@@ -47,6 +47,48 @@ def _last_ledger(ledger: str, attribute: str, version: str) -> dict | None:
     return prev
 
 
+def _read_seed_hash(eval_dir: str) -> str | None:
+    """Read the core/ir HEAD from SEED.md one level above eval/."""
+    lab_root = os.path.dirname(eval_dir)
+    seed_md = os.path.join(lab_root, "SEED.md")
+    if not os.path.exists(seed_md):
+        return None
+    with open(seed_md) as f:
+        for line in f:
+            if "core/ir HEAD" in line and "`" in line:
+                parts = line.split("`")
+                if len(parts) >= 3:
+                    candidate = parts[-2].strip()
+                    if len(candidate) >= 7:
+                        return candidate
+    return None
+
+
+def _warn_stale_seed(seed_hash: str | None, core_ir_path: str | None) -> None:
+    """Warn to stderr if live core/ir HEAD != SEED.md hash."""
+    if seed_hash is None:
+        return
+    ir_path = core_ir_path or "/home/ziovision/ziomilitary/core/ir"
+    if not os.path.isdir(os.path.join(ir_path, ".git")):
+        return
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["git", "-C", ir_path, "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        live_head = result.stdout.strip()
+        if live_head and live_head != seed_hash:
+            import sys
+            print(
+                f"WARNING: core/ir HEAD ({live_head[:12]}) != SEED.md hash "
+                f"({seed_hash[:12]}) — Δ may not be comparable (stale seed).",
+                file=sys.stderr,
+            )
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def main() -> None:
     here = os.path.dirname(os.path.abspath(__file__))
     ap = argparse.ArgumentParser()
@@ -55,7 +97,12 @@ def main() -> None:
     ap.add_argument("--version", default="plr_v1.4_cot")
     ap.add_argument("--ledger", default=os.path.join(here, "ledger.jsonl"))
     ap.add_argument("--date", default=None)
+    ap.add_argument("--core-ir", default=None, dest="core_ir",
+                    help="path to core/ir repo (for stale-seed warning)")
     args = ap.parse_args()
+
+    seed_hash = _read_seed_hash(here)
+    _warn_stale_seed(seed_hash, args.core_ir)
 
     gdir = args.golden or os.path.join(here, "golden", args.attribute)
     preds = {r["obj_id"]: (r.get("pred") or "unknown") for r in _jsonl(os.path.join(gdir, "predictions.jsonl"))}
@@ -110,11 +157,14 @@ def main() -> None:
     for t in classes:
         print(f"{t:>8}" + "".join(f"{confusion[t][p]:>10}" for p in classes))
 
+    gemma_repo = os.environ.get("IR_GEMMA_REPO", "")
     record = {
         "attribute": args.attribute, "version": args.version,
         "date": args.date or datetime.now().isoformat(timespec="seconds"),
         "n": n, "accuracy": round(acc, 4), "recall": recall, "bias": bias,
         "confusion": {t: dict(confusion[t]) for t in classes},
+        "seed_hash": seed_hash or "",
+        "gemma_repo": gemma_repo,
     }
     with open(args.ledger, "a") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
