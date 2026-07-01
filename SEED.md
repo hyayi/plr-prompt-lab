@@ -8,7 +8,10 @@ without storage / redis / scheduler / indexing.
 ## Source
 
 - Source repo: `ziomilitary/core/ir`
-- Source `core/ir HEAD`: `c2fc1cf20a6fbd3ad4272aec8439d438a4febf34`
+- Source `core/ir HEAD`: `1690f257b2a4a463322c7fe441e3f15a7501459b`
+  (the S0/S1 shared-core refactor `refactor(ir): extract shared pure cores`; the lab
+  was seeded from this working tree — originally `c2fc1cf` + the run_plr/run_search/
+  Model extraction, now committed as this hash so a re-seed reproduces the surface.)
 - Seeded on: **2026-07-01**
 - Re-seed with: `./seed.sh /path/to/core/ir` (see `seed.sh`)
 
