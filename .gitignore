@@ -1,0 +1,12 @@
+# Golden eval artifacts (per-run / large / regenerated)
+golden/*/labels.jsonl
+golden/*/crops/
+eval/golden/*/labels.jsonl
+eval/golden/*/crops/
+
+# Per-run ledger
+ledger.jsonl
+
+# Python bytecode
+__pycache__/
+*.pyc

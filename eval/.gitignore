@@ -1,0 +1,2 @@
+# human labels are produced per-session; keep the template, not the filled file
+golden/*/labels.jsonl
