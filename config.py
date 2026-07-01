@@ -19,7 +19,7 @@ CONSUMER_GROUP = os.getenv("CONSUMER_GROUP", "ir-group")
 CONSUMER_NAME = os.getenv("CONSUMER_NAME", f"ir-{os.getpid()}")
 
 # 경로 설정
-RESULT_PATH = os.getenv("RESULT_PATH", "/results/")
+RESULT_PATH = os.getenv("RESULT_PATH", "./results")
 
 # 모델 설정
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "64"))

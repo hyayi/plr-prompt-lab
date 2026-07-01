@@ -68,8 +68,8 @@ def _warn_stale_seed(seed_hash: str | None, core_ir_path: str | None) -> None:
     """Warn to stderr if live core/ir HEAD != SEED.md hash."""
     if seed_hash is None:
         return
-    ir_path = core_ir_path or "/home/ziovision/ziomilitary/core/ir"
-    if not os.path.isdir(os.path.join(ir_path, ".git")):
+    ir_path = core_ir_path or os.environ.get("CORE_IR_PATH")
+    if not ir_path or not os.path.isdir(os.path.join(ir_path, ".git")):
         return
     try:
         import subprocess

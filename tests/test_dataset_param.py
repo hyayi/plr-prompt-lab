@@ -1,0 +1,245 @@
+"""Dataset-as-parameter tests — no GPU, no DB, no redis.
+
+Verifies:
+  1. Dataset(path) accessors + manifest + obj_ids().
+  2. resolve_dataset_dir: --dataset wins; else backward-compat golden/<attr>.
+  3. `run`-equivalent (re_score) + `eval`-equivalent (run_eval) work against a
+     synthetic dataset dir built at an ARBITRARY path with a mock model.
+  4. search `run` + `eval` work against an arbitrary dataset dir.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import sys
+import textwrap
+from contextlib import redirect_stdout
+from pathlib import Path
+from typing import Any
+
+import pytest
+from PIL import Image
+
+_LAB_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(_LAB_ROOT))
+
+
+_MOCK_PLR_YAML = textwrap.dedent("""\
+    target: person
+    gender: female
+    gender_reason: long hair, slender build
+    age: adult
+    outfit: two_piece
+    upper.color: black
+    upper.type: jacket
+    lower.color: black
+    lower.type: pants
+    action: standing
+    military: civilian
+    margins:
+      gender: 0.8
+      age: 1.0
+      outfit: 0.8
+""")
+
+_MOCK_BLACK_VEHICLE_YAML = textwrap.dedent("""\
+    target: vehicle
+    color: black
+    type: sedan
+    military: civilian
+""")
+
+_MOCK_RED_VEHICLE_YAML = textwrap.dedent("""\
+    target: vehicle
+    color: red
+    type: sedan
+    military: civilian
+""")
+
+
+class MockModel:
+    def __init__(self, yaml_text: str = _MOCK_PLR_YAML) -> None:
+        self._yaml = yaml_text
+
+    def generate(self, messages: list[dict[str, Any]], image: Any) -> str:  # noqa: ARG002
+        return self._yaml
+
+
+def _tiny_jpg(path: Path, rgb: tuple[int, int, int] = (128, 128, 128)) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (100, 150), rgb).save(str(path), format="JPEG")
+
+
+def _write_jsonl(path: Path, records: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        for r in records:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+
+def _read_jsonl(path: Path) -> list[dict]:
+    with open(path, encoding="utf-8") as f:
+        return [json.loads(line) for line in f if line.strip()]
+
+
+# =====================================================================
+# Test 1: Dataset accessors
+# =====================================================================
+
+
+def test_dataset_accessors_and_manifest(tmp_path: Path) -> None:
+    import dataset as ds_mod
+
+    d = tmp_path / "my_dataset"
+    (d / "crops").mkdir(parents=True)
+    _write_jsonl(d / "predictions.jsonl", [
+        {"obj_id": "o1", "pred": "male", "reason": ""},
+        {"obj_id": "o2", "pred": "female", "reason": ""},
+    ])
+    (d / "manifest.yaml").write_text(
+        "attribute: gender\nn: 2\ncreated: 2026-07-01\nsource_note: synthetic\n",
+        encoding="utf-8",
+    )
+
+    ds = ds_mod.Dataset(d)
+    assert ds.crops_dir == d / "crops"
+    assert ds.labels_path == d / "labels.jsonl"
+    assert ds.queries_path == d / "queries.jsonl"
+    assert ds.obj_ids() == ["o1", "o2"]
+
+    manifest = ds.manifest
+    assert manifest["attribute"] == "gender"
+    assert manifest["n"] == 2
+    assert manifest["source_note"] == "synthetic"
+
+
+def test_resolve_dataset_dir_precedence(tmp_path: Path) -> None:
+    import dataset as ds_mod
+
+    # --dataset given → used verbatim
+    explicit = tmp_path / "arbitrary"
+    assert ds_mod.resolve_dataset_dir(_LAB_ROOT, "gender", str(explicit)) == explicit
+
+    # --dataset None → backward-compat golden/<attribute>
+    fallback = ds_mod.resolve_dataset_dir(_LAB_ROOT, "gender", None)
+    assert fallback == Path(_LAB_ROOT) / "eval" / "golden" / "gender"
+
+
+# =====================================================================
+# Test 2: attr run + eval against an arbitrary dataset dir
+# =====================================================================
+
+
+def _run_eval_against(gdir: Path, version: str, ledger_path: Path) -> str:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "run_eval_mod2", str(_LAB_ROOT / "eval" / "run_eval.py")
+    )
+    run_eval = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    spec.loader.exec_module(run_eval)  # type: ignore[union-attr]
+
+    orig_argv = sys.argv
+    sys.argv = [
+        "run_eval", "--attribute", "gender",
+        "--golden", str(gdir), "--version", version,
+        "--ledger", str(ledger_path), "--date", "2026-07-01T00:00:00",
+    ]
+    buf = io.StringIO()
+    try:
+        with redirect_stdout(buf):
+            run_eval.main()
+    except SystemExit:
+        pass
+    finally:
+        sys.argv = orig_argv
+    return buf.getvalue()
+
+
+def test_run_and_eval_on_arbitrary_dataset(tmp_path: Path) -> None:
+    """Build a synthetic dataset at an arbitrary path, re_score it with a mock
+    model (the `run` core), then eval it (the `eval` core). GPU-free."""
+    import re_score as rs
+
+    ds_dir = tmp_path / "some" / "where" / "genderset"
+    (ds_dir / "crops").mkdir(parents=True)
+    obj_ids = ["a1", "a2", "a3"]
+    _write_jsonl(ds_dir / "predictions.jsonl",
+                 [{"obj_id": o, "pred": "male", "reason": ""} for o in obj_ids])
+    _write_jsonl(ds_dir / "labels.jsonl",
+                 [{"obj_id": o, "true": "female"} for o in obj_ids])
+    for o in obj_ids:
+        _tiny_jpg(ds_dir / "crops" / f"{o}.jpg")
+
+    # `run` core — re_score writes predictions.jsonl (female) + attributes.jsonl
+    meta = rs.re_score("gender", MockModel(), golden_dir=str(ds_dir))
+    assert meta["n"] == 3
+    preds = _read_jsonl(ds_dir / "predictions.jsonl")
+    assert all(r["pred"] == "female" for r in preds)
+    assert (ds_dir / "attributes.jsonl").exists()
+
+    # `eval` core — score against labels (all female → accuracy 1.0)
+    ledger = tmp_path / "ledger.jsonl"
+    out = _run_eval_against(ds_dir, "ds_v1", ledger)
+    records = _read_jsonl(ledger)
+    assert len(records) == 1
+    assert records[0]["accuracy"] == pytest.approx(1.0, abs=1e-4)
+    assert "accuracy" in out
+
+
+# =====================================================================
+# Test 3: search run + eval against an arbitrary dataset dir
+# =====================================================================
+
+
+def test_search_run_and_eval_on_arbitrary_dataset(tmp_path: Path) -> None:
+    import re_score as rs
+    import run_search_eval as rse
+    from plr_prompts import parse_plr_response
+    from plr_core import _attach_military_flags
+
+    ds_dir = tmp_path / "elsewhere" / "searchset"
+    ds_dir.mkdir(parents=True)
+
+    _write_jsonl(ds_dir / "queries.jsonl",
+                 [{"query": "검은색 차", "relevant": ["black_car"]}])
+
+    black = parse_plr_response(_MOCK_BLACK_VEHICLE_YAML, hint="vehicle")
+    _attach_military_flags(black)
+    red = parse_plr_response(_MOCK_RED_VEHICLE_YAML, hint="vehicle")
+    _attach_military_flags(red)
+    _write_jsonl(ds_dir / "attributes.jsonl", [
+        {"obj_id": "black_car", "plr_json": black},
+        {"obj_id": "red_car", "plr_json": red},
+    ])
+
+    results_path = ds_dir / "search_results.jsonl"
+
+    # `run` search core
+    rs.run_search_over_golden(
+        queries_path=str(ds_dir / "queries.jsonl"),
+        attributes_path=str(ds_dir / "attributes.jsonl"),
+        results_path=str(results_path),
+        model=None,
+    )
+    results = _read_jsonl(results_path)
+    assert results[0]["query"] == "검은색 차"
+    assert "black_car" in results[0]["ranked"]
+    assert "red_car" not in results[0]["ranked"]
+
+    # `eval` search core
+    ledger = tmp_path / "ledger.jsonl"
+    record = rse.main(
+        results_path=str(results_path),
+        queries_path=str(ds_dir / "queries.jsonl"),
+        ledger_path=str(ledger),
+        version="ds_search_v1",
+        k=5,
+        date="2026-07-01T00:00:00",
+        seed_hash=None,
+        gemma_repo=None,
+        core_ir_path=None,
+    )
+    assert record["recall_at_k"] == pytest.approx(1.0, abs=1e-4)
+    assert record["attribute"] == "search"

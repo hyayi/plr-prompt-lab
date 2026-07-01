@@ -59,7 +59,7 @@ def main() -> None:
     cfg = ATTR[args.attribute]
     gdir = args.out or os.path.join(here, "golden", args.attribute)
     review = args.review_dir or os.path.join(os.path.expanduser("~"), f"{args.attribute}_eval")
-    crops = os.path.join(os.environ.get("RESULT_PATH", "/home/ziovision/data/ziosummary/results"),
+    crops = os.path.join(os.environ.get("RESULT_PATH", "./results"),
                          args.video, "objects")
     os.makedirs(gdir, exist_ok=True)
     os.makedirs(review, exist_ok=True)

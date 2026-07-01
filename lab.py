@@ -21,13 +21,46 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 
 # Add lab root to path so sibling modules are importable.
 _LAB_ROOT = os.path.dirname(os.path.abspath(__file__))
 if _LAB_ROOT not in sys.path:
     sys.path.insert(0, _LAB_ROOT)
 
-_DEFAULT_CORE_IR = "/home/ziovision/ziomilitary/core/ir"
+def _resolve_core_ir(override: str | None = None) -> str | None:
+    """Resolve the core/ir repo path without any ziovision-specific default.
+
+    Precedence:
+      1. explicit override (e.g. --core-ir)
+      2. CORE_IR_PATH env var
+      3. a generic relative guess: ../ziomilitary/core/ir next to this repo
+         (only if it exists)
+      4. None — the caller decides whether that is fatal.
+    """
+    if override:
+        return override
+    env = os.environ.get("CORE_IR_PATH")
+    if env:
+        return env
+    guess = os.path.abspath(os.path.join(_LAB_ROOT, "..", "ziomilitary", "core", "ir"))
+    if os.path.isdir(guess):
+        return guess
+    return None
+
+
+def _require_core_ir(override: str | None = None) -> str:
+    """Like _resolve_core_ir but raise a clear error when it cannot be found.
+
+    Used by commands that genuinely need core/ir (port, search-mode eval's
+    stale-seed check is tolerant of None, so it does not use this)."""
+    path = _resolve_core_ir(override)
+    if not path:
+        raise SystemExit(
+            "core/ir path not set. Set the CORE_IR_PATH environment variable "
+            "or pass --core-ir /path/to/core/ir."
+        )
+    return path
 
 # =====================================================================
 # Subcommand: build-golden
@@ -40,6 +73,8 @@ def _cmd_build_golden(args: argparse.Namespace) -> int:
     import importlib.util
     import shutil
 
+    from dataset import resolve_dataset_dir
+
     # Load build_golden as a module (avoids sys.argv interference).
     spec = importlib.util.spec_from_file_location(
         "build_golden",
@@ -48,12 +83,15 @@ def _cmd_build_golden(args: argparse.Namespace) -> int:
     bg = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
     spec.loader.exec_module(bg)  # type: ignore[union-attr]
 
+    gdir = str(resolve_dataset_dir(_LAB_ROOT, args.attribute, getattr(args, "dataset", None)))
+
     # Inject sys.argv so build_golden.main() parses the right args.
     orig_argv = sys.argv
     sys.argv = [
         "build_golden",
         "--video", args.video,
         "--attribute", args.attribute,
+        "--out", gdir,
     ]
     if args.per_class:
         sys.argv += ["--per-class", str(args.per_class)]
@@ -70,8 +108,7 @@ def _cmd_build_golden(args: argparse.Namespace) -> int:
     # ---- Ensure crops land at the authoritative bare path ----
     # build_golden copies crops to review_dir with decorated names
     # (e.g. M1__male__obj_id.jpg).  We also copy to the bare path
-    # eval/golden/<attribute>/crops/<obj_id>.jpg so re_score can find them.
-    gdir = os.path.join(_LAB_ROOT, "eval", "golden", args.attribute)
+    # <dataset>/crops/<obj_id>.jpg so re_score can find them.
     crops_dst = os.path.join(gdir, "crops")
     os.makedirs(crops_dst, exist_ok=True)
 
@@ -84,10 +121,7 @@ def _cmd_build_golden(args: argparse.Namespace) -> int:
     if os.path.exists(index_map_path):
         index_map: dict[str, str] = json.load(open(index_map_path))
         # index_map: {tile -> obj_id}
-        result_path = os.environ.get(
-            "RESULT_PATH",
-            "/home/ziovision/data/ziosummary/results",
-        )
+        result_path = os.environ.get("RESULT_PATH", "./results")
         video_crops = os.path.join(result_path, args.video, "objects")
         for tile, obj_id in index_map.items():
             dst = os.path.join(crops_dst, f"{obj_id}.jpg")
@@ -132,8 +166,19 @@ def _cmd_label(args: argparse.Namespace) -> int:
 
     orig_argv = sys.argv
     sys.argv = ["make_labels"]
+    # When --dataset is given, point make_labels.py at the dataset's files
+    # unless the user already passed the corresponding flag verbatim.
+    forwarded = list(args.label_args)
+    if getattr(args, "dataset", None):
+        ds = Path(args.dataset)
+        if "--index-map" not in forwarded:
+            sys.argv += ["--index-map", str(ds / "index_map.json")]
+        if "--pred" not in forwarded:
+            sys.argv += ["--pred", str(ds / "predictions.jsonl")]
+        if "--out" not in forwarded:
+            sys.argv += ["--out", str(ds / "labels.jsonl")]
     # Forward any remaining args (argparse remainder or explicit flags).
-    sys.argv += args.label_args
+    sys.argv += forwarded
     try:
         ml.main()
     except SystemExit as e:
@@ -155,6 +200,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     import Gemma at module level.
     """
     import re_score as rs
+    from dataset import resolve_dataset_dir
 
     # Set version env vars so re_score.re_score() picks them up.
     if args.version:
@@ -164,17 +210,26 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from gemma_model import LabGemmaModel
 
     attribute = args.attribute
-    print(f"[run] re_score attribute={attribute!r} version={args.version!r}")
-    meta = rs.re_score(attribute, LabGemmaModel())
+    ds_dir = resolve_dataset_dir(_LAB_ROOT, attribute, getattr(args, "dataset", None))
+    print(f"[run] re_score attribute={attribute!r} version={args.version!r} dataset={str(ds_dir)!r}")
+    meta = rs.re_score(attribute, LabGemmaModel(), golden_dir=str(ds_dir))
     print(f"[run] re_score done: {meta}")
 
     # Run search over golden if queries.jsonl exists.
-    queries_path = os.path.join(
-        _LAB_ROOT, "eval", "golden", "search", "queries.jsonl"
-    )
-    if os.path.exists(queries_path):
+    # When --dataset is given, the dataset dir carries its own queries.jsonl;
+    # otherwise fall back to the shared eval/golden/search/ layout.
+    if getattr(args, "dataset", None):
+        search_dir = ds_dir
+    else:
+        search_dir = Path(_LAB_ROOT) / "eval" / "golden" / "search"
+    queries_path = search_dir / "queries.jsonl"
+    if queries_path.exists():
         print("[run] running search over golden …")
-        rs.run_search_over_golden(model=None)  # dictionary path, no GPU needed
+        rs.run_search_over_golden(
+            queries_path=str(queries_path),
+            attributes_path=str(search_dir / "attributes.jsonl"),
+            model=None,  # dictionary path, no GPU needed
+        )
         print("[run] search done")
     else:
         print(f"[run] {queries_path} not found — skipping search runner")
@@ -193,7 +248,8 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     Mode 'attr'   → eval/run_eval.py
     Mode 'search' → run_search_eval.py
     """
-    core_ir = getattr(args, "core_ir", None) or _DEFAULT_CORE_IR
+    core_ir = _resolve_core_ir(getattr(args, "core_ir", None))
+    from dataset import resolve_dataset_dir
 
     if args.mode == "attr":
         import importlib.util
@@ -205,8 +261,10 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         re_mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
         spec.loader.exec_module(re_mod)  # type: ignore[union-attr]
 
+        ds_dir = resolve_dataset_dir(_LAB_ROOT, args.attribute, getattr(args, "dataset", None))
         orig_argv = sys.argv
-        sys.argv = ["run_eval", "--attribute", args.attribute]
+        sys.argv = ["run_eval", "--attribute", args.attribute,
+                    "--golden", str(ds_dir)]
         if args.version:
             sys.argv += ["--version", args.version]
         if args.ledger:
@@ -224,11 +282,20 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         ledger_path = args.ledger or os.path.join(
             _LAB_ROOT, "eval", "ledger.jsonl"
         )
+        # With --dataset, read queries/results from the dataset dir; otherwise
+        # run_search_eval.main falls back to eval/golden/search/ defaults.
+        results_path = queries_path = None
+        if getattr(args, "dataset", None):
+            ds_dir = Path(args.dataset)
+            results_path = str(ds_dir / "search_results.jsonl")
+            queries_path = str(ds_dir / "queries.jsonl")
         rse.main(
             version=args.version or "plr_v1.4_cot",
             ledger_path=ledger_path,
             k=args.k if hasattr(args, "k") and args.k else 5,
             core_ir_path=core_ir,
+            results_path=results_path,
+            queries_path=queries_path,
         )
     else:
         print(f"Unknown mode: {args.mode!r}", file=sys.stderr)
@@ -263,7 +330,7 @@ def _cmd_port(args: argparse.Namespace) -> int:
     import difflib
     import shutil
 
-    core_ir = getattr(args, "core_ir", None) or _DEFAULT_CORE_IR
+    core_ir = _require_core_ir(getattr(args, "core_ir", None))
 
     # Warn if stale seed
     import run_search_eval as rse
@@ -359,12 +426,18 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="cap per predicted class (default: 50)")
     bg.add_argument("--review-dir", default=None,
                     help="browsable crop dir (default: ~/<attr>_eval)")
+    bg.add_argument("--dataset", default=None,
+                    help="dataset dir to write into "
+                         "(default: eval/golden/<attribute>)")
 
     # -- label --
     la = sub.add_parser(
         "label",
         help="Turn human misclassification notes into labels.jsonl.",
     )
+    la.add_argument("--dataset", default=None,
+                    help="dataset dir (default: eval/golden/gender). Supplies "
+                         "--index-map/--pred/--out to make_labels.py.")
     la.add_argument("label_args", nargs=argparse.REMAINDER,
                     help="Arguments forwarded verbatim to make_labels.py "
                          "(e.g. --female-in-male M3,M7 --male-in-female F2)")
@@ -378,6 +451,8 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="PLR version string (e.g. plr_v1.4_cot)")
     ru.add_argument("--attribute", "-A", required=True,
                     help="PLR attribute to re-score")
+    ru.add_argument("--dataset", default=None,
+                    help="dataset dir (default: eval/golden/<attribute>)")
 
     # -- eval --
     ev = sub.add_parser(
@@ -395,6 +470,9 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="rank cutoff for search mode (default: 5)")
     ev.add_argument("--core-ir", default=None, dest="core_ir",
                     help="path to core/ir repo (for stale-seed warning)")
+    ev.add_argument("--dataset", default=None,
+                    help="dataset dir (default: eval/golden/<attribute>; "
+                         "search mode: eval/golden/search)")
 
     # -- port --
     po = sub.add_parser(
@@ -406,7 +484,8 @@ def _build_parser() -> argparse.ArgumentParser:
     po.add_argument("--apply", action="store_true",
                     help="Copy lab files into core/ir (default: read-only diff)")
     po.add_argument("--core-ir", default=None, dest="core_ir",
-                    help="path to core/ir repo (default: /home/ziovision/ziomilitary/core/ir)")
+                    help="path to core/ir repo (default: CORE_IR_PATH env, "
+                         "else ../ziomilitary/core/ir if present)")
 
     return p
 

@@ -1,0 +1,9 @@
+# plr-prompt-lab runtime deps (loose pins — bump as needed).
+# NOTE: llama-cpp-python must be installed as a GPU (CUDA) build for `lab run`.
+# See INSTALL.md for the CMAKE_ARGS="-DGGML_CUDA=on" build recipe. The plain
+# wheel below is CPU-only and will not satisfy the real (GPU) inference path.
+numpy>=1.24,<3
+pyyaml>=6.0
+Pillow>=10.0
+llama-cpp-python>=0.2.90   # GPU build required for real runs — see INSTALL.md
+pytest>=7.4               # test-only; the GPU-free lab/test path needs just the above
