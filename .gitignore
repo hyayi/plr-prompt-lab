@@ -10,3 +10,4 @@ ledger.jsonl
 # Python bytecode
 __pycache__/
 *.pyc
+_serve/

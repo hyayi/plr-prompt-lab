@@ -106,6 +106,7 @@
   <a href="#arch">구조</a>
   <a href="#files">파일 지도</a>
   <a href="#params">4개 파라미터</a>
+  <a href="#prompts">프롬프트 구조</a>
   <a href="#data">데이터 형식</a>
   <a href="#usage">사용법</a>
   <a href="#ledger">ledger &amp; 리포트</a>
@@ -246,9 +247,55 @@
   </table>
 </section>
 
+<!-- PROMPTS -->
+<section id="prompts">
+  <h2><span class="num">06</span>프롬프트 &amp; 파이프라인 구조 (실제)</h2>
+  <p class="sub">“프롬프트”는 한 덩어리가 아니다 — 파이프라인(plr/search)별로, 종류(system/템플릿)별로, 버전별로 나뉜다.</p>
+
+  <h3>버전 한 장(<code>prompts/plr_vX.yaml</code>) 안의 두 계열</h3>
+  <div class="svgwrap"><pre style="background:#fff;color:#1f2933;margin:0">
+prompts/plr_v1.4_cot.yaml            <span class="c"># 버전 = 스위처블 단위(--version)</span>
+├── <b style="color:#0d7d76">plr:</b>                             <span class="c"># ▸ PLR 속성추출 파이프라인의 프롬프트</span>
+│   ├── system                    <span class="c"># [system] 고정 역할지시 — "YAML만 출력"</span>
+│   ├── person_user               <span class="c"># [템플릿] 사람 크롭·CoT 추론    ← 편집대상</span>
+│   ├── person_user_no_reason     <span class="c"># [템플릿] 사람 크롭·비추론(토큰↓)</span>
+│   └── vehicle_user              <span class="c"># [템플릿] 차량 크롭             ← 편집대상</span>
+│
+└── <b style="color:#b26a00">query_parser:</b>                    <span class="c"># ▸ 텍스트 검색 파이프라인의 프롬프트</span>
+    ├── system                    <span class="c"># [system] 쿼리→구조화 역할지시</span>
+    └── user                      <span class="c"># [템플릿] 쿼리 파싱             ← 편집대상</span>
+                                  <span class="c">  + parser/qp_v0.4.yaml (색·성별·차종 시노님 사전)</span>
+  </pre></div>
+
+  <h3>프롬프트 “종류” × 2 파이프라인</h3>
+  <table>
+    <tr><th style="width:110px">종류</th><th>plr (속성)</th><th>search (검색)</th><th>성격</th></tr>
+    <tr><td><b>system</b></td><td><code>plr.system</code></td><td><code>query_parser.system</code></td><td>고정 역할 지시(대개 유지)</td></tr>
+    <tr><td><b>템플릿 (user)</b></td><td><code>person_user</code> · <code>vehicle_user</code> (+<code>_no_reason</code>)</td><td><code>query_parser.user</code></td><td class="ok">← 주 편집 대상</td></tr>
+    <tr><td><b>사전 / 코어</b></td><td><code>run_plr</code> 판별 로직</td><td><code>parser/qp_*.yaml</code> 시노님 + <code>run_search</code></td><td>파이프라인 로직</td></tr>
+  </table>
+
+  <div class="note">
+    <b>두 소스가 parity로 동기</b> — 런타임 레퍼런스 <code>plr_prompts.py</code>(파이썬 상수)와 스위처블
+    <code>prompts/&lt;version&gt;.yaml</code>(<code>FilePromptProvider</code>가 로드)는 <b>동일한 메시지</b>를 내도록 유지된다.
+    한쪽만 고치면 어긋나므로 <code>lab port</code> + <code>prompt_hash</code>가 둘 다(+<code>plr_core.py</code>)를 추적해 잡는다.
+  </div>
+
+  <h3>바꿀 수 있는 3개 축</h3>
+  <div class="grid c3">
+    <div class="tile"><h4>① 프롬프트 변경</h4><p>버전 yaml의 <b>system·템플릿</b>을 편집(plr 또는 search 계열). <code>--version</code>으로 버전 스위치·비교.</p></div>
+    <div class="tile"><h4>② 파이프라인 변경</h4><p><code>--pipeline plr|search</code> — 어느 판별/검색 경로를 쓸지. 코어는 <code>run_plr</code> / <code>run_search</code>.</p></div>
+    <div class="tile"><h4>③ 추론 토글</h4><p><code>IR_PLR_REASON=on</code> → CoT(<code>person_user</code>) / off → <code>person_user_no_reason</code>. 정확도 ↔ 토큰 트레이드오프.</p></div>
+  </div>
+  <p style="font-size:14px;color:#6b7480;margin-top:12px">
+    즉 실험에서 <b>“프롬프트”를 바꾼다</b>는 것은 = {plr | search} × {system | 템플릿} × {버전} 의 조합을 바꾸는 것이고,
+    <b>“파이프라인”을 바꾼다</b>는 것은 = 그 프롬프트를 소비하는 코어(run_plr/run_search)와 <code>--pipeline</code> 선택을 바꾸는 것이다.
+  </p>
+</section>
+
 <!-- DATA -->
 <section id="data">
-  <h2><span class="num">06</span>데이터 형식 (받는 사람이 만드는 것)</h2>
+  <h2><span class="num">07</span>데이터 형식 (받는 사람이 만드는 것)</h2>
   <p class="sub">데이터셋 = 디렉터리 하나. 자세한 스키마는 <code>DATASET_SPEC.md</code>.</p>
   <div class="grid c2">
     <div>
@@ -284,7 +331,7 @@ n: 63</pre>
 
 <!-- USAGE -->
 <section id="usage">
-  <h2><span class="num">07</span>사용법 (단계별)</h2>
+  <h2><span class="num">08</span>사용법 (단계별)</h2>
   <p class="sub">실제 명령 그대로. 실측(모델 호출)은 GPU가 필요하고, 연습은 <code>mock</code>으로 GPU 없이.</p>
   <ol class="steps">
     <li>
@@ -341,7 +388,7 @@ attributes:[<span class="s">gender</span>]
 
 <!-- LEDGER -->
 <section id="ledger">
-  <h2><span class="num">08</span>ledger &amp; 리포트</h2>
+  <h2><span class="num">09</span>ledger &amp; 리포트</h2>
   <p class="sub">모든 실험은 append-only 기록으로 남아 추이를 만든다.</p>
   <div class="grid c2">
     <div>
@@ -366,7 +413,7 @@ attributes:[<span class="s">gender</span>]
 
 <!-- HANDOFF -->
 <section id="handoff">
-  <h2><span class="num">09</span>전달 · 이식 (외부 엔지니어용)</h2>
+  <h2><span class="num">10</span>전달 · 이식 (외부 엔지니어용)</h2>
   <p class="sub">프롬프트를 개선해 되돌리는 사람을 위한 요약. 자세히는 <code>HANDOFF.md</code>.</p>
   <div class="grid c3">
     <div class="tile"><h4>✏️ 편집</h4><p><code>prompts/*.yaml</code>만 고친다. 운영 추론·저장 코드는 건드리지 않는다.</p></div>
