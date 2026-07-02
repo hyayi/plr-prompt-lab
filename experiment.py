@@ -228,6 +228,7 @@ def _run_plr_cell(cell: Cell, ledger_path: str) -> None:
         attribute=cell.attribute,
         model=model,
         golden_dir=str(ds_path),
+        prompt_version=cell.prompt,
     )
     log.debug("re_score meta: %s", meta)
 

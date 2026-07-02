@@ -24,7 +24,7 @@ keeping `_process_one`'s observable behavior byte-identical.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from PIL import Image, ImageDraw
 
@@ -174,6 +174,7 @@ def run_plr(
     model: Any,
     object_type_hint: str,
     *,
+    build_messages: Callable[[str], list[dict[str, Any]]] | None = None,
     _pre_marked: bool = False,
     _attach: bool = True,
 ) -> dict[str, Any]:
@@ -186,6 +187,13 @@ def run_plr(
         skipped and a minimal coarse PLR JSON is returned.
       model: a `gemma_model.Model` — `generate(messages, image) -> str`.
       object_type_hint: "person" | "vehicle" prompt template hint.
+      build_messages: (lab-only) optional builder `hint -> messages` for the
+        MAIN prompt. When None (the default, and the ONLY behaviour in core/ir)
+        the module-level `plr_prompts.build_plr_messages` is used, so the output
+        is byte-identical to the live path. The lab supplies a version-specific
+        builder (e.g. FilePromptProvider(version_override=...).build_plr_messages)
+        so a single checkout can genuinely compare prompt versions. The
+        schema-retry path is intentionally left on the constants builder.
       _pre_marked: (private) skip the marker draw when the caller already marked.
       _attach: (private) run `_attach_military_flags` on the result when True.
 
@@ -203,7 +211,7 @@ def run_plr(
     from plr_prompts import build_plr_messages
 
     marked = pil if _pre_marked else _draw_target_marker(pil)
-    msgs = build_plr_messages(object_type_hint)
+    msgs = (build_messages or build_plr_messages)(object_type_hint)
     plr = _plr_generate_parse(model, marked, msgs, object_type_hint)
     if _attach:
         _attach_military_flags(plr)

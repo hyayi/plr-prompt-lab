@@ -88,6 +88,7 @@ def re_score(
     attribute: str,
     model: Any,
     golden_dir: str | None = None,
+    prompt_version: str | None = None,
 ) -> dict[str, Any]:
     """Re-score every object in the golden set for one attribute.
 
@@ -96,6 +97,16 @@ def re_score(
       model:      Any object with .generate(messages, image) -> str
                   (gemma_model.Model protocol). May be a MockModel for tests.
       golden_dir: path to the golden dir (default: eval/golden/<attribute>).
+      prompt_version: optional prompt version tag (e.g. "plr_v1.3_cot"). When
+                  given AND prompts/<prompt_version>.yaml exists, the MAIN PLR
+                  prompt is built from that version's YAML via FilePromptProvider,
+                  so two cells with different prompt versions genuinely send
+                  DIFFERENT prompts (not just different ledger labels). When
+                  None, or the version has no YAML (e.g. a mock/demo version like
+                  "mock_v1"), the module-level constants are used (byte-identical
+                  to the live path). The returned meta["version"] is stamped with
+                  prompt_version in the YAML-backed case so the comparison is
+                  labeled correctly.
 
     Returns:
       meta dict: {attribute, n, version, gemma_repo}
@@ -144,6 +155,23 @@ def re_score(
 
     object_type_hint = HINT.get(attribute, "person")
 
+    # Version-specific prompt wiring. Only when a real yaml-backed version is
+    # requested do we build a per-version message builder; otherwise build_messages
+    # stays None so run_plr uses the module-level constants (byte-identical to the
+    # live path, and covering mock/demo versions with no yaml). FilePromptProvider
+    # is imported lazily here (not at module top) to keep `import re_score`
+    # import-clean and to avoid pulling the registry/bootstrap.
+    build_messages = None
+    stamped_version: str | None = None
+    if prompt_version and (here / "prompts" / f"{prompt_version}.yaml").exists():
+        from providers.file_prompt_provider import FilePromptProvider
+
+        build_messages = (
+            lambda hint: FilePromptProvider(version_override=prompt_version)
+            .build_plr_messages(hint)
+        )
+        stamped_version = prompt_version
+
     new_preds: list[dict[str, Any]] = []
     new_attrs: list[dict[str, Any]] = []
 
@@ -166,6 +194,7 @@ def re_score(
             qreport,
             model,
             object_type_hint=object_type_hint,
+            build_messages=build_messages,
         )
 
         pred, reason = _extract_pred_reason(attribute, plr_json)
@@ -188,7 +217,10 @@ def re_score(
         for row in new_attrs:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
-    version = (
+    # Stamp the ledger version with the ACTUAL prompt version when a yaml-backed
+    # version drove this run (so a prompt-axis comparison is labeled correctly);
+    # otherwise fall back to the env-derived "format+reason" tag.
+    version = stamped_version or (
         os.environ.get("IR_PLR_FORMAT", "yaml")
         + "+" + os.environ.get("IR_PLR_REASON", "")
     ).rstrip("+")

@@ -255,7 +255,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
     model = get_model(model_name)
     print(f"[run] re_score attribute={attribute!r} version={args.version!r} "
           f"model={model_name!r} dataset={str(ds_dir)!r}")
-    meta = rs.re_score(attribute, model, golden_dir=str(ds_dir))
+    meta = rs.re_score(
+        attribute, model, golden_dir=str(ds_dir), prompt_version=args.version
+    )
     print(f"[run] re_score done: {meta}")
 
     # Also run search over golden if this dataset carries queries.jsonl, so the
