@@ -119,13 +119,28 @@ def re_score(
     preds_path = gdir / "predictions.jsonl"
     attrs_path = gdir / "attributes.jsonl"
     crops_dir = gdir / "crops"
+    labels_path = gdir / "labels.jsonl"
 
-    # Resolve golden obj_id set from existing predictions.jsonl
-    with open(preds_path) as f:
-        existing = [json.loads(line) for line in f if line.strip()]
-    obj_ids: list[str] = [row["obj_id"] for row in existing]
+    # Resolve the obj_id set to score. Preferred source: an existing
+    # predictions.jsonl (the golden bootstrap that build-golden writes) —
+    # keeps order for deterministic output. For a spec-only dataset (crops +
+    # labels, no predictions.jsonl — e.g. the prepare-dataset "arbitrary
+    # crops" path), fall back to the crop files, then to labels.jsonl.
+    obj_ids: list[str] = []
+    if preds_path.exists():
+        with open(preds_path) as f:
+            obj_ids = [json.loads(line)["obj_id"] for line in f if line.strip()]
+    if not obj_ids and crops_dir.is_dir():
+        obj_ids = sorted(p.stem for p in crops_dir.glob("*.jpg"))
+    if not obj_ids and labels_path.exists():
+        with open(labels_path) as f:
+            obj_ids = sorted(json.loads(line)["obj_id"] for line in f if line.strip())
+    if not obj_ids:
+        raise FileNotFoundError(
+            f"No obj_ids to score in {gdir}: provide a non-empty "
+            f"predictions.jsonl, crops/*.jpg, or labels.jsonl."
+        )
     obj_id_set: set[str] = set(obj_ids)
-    # Preserve order from the file for deterministic output.
 
     object_type_hint = HINT.get(attribute, "person")
 
