@@ -75,6 +75,23 @@ def _extract_pred_reason(attribute: str, plr_json: dict[str, Any]) -> tuple[str,
     raise ValueError(f"Unknown attribute: {attribute!r}. Add it to HINT and _extract_pred_reason.")
 
 
+def _extract_margin(attribute: str, plr_json: dict[str, Any]) -> float | None:
+    """Model confidence (decision_margin) for one attribute, when the prompt
+    emits it. plr_v1.5_cot forced-commit replaced unknown with
+    "commit + margin", so eval uses this to verify the margin actually
+    carries signal (low margin <-> errors). Only the person prompt emits a
+    margins block (gender/age/outfit/sleeve); vehicle and military do not ->
+    None, and eval skips the confidence split for those attributes."""
+    attrs = plr_json.get("attributes") or {}
+    if attribute == "gender":
+        m = (attrs.get("gender_scores") or {}).get("decision_margin")
+        try:
+            return float(m) if m is not None else None
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 # =====================================================================
 # PLR lab runner (Deliverable 1)
 # =====================================================================
@@ -119,6 +136,7 @@ def re_score(
     from types import SimpleNamespace
 
     import plr_core
+    import quality_gate
 
     here = Path(__file__).resolve().parent.parent  # lab root (runners/ is one below)
     gdir = Path(golden_dir) if golden_dir else here / "eval" / "golden" / attribute
@@ -181,6 +199,11 @@ def re_score(
 
         pil = Image.open(crop_path).convert("RGB")
 
+        # Quality score — MEASUREMENT ONLY, never gating (single-view
+        # contract: every crop still goes to the model). Recorded so eval can
+        # split accuracy by crop quality and check where errors concentrate.
+        quality = round(float(quality_gate.evaluate(pil).score), 4)
+
         # PLR inference — single-view contract (plr_v1.5_cot): the quality
         # gate no longer withholds crops from the model, so every crop gets
         # exactly one call. run_plr's qreport parameter only steers its (now
@@ -194,8 +217,12 @@ def re_score(
         )
 
         pred, reason = _extract_pred_reason(attribute, plr_json)
+        margin = _extract_margin(attribute, plr_json)
 
-        new_preds.append({"obj_id": obj_id, "pred": pred, "reason": reason})
+        new_preds.append({
+            "obj_id": obj_id, "pred": pred, "reason": reason,
+            "margin": margin, "quality": quality,
+        })
         new_attrs.append({"obj_id": obj_id, "plr_json": plr_json})
 
     # Sanity check before any writes

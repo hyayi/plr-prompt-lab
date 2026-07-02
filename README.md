@@ -270,6 +270,8 @@ download).
 | `bias` | Per-attribute bias metric (e.g. `female→male` misclassification rate) |
 | `confusion` | Full confusion matrix (rows=true, cols=pred) |
 | `pred_unknown` | Model unknown-rate `{rate, count}` over all matched ids (forced-commit compliance) |
+| `margin_stats` | Accuracy split by model confidence (high/low vs `--margin-threshold`, mean correct/wrong) |
+| `quality_stats` | Accuracy split by crop quality score (measurement only — never gates the call) |
 | `n_label_unknown` | Human-unlabelable crops (label=unknown) excluded from accuracy/bias |
 | `seed_hash` | `core/ir HEAD` at seed time (from `SEED.md`) |
 | `gemma_repo` | `IR_GEMMA_REPO` env at run time |

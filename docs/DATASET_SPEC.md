@@ -130,8 +130,20 @@ construction_vehicle, vehicle_unknown
 ## 6. `predictions.jsonl` Schema (written by `lab run`)
 
 ```json
-{"obj_id": "1003", "pred": "male", "reason": "broad shoulders"}
+{"obj_id": "1003", "pred": "male", "reason": "broad shoulders", "margin": 0.8, "quality": 0.71}
 ```
+
+- `margin` — the model's decision confidence for the evaluated attribute
+  (from the prompt's `margins` block; `null` for attributes whose prompt
+  emits none, e.g. vehicle_type/military). Under the forced-commit prompt
+  this replaces the removed `unknown` escape hatch.
+- `quality` — crop quality score in [0,1] (quality_gate, **measurement
+  only** — it never gates the model call).
+
+`lab eval` splits accuracy by both signals (`margin_stats` /
+`quality_stats` in the ledger) to check that errors concentrate in
+low-margin / low-quality crops. Both fields are optional — old files
+without them still evaluate.
 
 This file is the seed for the obj_id set that `re_score` processes. It is
 overwritten by `lab run` and read by `lab eval`.

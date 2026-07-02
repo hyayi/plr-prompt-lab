@@ -270,6 +270,8 @@ python3 lab.py demo
 | `bias` | 속성별 bias 지표 (예: `female→male` 오분류율) |
 | `confusion` | 전체 confusion matrix (행=정답, 열=예측) |
 | `pred_unknown` | 모델 unknown율 `{rate, count}` — 강제 커밋 준수도 (전체 매칭 id 기준) |
+| `margin_stats` | 모델 신뢰(margin) 구간별 accuracy (high/low + 정답·오답 평균) — 캘리브레이션 확인 |
+| `quality_stats` | 크롭 품질 점수 구간별 accuracy (측정 전용 — 게이팅 아님) |
 | `n_label_unknown` | 사람도 판별 불가(label=unknown)로 정확도에서 제외된 크롭 수 |
 | `seed_hash` | 씨딩 시점의 `core/ir HEAD` (`SEED.md` 기준) |
 | `gemma_repo` | 실행 시점의 `IR_GEMMA_REPO` env |

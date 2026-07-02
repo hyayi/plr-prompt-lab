@@ -39,6 +39,39 @@ def _prompt_hash() -> str:
 
     return prompt_hash(_LAB_ROOT)
 
+def _signal_stats(
+    vals: dict, eval_ids: list, is_correct: dict, threshold: float,
+) -> dict | None:
+    """Accuracy split by a per-crop signal (model margin or crop quality).
+
+    plr_v1.5_cot replaced the unknown escape hatch with "commit + margin",
+    so eval must verify the signal is informative: if low-margin /
+    low-quality crops concentrate the errors, the signal is usable
+    downstream; if high/low accuracy are equal, it is noise.
+    Returns None when the signal is absent from predictions (old files,
+    or attributes whose prompt emits no margin)."""
+    ids = [i for i in eval_ids if vals.get(i) is not None]
+    if not ids:
+        return None
+
+    def _acc(group):
+        return round(sum(is_correct[i] for i in group) / len(group), 4) if group else None
+
+    def _mean(group):
+        return round(sum(vals[i] for i in group) / len(group), 4) if group else None
+
+    hi = [i for i in ids if vals[i] >= threshold]
+    lo = [i for i in ids if vals[i] < threshold]
+    return {
+        "threshold": threshold,
+        "n": len(ids),
+        "high": {"n": len(hi), "accuracy": _acc(hi)},
+        "low": {"n": len(lo), "accuracy": _acc(lo)},
+        "mean_correct": _mean([i for i in ids if is_correct[i]]),
+        "mean_wrong": _mean([i for i in ids if not is_correct[i]]),
+    }
+
+
 # Per-attribute "bias" metric: (true_class -> mistaken_as) whose rate we headline.
 # For gender the user's concern is women predicted male, so ("female","male").
 BIAS_PAIR = {
@@ -121,13 +154,20 @@ def main() -> None:
                     help="pipeline name (default: plr)")
     ap.add_argument("--dataset", default=None,
                     help="dataset path/name for the ledger (default: --golden path)")
+    ap.add_argument("--margin-threshold", type=float, default=0.7,
+                    dest="margin_threshold",
+                    help="confidence split point for margin_stats (default: 0.7)")
+    ap.add_argument("--quality-threshold", type=float, default=0.4,
+                    dest="quality_threshold",
+                    help="crop-quality split point for quality_stats (default: 0.4)")
     args = ap.parse_args()
 
     seed_hash = _read_seed_hash(here)
     _warn_stale_seed(seed_hash, args.core_ir)
 
     gdir = args.golden or os.path.join(here, "golden", args.attribute)
-    preds = {r["obj_id"]: (r.get("pred") or "unknown") for r in _jsonl(os.path.join(gdir, "predictions.jsonl"))}
+    pred_rows = {r["obj_id"]: r for r in _jsonl(os.path.join(gdir, "predictions.jsonl"))}
+    preds = {i: (r.get("pred") or "unknown") for i, r in pred_rows.items()}
     labels = {r["obj_id"]: (r.get("label") or r.get("true") or "unknown") for r in _jsonl(os.path.join(gdir, "labels.jsonl"))}
 
     ids = [i for i in preds if i in labels]
@@ -172,6 +212,13 @@ def main() -> None:
         if cid:
             recall[c] = round(sum(preds[i] == c for i in cid) / len(cid), 4)
 
+    # Confidence / quality splits (values are optional per prediction row).
+    is_correct = {i: labels[i] == preds[i] for i in eval_ids}
+    margins = {i: pred_rows[i].get("margin") for i in eval_ids}
+    qualities = {i: pred_rows[i].get("quality") for i in eval_ids}
+    margin_stats = _signal_stats(margins, eval_ids, is_correct, args.margin_threshold)
+    quality_stats = _signal_stats(qualities, eval_ids, is_correct, args.quality_threshold)
+
     bias = None
     if args.attribute in BIAS_PAIR:
         t_cls, as_cls = BIAS_PAIR[args.attribute]
@@ -199,6 +246,12 @@ def main() -> None:
             print(f"   Δ: {bias['rate'] - prev['bias']['rate']:+.3f}")
         else:
             print()
+    for name, st in (("margin", margin_stats), ("quality", quality_stats)):
+        if st:
+            print(f"{name} split (>= {st['threshold']}): "
+                  f"high acc={st['high']['accuracy']} (n={st['high']['n']})  "
+                  f"low acc={st['low']['accuracy']} (n={st['low']['n']})  "
+                  f"mean correct/wrong: {st['mean_correct']}/{st['mean_wrong']}")
     print("recall: " + ", ".join(f"{k}={v}" for k, v in recall.items()))
     print("confusion (rows=true, cols=pred):")
     print("        " + "".join(f"{c:>10}" for c in classes))
@@ -215,6 +268,9 @@ def main() -> None:
         # matched ids) and how many crops were human-unlabelable (excluded).
         "pred_unknown": pred_unknown,
         "n_label_unknown": n_label_unknown,
+        # Confidence/quality calibration (None when the signal is absent).
+        "margin_stats": margin_stats,
+        "quality_stats": quality_stats,
         "seed_hash": seed_hash or "",
         "gemma_repo": gemma_repo,
         # ---- Experiment-combination keys (P2-1) ----

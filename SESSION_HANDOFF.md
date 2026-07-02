@@ -98,6 +98,11 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 - `GUIDE.html` (구조+사용법 원페이지, 배포용): `654ca3a` · `d7285e3` · `7634a0a`
 - **`--version` 실-프롬프트-로드 픽스**: `51022f6`(feat) · `2553b13`(docs) — experiment의 프롬프트 축이 이제 진짜로 다른 프롬프트를 비교
 
+### 신뢰·품질 스코어 평가 활용 (2026-07-02)
+- **re_score**: 크롭마다 `margin`(모델 decision_margin — gender만 프롬프트가 emit, 그 외 None)과 `quality`(quality_gate 점수 — **측정 전용, 게이팅 아님**)를 predictions.jsonl에 기록.
+- **run_eval**: `margin_stats`/`quality_stats` — 임계값(기본 0.7/0.4, `--margin-threshold`/`--quality-threshold`) 기준 high/low 구간별 accuracy + 정답·오답 평균. **v1.5 강제커밋의 캘리브레이션 검증 지표**: 오답이 저margin/저품질에 몰리면 신호 유효(런타임 필터 활용 가능), 아니면 margin은 노이즈.
+- 하위호환: margin/quality 없는 구 predictions도 평가됨(stats=None). 75 tests green.
+
 ### 폴더 재구성 (2026-07-02, 기능별 분류)
 - 루트 과밀 해소(사용자 요청). **parity/공유 표면은 core/ir과 같은 경로여야 해서 루트 고정**: `plr_core.py`·`plr_prompts.py`·`prompts/`·`providers/`·`plr_schema.py`·`quality_gate.py`·`config.py`·`registry.py`·`gemma_model.py`·`gemma_backend.py`.
 - 이동: **`runners/`**(re_score·experiment·demo) · **`evalkit/`**(dataset·validate·provenance·report) · **`docs/`**(GUIDE.html·STRUCTURE.html·HANDOFF·INSTALL·DATASET_SPEC·EXPERIMENT_SPEC). 루트 잔류 문서: README(.ko)·SESSION_HANDOFF·SEED.md(provenance가 루트에서 읽음)·LICENSE·requirements.txt·seed.sh.
