@@ -16,7 +16,7 @@ Report sections:
   2. Trend charts — per attribute, accuracy (and bias/recall@k where present)
      over the ordered ledger sequence. Inline SVG line+point charts.
   3. Matrix heatmap — model × prompt(version) grid of a metric (accuracy for
-     plr, recall@k for search), cells colored by value. Sparse cells blank.
+     plr; legacy search records show recall@k), colored by value.
   4. Prompt-change tracking — for consecutive records of the same attribute
      where prompt_hash (or version) changed, the metric Δ alongside the
      hash/version transition. Only shows what the ledger supports.
@@ -77,7 +77,7 @@ def _combo(record: dict) -> tuple[str, str]:
 
 
 def _primary_metric(record: dict) -> float | None:
-    """The headline metric for a record: accuracy for plr, recall@k for search."""
+    """Headline metric: accuracy (plr); recall@k for legacy search records."""
     if record.get("attribute") == "search":
         v = record.get("recall_at_k")
     else:

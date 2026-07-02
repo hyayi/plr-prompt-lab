@@ -56,8 +56,7 @@ def _resolve_core_ir(override: str | None = None) -> str | None:
 def _require_core_ir(override: str | None = None) -> str:
     """Like _resolve_core_ir but raise a clear error when it cannot be found.
 
-    Used by commands that genuinely need core/ir (port, search-mode eval's
-    stale-seed check is tolerant of None, so it does not use this)."""
+    Used by commands that genuinely need core/ir (port)."""
     path = _resolve_core_ir(override)
     if not path:
         raise SystemExit(

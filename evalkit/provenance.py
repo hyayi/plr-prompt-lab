@@ -4,7 +4,7 @@ The "prompt surface" is the same true-surface set that ``lab port`` diffs
 against core/ir: the prompt YAML files under ``prompts/`` plus ``plr_prompts.py``
 and ``plr_core.py`` (defined once in ``surface_relpaths`` and reused by both).
 ``prompt_hash()`` returns a short, stable sha256 prefix of that content so every
-ledger writer (``eval/run_eval.py``, ``run_search_eval.py``) and any reporter
+ledger writer (``eval/run_eval.py``) and any reporter
 stamps the SAME hash for a given prompt state — letting a ledger record be tied
 back to the exact prompt bytes that produced it.
 

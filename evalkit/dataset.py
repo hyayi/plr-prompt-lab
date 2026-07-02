@@ -12,7 +12,6 @@ Layout (all optional except crops/ + labels for a real run)::
         labels.jsonl            # {"obj_id": ..., "label": ...}  human ground truth
         predictions.jsonl       # {"obj_id": ..., "pred": ...}   model output
         attributes.jsonl        # {"obj_id": ..., "plr_json": {...}}
-        queries.jsonl           # {"query": ..., "relevant": [obj_id, ...]}   (search)
         manifest.yaml           # {attribute, n, created, source_note}
 
 ``Dataset(path)`` only wraps paths; it does not read the jsonl bodies (the

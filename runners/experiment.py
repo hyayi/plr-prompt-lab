@@ -151,7 +151,7 @@ class Cell:
     model: str
     prompt: str      # version tag (e.g. plr_v1.4_cot)
     pipeline: str
-    attribute: str   # empty string for search pipeline cells
+    attribute: str   # PLR attribute (e.g. gender)
     fmt: str = ""    # IR_PLR_FORMAT axis value ("yaml"|"json"); "" = env untouched
     reason: str = "" # IR_PLR_REASON axis value ("on"|"off"); "" = env untouched
 
