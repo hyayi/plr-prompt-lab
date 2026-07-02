@@ -145,13 +145,13 @@ def re_score(
     stamped_version: str | None = None
     variant = None
     if prompt_version:
-        from runners.variant import apply_sampling, load_variant
+        from runners.exp_config import apply_sampling, load_config
 
-        # --version accepts a VARIANT name (variants/<n>.yaml — a composed
-        # experiment combination referencing a prompt version) or a plain
+        # --version accepts an EXPERIMENT CONFIG name (configs/<n>.yaml — a
+        # composed combination referencing a prompt version) or a plain
         # prompt version (prompts/<V>.yaml). Names matching neither
         # (mock_v1, demo tags) fall back to the module constants.
-        variant = load_variant(here, prompt_version)
+        variant = load_config(here, prompt_version)
         prompt_yaml_ver = variant.prompt if variant else prompt_version
         if (here / "prompts" / f"{prompt_yaml_ver}.yaml").exists():
             from providers.file_prompt_provider import FilePromptProvider
@@ -163,7 +163,7 @@ def re_score(
                     enum_overrides=_enum_overrides,
                 ).build_plr_messages(hint)
             )
-            # Ledger tag = what the user named: the variant (combination)
+            # Ledger tag = what the user named: the experiment-config
             # name, or the bare prompt version.
             stamped_version = prompt_version
             apply_sampling(model, variant)
@@ -190,7 +190,7 @@ def re_score(
         # gate no longer withholds crops from the model, so every crop gets
         # exactly one call. run_plr's qreport parameter only steers its (now
         # unused) coarse_only branch — pin the normal mode.
-        # preprocess.marker=false (variant knob): pass the RAW crop with
+        # preprocess.marker=false (config knob): pass the RAW crop with
         # _pre_marked=True so run_plr skips drawing the corner marker.
         skip_marker = variant is not None and not variant.marker
         plr_json = plr_core.run_plr(

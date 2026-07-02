@@ -1,0 +1,14 @@
+# configs/<name>.yaml — 실험 파라미터 config (구성요소를 경로로 참조해 조합)
+# 실행: lab run --version example  (ledger의 version에 config명이 찍힘)
+# provenance: prompt_hash가 configs/*.yaml을 해시 → 조합 자동 각인
+prompt: prompts/plr_v1.5_cot.yaml   # 필수 — 프롬프트 버전 경로 (bare 이름도 허용)
+
+# --- 선택 knob (생략 = 운영 기본값) ---
+# enums:                            # 주입 enum 오버라이드: inline 또는 yaml 경로
+#   colors: [black, white, red]
+# enums: configs/enums/cctv_slim.yaml
+# preprocess:
+#   marker: false                   # 노란 코너 마커 생략 (기본 true)
+# sampling:
+#   max_tokens: 256                 # 기본 512
+#   temperature: 0.2                # 기본 0.0

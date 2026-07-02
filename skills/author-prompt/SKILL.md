@@ -87,22 +87,23 @@ plr:
 #     ...
 ```
 
-## Variants — experiment COMBINATIONS (variants/<name>.yaml)
+## Experiment configs — parameter combinations (configs/<name>.yaml)
 
 A prompt yaml holds templates ONLY. To cross a prompt with other input
 knobs (enum lists, preprocessing, sampling) WITHOUT copying template text,
-write a variant file (see `variants/example.yaml`):
+write an experiment config that references each component by path (see
+`configs/example.yaml`):
 
 ```yaml
-prompt: plr_v1.5_cot        # references the prompt version above
-enums: { colors: [black, white, red] }
+prompt: prompts/plr_v1.5_cot.yaml    # component by path (bare name also ok)
+enums: { colors: [black, white, red] }   # inline, or a yaml path
 preprocess: { marker: false }
 sampling: { max_tokens: 256, temperature: 0.2 }
 ```
 
-`lab run --version <variant-name>` resolves the combination; the ledger
-stamps the variant name; prompt_hash covers variants/*.yaml. Same prompt ×
-N knob-sets = N variant files, zero template copies.
+`lab run --version <config-name>` resolves the combination; the ledger
+stamps the config name; prompt_hash covers configs/*.yaml. Same prompt ×
+N knob-sets = N config files, zero template copies.
 
 ## Domain lessons (encoded history — do not relearn these the hard way)
 

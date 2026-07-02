@@ -31,27 +31,27 @@ _SURFACE_PY = ("plr_prompts.py", "plr_core.py")
 
 def surface_relpaths(
     lab_root: str | os.PathLike[str] | None = None,
-    include_variants: bool = False,
+    include_exp_configs: bool = False,
 ) -> list[str]:
     """Relative paths of the existing prompt-surface files, deterministic order.
 
     Single source of truth for both prompt_hash() and lab port. Sorted by
     relative path so callers are independent of directory-listing order.
 
-    ``include_variants=True`` adds variants/*.yaml (experiment combination
-    files) — used by prompt_hash so a knob change re-stamps provenance.
-    ``lab port`` keeps the default False: variants are lab-only and have no
-    core/ir counterpart to diff against.
+    ``include_exp_configs=True`` adds configs/*.yaml (experiment parameter
+    configs) — used by prompt_hash so a knob change re-stamps provenance.
+    ``lab port`` keeps the default False: experiment configs are lab-only
+    and have no core/ir counterpart to diff against.
     """
     root = Path(lab_root) if lab_root else _LAB_ROOT
     rels: list[str] = []
     prompts_dir = root / _PROMPTS_DIR
     if prompts_dir.is_dir():
         rels.extend(sorted(str(p.relative_to(root)) for p in prompts_dir.glob("*.yaml")))
-    if include_variants:
-        variants_dir = root / "variants"
-        if variants_dir.is_dir():
-            rels.extend(sorted(str(p.relative_to(root)) for p in variants_dir.glob("*.yaml")))
+    if include_exp_configs:
+        configs_dir = root / "configs"
+        if configs_dir.is_dir():
+            rels.extend(sorted(str(p.relative_to(root)) for p in configs_dir.glob("*.yaml")))
     for py in _SURFACE_PY:
         if (root / py).exists():
             rels.append(py)
@@ -59,9 +59,9 @@ def surface_relpaths(
 
 
 def _surface_paths(lab_root: str | os.PathLike[str] | None = None) -> list[Path]:
-    """Absolute paths of the hashed surface (prompts + variants)."""
+    """Absolute paths of the hashed surface (prompts + experiment configs)."""
     root = Path(lab_root) if lab_root else _LAB_ROOT
-    return [root / rel for rel in surface_relpaths(root, include_variants=True)]
+    return [root / rel for rel in surface_relpaths(root, include_exp_configs=True)]
 
 
 def read_seed_hash(lab_root: str | os.PathLike[str] | None = None) -> str | None:

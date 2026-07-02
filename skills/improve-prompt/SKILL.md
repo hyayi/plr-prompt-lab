@@ -56,8 +56,8 @@ loop indefinitely.
 - The levers are ALL the input knobs, not just wording:
   ① prompt template text (a new prompts/<V>.yaml)
   ② `enums:` ③ `preprocess.marker` ④ `sampling:` — knobs ②-④ go into a
-  variants/<name>.yaml that REFERENCES the prompt version (no template
-  copies; see skills/author-prompt §Variants). Pick the lever the evidence
+  configs/<name>.yaml experiment config that REFERENCES the prompt by path
+  (no template copies; see skills/author-prompt). Pick the lever the evidence
   points at: a vocabulary-confusion pattern wants an enum change, not more
   instructions.
 - Anti-patterns to avoid: piling on generic instructions ("be more careful"),
@@ -96,9 +96,9 @@ If any fail → back to 2 (next round). After round 3 → emit `unresolved`.
 1. **분석 리포트** — error patterns with obj_ids + image observations +
    metrics (including margin/quality calibration reading).
 2. **수정안** — a ready draft: a new `prompts/<new_version>.yaml` (template
-   changes) and/or a `variants/<name>.yaml` (knob changes referencing an
-   existing prompt), with a header comment documenting the rationale per
-   change.
+   changes) and/or a `configs/<name>.yaml` experiment config (knob changes
+   referencing an existing prompt), with a header comment documenting the
+   rationale per change.
 3. **예상 효과** — the judge-approved measurable predictions.
 4. **검증 계획** — the exact `lab experiment run` yaml comparing
    current vs new version on the same dataset.

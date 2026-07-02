@@ -1,10 +1,10 @@
-"""Variant composition — variants/<name>.yaml crosses a prompt version with
-input knobs WITHOUT copying template text.
+"""Experiment configs — configs/<name>.yaml crosses a prompt version with
+input knobs WITHOUT copying template text (components referenced by path).
 
-`prompts/<V>.yaml` stays a pure prompt version; a variant references it
-(`prompt: plr_v1.5_cot`) and adds `enums:` / `preprocess:` / `sampling:`.
-`lab run --version <variant-name>` resolves the combination, the ledger
-stamps the variant name, and prompt_hash covers variants/*.yaml so any knob
+`prompts/<V>.yaml` stays a pure prompt version; a config references it
+(`prompt: prompts/plr_v1.5_cot.yaml`) and adds `enums:`/`preprocess:`/`sampling:`.
+`lab run --version <config-name>` resolves the combination, the ledger
+stamps the config name, and prompt_hash covers configs/*.yaml so any knob
 change re-stamps provenance.
 
 No GPU, no DB, no Redis.
@@ -52,8 +52,8 @@ class _SamplingAwareMock:
         return _MOCK_PLR_YAML
 
 
-def _write_variant(name: str, body: str) -> Path:
-    vdir = _LAB_ROOT / "variants"
+def _write_config(name: str, body: str) -> Path:
+    vdir = _LAB_ROOT / "configs"
     vdir.mkdir(exist_ok=True)
     out = vdir / f"{name}.yaml"
     out.write_text(textwrap.dedent(body), encoding="utf-8")
@@ -69,14 +69,14 @@ def _make_ds(base: Path) -> Path:
     return base
 
 
-def test_variant_composition_applies_all_knobs(tmp_path: Path, monkeypatch) -> None:
-    """A variant referencing plr_v1.5_cot applies enum/marker/sampling knobs
-    without any copy of the template text."""
+def test_config_composition_applies_all_knobs(tmp_path: Path, monkeypatch) -> None:
+    """A config referencing prompts/plr_v1.5_cot.yaml (path form) applies
+    enum/marker/sampling knobs without any copy of the template text."""
     from runners import re_score as rs
     import plr_core
 
-    path = _write_variant("test_combo", """\
-        prompt: plr_v1.5_cot
+    path = _write_config("test_combo", """\
+        prompt: prompts/plr_v1.5_cot.yaml
         enums:
           colors: [black, white, red]
         preprocess:
@@ -105,26 +105,26 @@ def test_variant_composition_applies_all_knobs(tmp_path: Path, monkeypatch) -> N
         assert "- color: black, white, red\n" in text, "enum override not injected"
         assert marker_calls == [], "preprocess.marker=false must skip drawing"
         assert model.max_tokens == 256 and model.temperature == 0.2
-        assert meta["version"] == "test_combo", "ledger tag must be the variant name"
+        assert meta["version"] == "test_combo", "ledger tag must be the config name"
     finally:
         path.unlink()
 
 
-def test_same_prompt_two_variants_differ_only_by_knobs(tmp_path: Path, monkeypatch) -> None:
-    """Two variants over the SAME prompt version — no template copies, prompts
+def test_same_prompt_two_configs_differ_only_by_knobs(tmp_path: Path, monkeypatch) -> None:
+    """Two configs over the SAME prompt version — no template copies, prompts
     differ exactly by the overridden enum list."""
     from providers.file_prompt_provider import FilePromptProvider
-    from runners.variant import load_variant
+    from runners.exp_config import load_config
 
-    a = _write_variant("test_va", "prompt: plr_v1.5_cot\n")
-    b = _write_variant("test_vb", """\
+    a = _write_config("test_va", "prompt: plr_v1.5_cot\n")
+    b = _write_config("test_vb", """\
         prompt: plr_v1.5_cot
         enums:
           colors: [red, blue]
         """)
     try:
         monkeypatch.setenv("IR_PLR_REASON", "on")
-        va, vb = load_variant(_LAB_ROOT, "test_va"), load_variant(_LAB_ROOT, "test_vb")
+        va, vb = load_config(_LAB_ROOT, "test_va"), load_config(_LAB_ROOT, "test_vb")
         ta = FilePromptProvider(version_override=va.prompt,
                                 enum_overrides=va.enums).build_plr_messages("person")
         tb = FilePromptProvider(version_override=vb.prompt,
@@ -137,18 +137,18 @@ def test_same_prompt_two_variants_differ_only_by_knobs(tmp_path: Path, monkeypat
 
 
 def test_variant_dangling_prompt_fails_loud() -> None:
-    from runners.variant import load_variant
+    from runners.exp_config import load_config
 
-    path = _write_variant("test_dangling", "prompt: no_such_version\n")
+    path = _write_config("test_dangling", "prompt: no_such_version\n")
     try:
         with pytest.raises(ValueError, match="dangling"):
-            load_variant(_LAB_ROOT, "test_dangling")
+            load_config(_LAB_ROOT, "test_dangling")
     finally:
         path.unlink()
 
 
 def test_default_prompt_version_keeps_production_behaviour(tmp_path: Path, monkeypatch) -> None:
-    """Plain prompt version (no variant): marker drawn, sampling untouched."""
+    """Plain prompt version (no config): marker drawn, sampling untouched."""
     from runners import re_score as rs
     import plr_core
 
@@ -163,13 +163,13 @@ def test_default_prompt_version_keeps_production_behaviour(tmp_path: Path, monke
     assert model.max_tokens == 512 and model.temperature == 0.0
 
 
-def test_variant_changes_prompt_hash() -> None:
-    """A new/changed variant file re-stamps provenance."""
+def test_config_changes_prompt_hash() -> None:
+    """A new/changed experiment config re-stamps provenance."""
     from evalkit.provenance import prompt_hash
 
     before = prompt_hash(_LAB_ROOT)
-    path = _write_variant("test_hash", "prompt: plr_v1.5_cot\n")
+    path = _write_config("test_hash", "prompt: plr_v1.5_cot\n")
     try:
-        assert prompt_hash(_LAB_ROOT) != before, "variants/ must be hashed"
+        assert prompt_hash(_LAB_ROOT) != before, "configs/ must be hashed"
     finally:
         path.unlink()
