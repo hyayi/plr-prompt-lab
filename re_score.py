@@ -262,6 +262,7 @@ def run_search_over_golden(
     attributes_path: str | None = None,
     results_path: str | None = None,
     model: Any = None,
+    prompt_version: str | None = None,
 ) -> None:
     """Run search_core.run_search over the golden search set.
 
@@ -286,12 +287,30 @@ def run_search_over_golden(
       results_path:     path to write search_results.jsonl
                         (default: same directory as queries_path)
       model:            passed to parse_query as backend; None = dictionary path (no GPU needed)
+      prompt_version:   optional prompt version tag (e.g. "plr_v1.4_cot"). When
+                        given AND prompts/<prompt_version>.yaml exists, the
+                        QUERY-PARSER prompt is built from that version's YAML via
+                        FilePromptProvider (same rule as re_score's PLR prompt).
+                        Only effective on the Gemma parse path (model != None) —
+                        the dictionary path sends no prompt at all. None, or a
+                        version with no YAML, keeps the module-level constants.
     """
     import search_core
     from query_parser import parse_query
 
     here = Path(__file__).parent
     search_dir = here / "eval" / "golden" / "search"
+
+    # Version-specific query-parser prompt wiring — mirrors re_score's PLR
+    # wiring exactly (yaml-backed version → FilePromptProvider, else constants).
+    build_messages = None
+    if prompt_version and (here / "prompts" / f"{prompt_version}.yaml").exists():
+        from providers.file_prompt_provider import FilePromptProvider
+
+        build_messages = (
+            lambda q: FilePromptProvider(version_override=prompt_version)
+            .build_query_parser_messages(q)
+        )
 
     q_path = Path(queries_path) if queries_path else search_dir / "queries.jsonl"
     a_path = Path(attributes_path) if attributes_path else search_dir / "attributes.jsonl"
@@ -325,7 +344,7 @@ def run_search_over_golden(
         query_text = q_entry["query"]
 
         # Parse query — dictionary path when model=None (no GPU required)
-        query_json = parse_query(query_text, backend=model)
+        query_json = parse_query(query_text, backend=model, build_messages=build_messages)
 
         # Run search (hard-filter + attribute-match rank)
         ranked_rows = search_core.run_search(query_json, candidates)

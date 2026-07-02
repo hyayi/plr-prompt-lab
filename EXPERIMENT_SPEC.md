@@ -19,6 +19,8 @@ attributes: [gender]                       # PLR attributes (plr pipeline only)
 
 # Optional
 ledger:     ./eval/ledger.jsonl            # ledger path (default: eval/ledger.jsonl)
+formats:    [yaml]                         # IR_PLR_FORMAT axis (yaml | json), plr cells only
+reasons:    ["on", "off"]                  # IR_PLR_REASON axis (on | off), plr cells only
 ```
 
 ### Field reference
@@ -31,16 +33,36 @@ ledger:     ./eval/ledger.jsonl            # ledger path (default: eval/ledger.j
 | `pipelines` | list[str]      | yes      | `plr` (attribute extraction) or `search` (text retrieval). Unknown names raise an error before any cell runs. |
 | `attributes`| list[str]      | no       | PLR attribute names (e.g. `gender`, `vehicle_type`, `military`). Required for the `plr` pipeline. Ignored for `search`. Default: `[""]`. |
 | `ledger`    | str            | no       | Path to the ledger JSONL file. Relative paths are resolved relative to the experiment YAML file. Default: `eval/ledger.jsonl` inside the lab root. |
+| `formats`   | list[str]      | no       | `IR_PLR_FORMAT` env axis; allowed values `yaml`, `json` (quote-free). Applies to **plr cells only**. Set per cell and restored after each cell. Default: env untouched. |
+| `reasons`   | list[str]      | no       | `IR_PLR_REASON` env axis; allowed values `on`, `off` (**quote them** — bare YAML `on`/`off` parse as booleans). Applies to **plr cells only**. Default: env untouched. |
+
+### format/reason axis semantics
+
+- These are the *effective* runtime axes the constants prompt path switches on
+  (`plr_prompts.py`: format picks the yaml/json template family, reason picks
+  the CoT vs no-reason person template).
+- **Ledger disambiguation**: two cells that differ only in an env axis would
+  otherwise stamp the same `version` + `prompt_hash` (the hash covers files,
+  not env). The runner therefore appends the axis values to the ledger version
+  tag: `plr_v1.4_cot+json+reason-off`.
+- **Conflict guard**: a yaml-backed prompt version pins its own wire format in
+  the yaml's `format:` key, while the *response parser* follows
+  `IR_PLR_FORMAT`. A conflicting combination (e.g. `prompts: [plr_v1.4_cot]`
+  which pins yaml × `formats: [json]`) would make every parse fail, so the
+  cell fails loudly with a clear error instead of producing garbage metrics.
+  The `reasons` axis has no such conflict (the provider reads it from env).
 
 ## Cell enumeration
 
 The cross-product is: `pipelines × datasets × models × prompts`.
 
-For the `plr` pipeline, the `attributes` axis is added:
-`pipelines × datasets × models × prompts × attributes`.
+For the `plr` pipeline, the `attributes` (and optional `formats` / `reasons`)
+axes are added:
+`pipelines × datasets × models × prompts × attributes × formats × reasons`.
 
-For the `search` pipeline, the `attributes` axis is not used (search reads
-`queries.jsonl` from the dataset directory).
+For the `search` pipeline, the `attributes`/`formats`/`reasons` axes are not
+used (search reads `queries.jsonl` from the dataset directory, and its
+dictionary parse sends no PLR prompt).
 
 ## Dispatch via registry
 

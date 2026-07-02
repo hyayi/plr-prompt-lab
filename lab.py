@@ -245,6 +245,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             queries_path=str(queries_path),
             attributes_path=str(search_dir / "attributes.jsonl"),
             model=None,  # dictionary path, no GPU needed
+            prompt_version=args.version,  # query-parser prompt (gemma path only)
         )
         print("[run] search done")
         return 0
@@ -273,6 +274,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             queries_path=str(queries_path),
             attributes_path=str(search_dir / "attributes.jsonl"),
             model=None,  # dictionary path, no GPU needed
+            prompt_version=args.version,  # query-parser prompt (gemma path only)
         )
         print("[run] search done")
     else:

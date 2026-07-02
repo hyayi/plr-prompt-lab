@@ -1,7 +1,8 @@
 """Experiment matrix runner for the PLR prompt lab (P2-2).
 
 Enumerates the cross-product of datasets × models × prompts × pipelines ×
-attributes from an experiment.yaml, then for each cell:
+attributes (× formats × reasons, both optional) from an experiment.yaml, then
+for each cell:
 
   (a) run  — invoke the pipeline's runner via the registry
               (plr  → re_score.re_score with get_model(model))
@@ -99,6 +100,24 @@ def _validate_schema(cfg: dict[str, Any], path: str | Path) -> None:
                     f"experiment.yaml ({path}): all items in 'attributes' must be "
                     f"strings, got {item!r}"
                 )
+    # Optional env axes: 'formats' (IR_PLR_FORMAT) and 'reasons' (IR_PLR_REASON).
+    # Closed value sets — anything else is a typo we want to fail loudly on.
+    _ENV_AXES = {"formats": {"yaml", "json"}, "reasons": {"on", "off"}}
+    for key, allowed in _ENV_AXES.items():
+        if key not in cfg:
+            continue
+        val = cfg[key]
+        if not isinstance(val, list) or not val:
+            raise ValueError(
+                f"experiment.yaml ({path}): '{key}' must be a non-empty list "
+                f"when present, got {val!r}"
+            )
+        bad = [x for x in val if not isinstance(x, str) or x not in allowed]
+        if bad:
+            raise ValueError(
+                f"experiment.yaml ({path}): invalid value(s) in '{key}': {bad}. "
+                f"Allowed: {sorted(allowed)}"
+            )
 
 
 def _validate_registry(cfg: dict[str, Any], path: str | Path) -> None:
@@ -133,6 +152,8 @@ class Cell:
     prompt: str      # version tag (e.g. plr_v1.4_cot)
     pipeline: str
     attribute: str   # empty string for search pipeline cells
+    fmt: str = ""    # IR_PLR_FORMAT axis value ("yaml"|"json"); "" = env untouched
+    reason: str = "" # IR_PLR_REASON axis value ("on"|"off"); "" = env untouched
 
     def label(self) -> str:
         parts = [
@@ -143,7 +164,22 @@ class Cell:
         ]
         if self.attribute:
             parts.append(f"attribute={self.attribute!r}")
+        if self.fmt:
+            parts.append(f"format={self.fmt!r}")
+        if self.reason:
+            parts.append(f"reason={self.reason!r}")
         return "{" + ", ".join(parts) + "}"
+
+    def version_tag(self) -> str:
+        """Ledger version stamp. The base prompt tag alone cannot distinguish
+        two cells that differ only in the format/reason env axes (prompt_hash
+        hashes files, not env), so the axis values are appended to the tag."""
+        tag = self.prompt
+        if self.fmt:
+            tag += f"+{self.fmt}"
+        if self.reason:
+            tag += f"+reason-{self.reason}"
+        return tag
 
 
 @dataclass
@@ -160,16 +196,23 @@ class CellResult:
 def enumerate_cells(cfg: dict[str, Any]) -> list[Cell]:
     """Build the cross-product of axes into a flat list of Cells.
 
-    For the plr pipeline each (dataset, model, prompt, attribute) tuple
-    is a cell.  For the search pipeline the attribute axis is not used
-    (search uses queries.jsonl); we emit one cell per (dataset, model,
-    prompt) with attribute="".
+    For the plr pipeline each (dataset, model, prompt, attribute[, format,
+    reason]) tuple is a cell.  For the search pipeline the attribute axis is
+    not used (search uses queries.jsonl); we emit one cell per (dataset,
+    model, prompt) with attribute="".
+
+    The optional 'formats' / 'reasons' axes (IR_PLR_FORMAT / IR_PLR_REASON)
+    apply to plr cells only — the search pipeline's dictionary parse sends no
+    PLR prompt, so crossing it with env axes would just duplicate identical
+    cells.
     """
     datasets: list[str] = cfg["datasets"]
     models: list[str] = cfg["models"]
     prompts: list[str] = cfg["prompts"]
     pipelines: list[str] = cfg["pipelines"]
     attributes: list[str] = cfg.get("attributes") or [""]
+    formats: list[str] = cfg.get("formats") or [""]
+    reasons: list[str] = cfg.get("reasons") or [""]
 
     cells: list[Cell] = []
     for pipeline, dataset, model, prompt in product(pipelines, datasets, models, prompts):
@@ -182,14 +225,16 @@ def enumerate_cells(cfg: dict[str, Any]) -> list[Cell]:
                 attribute="",
             ))
         else:
-            # plr: one cell per attribute
-            for attribute in attributes:
+            # plr: one cell per attribute × format × reason
+            for attribute, fmt, reason in product(attributes, formats, reasons):
                 cells.append(Cell(
                     dataset=dataset,
                     model=model,
                     prompt=prompt,
                     pipeline=pipeline,
                     attribute=attribute,
+                    fmt=fmt,
+                    reason=reason,
                 ))
     return cells
 
@@ -209,6 +254,36 @@ def _set_prompt_env(prompt_version: str) -> None:
         os.environ["IR_PLR_FORMAT"] = prompt_version.strip().lower()
 
 
+def _apply_env_axes(cell: Cell) -> None:
+    """Apply the cell's optional format/reason axes to the environment.
+
+    Called after _set_prompt_env so an explicit 'formats' axis wins over a
+    format-named prompt tag.  Guard: a yaml-backed prompt version pins its own
+    wire format (FilePromptProvider reads it from the yaml's `format:` key),
+    while the RESPONSE parser follows IR_PLR_FORMAT — a mismatch would make the
+    model emit one format and the parser expect the other, failing every crop.
+    Fail the cell loudly instead of producing garbage metrics.
+    """
+    if cell.fmt:
+        yaml_path = _LAB_ROOT / "prompts" / f"{cell.prompt}.yaml"
+        if yaml_path.exists():
+            import yaml
+
+            data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+            pinned = str(data.get("format", "yaml")).strip().lower()
+            if pinned != cell.fmt:
+                raise RuntimeError(
+                    f"format axis {cell.fmt!r} conflicts with prompts/{cell.prompt}.yaml "
+                    f"which pins format={pinned!r}: the prompt would ask for {pinned} "
+                    f"but the response parser (IR_PLR_FORMAT={cell.fmt}) would reject it. "
+                    f"Drop this (prompt, format) combination or use a constants-backed "
+                    f"version tag for the format axis."
+                )
+        os.environ["IR_PLR_FORMAT"] = cell.fmt
+    if cell.reason:
+        os.environ["IR_PLR_REASON"] = cell.reason
+
+
 def _run_plr_cell(cell: Cell, ledger_path: str) -> None:
     """Run one PLR cell: re_score then run_eval."""
     import re_score as rs
@@ -223,6 +298,7 @@ def _run_plr_cell(cell: Cell, ledger_path: str) -> None:
 
     model = get_model(cell.model)
     _set_prompt_env(cell.prompt)
+    _apply_env_axes(cell)
 
     meta = rs.re_score(
         attribute=cell.attribute,
@@ -245,7 +321,7 @@ def _run_plr_cell(cell: Cell, ledger_path: str) -> None:
         "run_eval",
         "--attribute", cell.attribute,
         "--golden", str(ds_path),
-        "--version", cell.prompt,
+        "--version", cell.version_tag(),
         "--ledger", ledger_path,
         "--model", cell.model,
         "--pipeline", cell.pipeline,
@@ -296,6 +372,7 @@ def _run_search_cell(cell: Cell, ledger_path: str) -> None:
         attributes_path=str(attributes_path),
         results_path=str(results_path),
         model=None,
+        prompt_version=cell.prompt,  # query-parser prompt (gemma path only)
     )
 
     # (b) eval — run_search_eval.main
@@ -315,9 +392,15 @@ def _run_search_cell(cell: Cell, ledger_path: str) -> None:
 
 
 def run_cell(cell: Cell, ledger_path: str) -> CellResult:
-    """Run one cell (run + eval).  Returns CellResult; never raises."""
+    """Run one cell (run + eval).  Returns CellResult; never raises.
+
+    IR_PLR_FORMAT / IR_PLR_REASON are snapshotted before and restored after the
+    cell so the format/reason axes (and _set_prompt_env) never leak into the
+    next cell — a cell without an axis value must see the pre-matrix env.
+    """
     label = cell.label()
     print(f"[experiment] CELL {label}", flush=True)
+    saved_env = {k: os.environ.get(k) for k in ("IR_PLR_FORMAT", "IR_PLR_REASON")}
     try:
         if cell.pipeline == "search":
             _run_search_cell(cell, ledger_path)
@@ -330,6 +413,12 @@ def run_cell(cell: Cell, ledger_path: str) -> CellResult:
         print(f"[experiment]   FAILED {label}\n             {msg}", flush=True)
         log.error("Cell failed: %s — %s", label, msg)
         return CellResult(cell=cell, status="failed", error=msg)
+    finally:
+        for k, v in saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 # =====================================================================

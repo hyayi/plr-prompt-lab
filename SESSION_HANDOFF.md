@@ -11,8 +11,8 @@
 - **무엇**: PLR(객체 속성 추출) + 텍스트검색의 **프롬프트·파이프라인을 측정하며 개선**하는 독립 실험 도구. 데이터·모델·프롬프트·파이프라인을 파라미터로 조합 → 자동 eval → ledger 추이 → HTML 리포트.
 - **어디(lab)**: `/home/ziovision/plr-prompt-lab` — 별도 git repo, `master`, HEAD **`2553b13`**, 71 tracked files, **67 tests green** (GPU-free).
 - **운영 원본(ir)**: `/home/ziovision/ziomilitary/core/ir` — branch `fix/ir-classmap`, HEAD **`1690f25`** (미배포·작업트리→커밋, ir 재시작 시 반영).
-- **진행 완료**: v1(사이클 코어) → v2 Phase 1(패키징+데이터준비) → v2 Phase 2(매트릭스+리포트) → GUIDE.html(구조/사용법 원페이지) → `--version` 실-프롬프트-로드 픽스.
-- **미완/다음**: 실측 baseline 미실행(GPU + gender 라벨 필요), search 쪽 `--version` 스위치 미배선, format/reason 매트릭스 축 승격(옵션).
+- **진행 완료**: v1(사이클 코어) → v2 Phase 1(패키징+데이터준비) → v2 Phase 2(매트릭스+리포트) → GUIDE.html(구조/사용법 원페이지) → `--version` 실-프롬프트-로드 픽스 → **(2026-07-02) search `--version` 배선 + format/reason 매트릭스 축 + lab-side parity 테스트** (§8 갭 2·3·4 해소).
+- **미완/다음**: 실측 baseline 미실행(GPU + gender 라벨 필요) — 남은 유일한 실행 갭.
 
 ---
 
@@ -31,6 +31,7 @@
 - `plr_prompts.py` — 프롬프트 **상수** (lab == core/ir, 바이트 동일)
 - `plr_core.py` — ⚠️ **의도적 divergence 1곳**: lab에는 `run_plr(..., build_messages=None)` 파라미터가 추가됨(`--version` 픽스, 하위호환). core/ir엔 없음. 그 외는 동일.
 - (시노님) `parser/qp_v0.4.yaml` — search 쪽, 동일
+- (표면 밖) `query_parser.py` — ⚠️ lab-only divergence: `parse_query`/`parse_with_gemma`에 `build_messages=None` 주입구 추가(search `--version` 배선, 하위호환 — plr_core와 같은 패턴). port 표면(provenance)에는 포함되지 않으므로 `lab port`에는 안 나타남; core/ir 이식 시 참고.
 
 **비교 방법**:
 ```bash
@@ -98,6 +99,12 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 - `GUIDE.html` (구조+사용법 원페이지, 배포용): `654ca3a` · `d7285e3` · `7634a0a`
 - **`--version` 실-프롬프트-로드 픽스**: `51022f6`(feat) · `2553b13`(docs) — experiment의 프롬프트 축이 이제 진짜로 다른 프롬프트를 비교
 
+### 갭 마감 (2026-07-02, §8의 2·3·4)
+- **search `--version` 배선**: `run_search_over_golden(prompt_version=…)` → `parse_query(build_messages=…)` → `parse_with_gemma` 주입구. gemma 백엔드가 있을 때 `prompts/<V>.yaml`의 `query_parser` 블록을 실제 전송(dictionary 경로는 무프롬프트라 영향 없음). lab.py / experiment.py 양쪽 배선.
+- **format/reason 매트릭스 축**: experiment.yaml 옵션 키 `formats:`(yaml|json) / `reasons:`("on"|"off" — 따옴표 필수). plr 셀에만 교차, 셀 단위 env 적용+복원, ledger version 태그에 `+json`/`+reason-off` 접미사로 구분. yaml-고정 버전 × 불일치 format 은 셀 단위 fail-loud.
+- **lab-side parity 테스트**: `tests/test_prompt_surface_parity.py` — core/ir의 `test_prompt_source_parity.py` 미러 + query_parser 블록 parity(3버전 모두) 추가.
+- 신규 테스트: `tests/test_search_version_and_axes.py` (배선/축/가드/env-복원 검증). 총 **79 passed, 4 xfailed**.
+
 ---
 
 ## 5. CLI (9 서브명령)
@@ -154,11 +161,12 @@ python3 lab.py demo                  # GPU 없이 전체 사이클 시연
 ## 8. 알려진 갭 / 다음 할 일
 
 1. **실측 baseline 미실행** — gender 골든셋(63)에 **사람 라벨**이 아직 없고 GPU 실행 필요. (`lab build-golden`으로 크롭 재생성 → `lab label` → `lab run --model gemma` → `lab eval`.)
-2. **search `--version` 미배선** — 지금 버전 스위치는 `plr` 프롬프트만. `query_parser`(검색 프롬프트)는 버전 로드 미연결 → 필요 시 `run_search`/`run_search_over_golden`에도 provider 배선.
-3. **format/reason 매트릭스 축 승격**(옵션) — 실효 축인 `IR_PLR_FORMAT`/`IR_PLR_REASON`을 experiment 축으로 노출 고려.
-4. **lab parity 테스트 없음** — core/ir엔 `tests/test_prompt_source_parity.py`가 상수↔yaml 강제. lab은 `lab port` diff로만 확인 → lab-side parity 테스트 추가 고려.
+2. ~~search `--version` 미배선~~ — ✅ **완료 (2026-07-02)**: `run_search_over_golden(prompt_version=…)` → `parse_query(build_messages=…)` 배선. 단, 효과는 gemma 백엔드 사용 시에만(현재 lab run search는 `model=None` dictionary 경로 — 검색 프롬프트 A/B는 GPU 백엔드 연결이 선행 조건).
+3. ~~format/reason 매트릭스 축 승격~~ — ✅ **완료 (2026-07-02)**: experiment.yaml `formats:`/`reasons:` 옵션 축 (EXPERIMENT_SPEC.md 참고).
+4. ~~lab parity 테스트 없음~~ — ✅ **완료 (2026-07-02)**: `tests/test_prompt_surface_parity.py`.
 5. **core/ir `1690f25` 미배포** — ir 재시작 시 반영됨. 배포 여부는 사용자 결정(architect가 "재시작 안전" 확인).
 6. **골든 크롭 gitignore** — 실측 데이터는 repo에 없음(`~/gender_eval` 등). 프라이버시상 배포 금지 → 받는 사람은 자기 데이터로.
+7. **(신규, 옵션) search의 gemma 백엔드 스위치** — `lab run --pipeline search`가 `--model`을 무시하고 항상 dictionary 경로. 검색 프롬프트를 실제로 A/B 하려면 query-parser용 backend(.generate(pil,msgs,…)→.raw 프로토콜, lab Model 프로토콜과 다름) 어댑터가 필요.
 
 ---
 

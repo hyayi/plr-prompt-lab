@@ -31,6 +31,10 @@ IR_PLR_FORMAT = yaml | json     # yaml is current; json is a legacy A/B path
 IR_PLR_REASON = on   | off      # on = chain-of-thought (longer, ~+35% tokens)
 ```
 
+Both env vars are also available as experiment-matrix axes (`formats:` /
+`reasons:` in experiment.yaml — see EXPERIMENT_SPEC.md), so you can sweep them
+without touching your shell environment.
+
 Constants to edit (to actually change behavior):
 
 ```

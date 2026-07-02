@@ -1211,10 +1211,19 @@ def _vehicle_template_en(colors: list[str], types_: list[str]) -> str:
 # =====================================================================
 
 
-def parse_with_gemma(user_text: str, backend) -> QueryJSON:
+def parse_with_gemma(user_text: str, backend, build_messages=None) -> QueryJSON:
     """Use the Gemma backend to parse the query. Falls back to dictionary
-    output if Gemma's response is unusable."""
-    msgs = build_query_parser_messages(user_text)
+    output if Gemma's response is unusable.
+
+    ``build_messages`` (lab-only injection seam, mirrors plr_core.run_plr's
+    parameter): optional callable ``(user_text) -> messages`` that replaces the
+    module-level ``build_query_parser_messages`` constants — this is how
+    ``lab run --version <V>`` sends the query-parser prompt from
+    ``prompts/<V>.yaml`` instead of the hardcoded constants. ``None`` keeps the
+    constants path byte-identical to the live core/ir behaviour.
+    """
+    builder = build_messages or build_query_parser_messages
+    msgs = builder(user_text)
     try:
         gen = backend.generate(None, msgs, max_tokens=512, temperature=0.0)
     except Exception as e:
@@ -1338,7 +1347,9 @@ def _target_from_query_type(qt: str) -> str:
 # =====================================================================
 
 
-def parse_query(user_text: str, *, backend=None, force_gemma: bool = False) -> QueryJSON:
+def parse_query(
+    user_text: str, *, backend=None, force_gemma: bool = False, build_messages=None,
+) -> QueryJSON:
     """Parse a user query into structured slots.
 
     qp_v0.3 (2026-05-26): Gemma is the primary parser. The dictionary
@@ -1353,10 +1364,14 @@ def parse_query(user_text: str, *, backend=None, force_gemma: bool = False) -> Q
     can't be parsed, we keep the old dictionary route so the system
     degrades to "still works, just narrower" instead of "nothing works".
     `force_gemma=True` skips even that fallback (used in tests).
+
+    `build_messages` (lab-only, keyword): forwarded to parse_with_gemma so a
+    per-version query-parser prompt (prompts/<V>.yaml) can replace the
+    constants. Ignored on the dictionary path (no prompt is sent there).
     """
     if backend is not None:
         try:
-            q = parse_with_gemma(user_text, backend)
+            q = parse_with_gemma(user_text, backend, build_messages=build_messages)
             # Parity: apply the same surface-form intents the dictionary path
             # applies (e.g. 청바지 = blue denim). This closes the long-standing
             # gap where the production gemma path never narrowed "청바지".
