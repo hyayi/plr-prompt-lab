@@ -125,7 +125,7 @@ def test_re_score_mock_writes_correct_preds(tmp_path: Path) -> None:
     obj_ids = ["obj_a", "obj_b", "obj_c"]
     gdir = _make_golden_dir(tmp_path, obj_ids)
 
-    import re_score as rs
+    from runners import re_score as rs
 
     meta = rs.re_score("gender", MockModel(), golden_dir=str(gdir))
 
@@ -171,7 +171,7 @@ def test_re_score_missing_crop_raises(tmp_path: Path) -> None:
     # Remove one crop
     (gdir / "crops" / "p2.jpg").unlink()
 
-    import re_score as rs
+    from runners import re_score as rs
 
     with pytest.raises(FileNotFoundError):
         rs.re_score("gender", MockModel(), golden_dir=str(gdir))
@@ -189,7 +189,7 @@ def test_re_score_no_db_imports(tmp_path: Path) -> None:
     obj_ids = ["x1", "x2"]
     gdir = _make_golden_dir(tmp_path, obj_ids)
 
-    import re_score as rs
+    from runners import re_score as rs
 
     rs.re_score("gender", MockModel(), golden_dir=str(gdir))
 

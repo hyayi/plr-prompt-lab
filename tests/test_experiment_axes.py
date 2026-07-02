@@ -74,7 +74,7 @@ def _make_gender_dataset(base: Path, obj_ids: list[str]) -> Path:
 
 def test_enumerate_cells_crosses_format_reason_axes() -> None:
     """plr cells cross formats × reasons."""
-    import experiment as ex
+    from runners import experiment as ex
 
     cfg = {
         "datasets": ["d"], "models": ["mock"], "prompts": ["p"],
@@ -88,7 +88,7 @@ def test_enumerate_cells_crosses_format_reason_axes() -> None:
 
 
 def test_validate_schema_rejects_bad_axis_values() -> None:
-    import experiment as ex
+    from runners import experiment as ex
 
     base = {"datasets": ["d"], "models": ["m"], "prompts": ["p"], "pipelines": ["plr"]}
     with pytest.raises(ValueError, match="formats"):
@@ -106,7 +106,7 @@ def test_experiment_reason_axis_sets_env_and_stamps_ledger(
     IR_PLR_REASON, the ledger stamps distinct version tags, and the env is
     restored after the matrix."""
     import registry
-    import experiment
+    from runners import experiment
 
     ds_dir = _make_gender_dataset(tmp_path / "ds", ["m1", "m2"])
     ledger_path = tmp_path / "ledger.jsonl"
@@ -158,7 +158,7 @@ def test_format_axis_conflict_with_yaml_pinned_version_fails_cell(
     """formats: [json] against plr_v1.5_cot (yaml-pinned) must fail that cell
     loudly — and NOT crash the whole matrix (exit 2 = all cells failed)."""
     import registry
-    import experiment
+    from runners import experiment
 
     ds_dir = _make_gender_dataset(tmp_path / "ds", ["m1"])
     monkeypatch.setitem(

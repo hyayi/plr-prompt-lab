@@ -180,7 +180,7 @@ def test_a_cycle_two_versions_delta(tmp_path: Path) -> None:
     v2 MockModel: predicts male   → accuracy = 0.0
     Second run_eval must print 'Δ vs mock_v1' and the ledger has 2 records.
     """
-    import re_score as rs
+    from runners import re_score as rs
 
     obj_ids = ["e2e_a", "e2e_b", "e2e_c"]
     gdir = _make_plr_golden_dir(tmp_path, obj_ids)
@@ -273,7 +273,7 @@ _MOCK_RED_VEHICLE_YAML = textwrap.dedent("""\
 
 def test_no_db_modules_after_cycles(tmp_path: Path) -> None:
     """After running the PLR cycle, forbidden modules must not be in sys.modules."""
-    import re_score as rs
+    from runners import re_score as rs
 
     obj_ids = ["nodb_a", "nodb_b"]
     gdir = _make_plr_golden_dir(tmp_path, obj_ids)
@@ -310,7 +310,7 @@ def test_lab_run_wiring_reaches_gemma_backend(tmp_path: Path) -> None:
     """
     # Build a minimal golden dir so re_score can iterate over obj_ids
     # before the first generate() call hits load_backend
-    import re_score as rs
+    from runners import re_score as rs
 
     obj_ids = ["wire_a", "wire_b"]
     gdir = _make_plr_golden_dir(tmp_path, obj_ids)
@@ -370,7 +370,7 @@ def test_lab_run_wiring_via_re_score_monkeypatch(tmp_path: Path) -> None:
 
     This proves the full path: lab run → re_score → LabGemmaModel → load_backend.
     """
-    import re_score as rs
+    from runners import re_score as rs
     import gemma_backend
     import gemma_model
 

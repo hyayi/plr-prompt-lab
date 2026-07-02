@@ -77,7 +77,7 @@ def _cmd_build_golden(args: argparse.Namespace) -> int:
     import importlib.util
     import shutil
 
-    from dataset import resolve_dataset_dir
+    from evalkit.dataset import resolve_dataset_dir
 
     # Load build_golden as a module (avoids sys.argv interference).
     spec = importlib.util.spec_from_file_location(
@@ -210,8 +210,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     (2026-07 — the lab optimizes the PLR prompt; search eval lives in
     core/ir / cctv-eval).
     """
-    import re_score as rs
-    from dataset import resolve_dataset_dir
+    from runners import re_score as rs
+    from evalkit.dataset import resolve_dataset_dir
     from registry import get_model
 
     # IR_PLR_FORMAT selects the WIRE format (yaml|json) the prompt/parser use —
@@ -246,7 +246,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     """Score predictions vs golden labels (PLR attribute eval → eval/run_eval.py)."""
     import importlib.util
 
-    from dataset import resolve_dataset_dir
+    from evalkit.dataset import resolve_dataset_dir
 
     model_name = getattr(args, "model", "gemma")
 
@@ -288,7 +288,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
 # ledger prompt_hash always cover the SAME files. Same relative path both sides;
 # globs prompts/*.yaml so new prompt versions are picked up automatically.
 def _port_files() -> list[tuple[str, str]]:
-    import provenance
+    from evalkit import provenance
     return [(rel, rel) for rel in provenance.surface_relpaths(_LAB_ROOT)]
 
 
@@ -306,7 +306,7 @@ def _cmd_port(args: argparse.Namespace) -> int:
     core_ir = _require_core_ir(getattr(args, "core_ir", None))
 
     # Warn if stale seed
-    import provenance
+    from evalkit import provenance
     seed_hash = provenance.read_seed_hash(_LAB_ROOT)
     provenance.warn_stale_seed(_LAB_ROOT, seed_hash, core_ir)
 
@@ -521,7 +521,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     Delegates to demo.run_demo() which lives in demo.py alongside this file.
     No GPU, no DB, no Redis required.
     """
-    from demo import run_demo
+    from runners.demo import run_demo
     keep = getattr(args, "keep", False)
     return run_demo(lab_root=_LAB_ROOT_PATH, keep_dir=keep)
 
@@ -536,7 +536,7 @@ def _cmd_experiment_run(args: argparse.Namespace) -> int:
 
     Delegates to experiment.run_experiment().
     """
-    from experiment import run_experiment
+    from runners.experiment import run_experiment
 
     return run_experiment(
         experiment_yaml=args.experiment_yaml,
@@ -554,7 +554,7 @@ def _cmd_report(args: argparse.Namespace) -> int:
 
     Delegates to report.build_report(). GPU-free, network-free.
     """
-    from report import build_report
+    from evalkit.report import build_report
 
     build_report(ledger_path=args.ledger, out_path=args.out)
     return 0
@@ -567,7 +567,7 @@ def _cmd_report(args: argparse.Namespace) -> int:
 
 def _cmd_validate_dataset(args: argparse.Namespace) -> int:
     """Validate a dataset directory against the PLR dataset spec."""
-    from validate import validate_dataset
+    from evalkit.validate import validate_dataset
 
     ok = validate_dataset(args.dataset)
     return 0 if ok else 1

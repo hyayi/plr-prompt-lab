@@ -97,7 +97,7 @@ def test_get_model_mock_is_gpu_free() -> None:
 
 
 def test_prompt_hash_stable_and_short() -> None:
-    from provenance import prompt_hash
+    from evalkit.provenance import prompt_hash
 
     h1 = prompt_hash()
     h2 = prompt_hash()
@@ -112,9 +112,9 @@ def test_prompt_hash_stable_and_short() -> None:
 
 
 def test_mock_run_eval_ledger_has_combination_keys(tmp_path: Path) -> None:
-    import re_score as rs
+    from runners import re_score as rs
     from registry import get_model
-    from provenance import prompt_hash
+    from evalkit.provenance import prompt_hash
 
     ds = _make_gender_dataset(tmp_path, ["c1", "c2", "c3"])
 
@@ -178,7 +178,7 @@ def test_run_eval_tolerates_old_ledger_records(tmp_path: Path) -> None:
         "seed_hash": "", "gemma_repo": "",
     }])
 
-    import re_score as rs
+    from runners import re_score as rs
     from registry import get_model
     rs.re_score("gender", get_model("mock"), golden_dir=str(ds))
 

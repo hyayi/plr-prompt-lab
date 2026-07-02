@@ -117,7 +117,7 @@ def _http_refs_excluding_svg_ns(text: str) -> list[str]:
 
 
 def test_build_report_creates_self_contained_html(tmp_path: Path) -> None:
-    from report import build_report
+    from evalkit.report import build_report
 
     ledger = tmp_path / "ledger.jsonl"
     _synthetic_ledger(ledger)
@@ -195,7 +195,7 @@ def test_lab_report_cli_wiring(tmp_path: Path) -> None:
 
 
 def test_empty_ledger_produces_no_records_html(tmp_path: Path) -> None:
-    from report import build_report
+    from evalkit.report import build_report
 
     ledger = tmp_path / "empty.jsonl"
     ledger.write_text("", encoding="utf-8")
@@ -215,7 +215,7 @@ def test_empty_ledger_produces_no_records_html(tmp_path: Path) -> None:
 
 
 def test_missing_ledger_file_does_not_crash(tmp_path: Path) -> None:
-    from report import build_report
+    from evalkit.report import build_report
 
     out = tmp_path / "missing_report.html"
     build_report(str(tmp_path / "does_not_exist.jsonl"), str(out))

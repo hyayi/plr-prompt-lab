@@ -108,7 +108,7 @@ def test_two_cell_matrix_writes_two_ledger_records(tmp_path: Path) -> None:
         """,
     )
 
-    from experiment import run_experiment
+    from runners.experiment import run_experiment
 
     exit_code = run_experiment(str(yaml_path))
 
@@ -172,7 +172,7 @@ def test_fail_loud_but_continue_missing_dataset(tmp_path: Path) -> None:
         """,
     )
 
-    from experiment import run_experiment
+    from runners.experiment import run_experiment
 
     exit_code = run_experiment(str(yaml_path))
 
@@ -217,7 +217,7 @@ def test_fail_loud_continue_strict_flag(tmp_path: Path) -> None:
         """,
     )
 
-    from experiment import run_experiment
+    from runners.experiment import run_experiment
 
     exit_code = run_experiment(str(yaml_path), strict=True)
     assert exit_code == 1, (
@@ -256,7 +256,7 @@ def test_all_cells_fail_returns_exit_code_2(tmp_path: Path) -> None:
         """,
     )
 
-    from experiment import run_experiment
+    from runners.experiment import run_experiment
 
     exit_code = run_experiment(str(yaml_path))
     assert exit_code == 2, (
@@ -292,7 +292,7 @@ def test_unknown_model_raises_before_running(tmp_path: Path) -> None:
         """,
     )
 
-    from experiment import run_experiment
+    from runners.experiment import run_experiment
 
     with pytest.raises(ValueError, match="unknown model"):
         run_experiment(str(yaml_path))
@@ -331,7 +331,7 @@ def test_unknown_pipeline_raises_before_running(tmp_path: Path) -> None:
         """,
     )
 
-    from experiment import run_experiment
+    from runners.experiment import run_experiment
 
     with pytest.raises(ValueError, match="unknown pipeline"):
         run_experiment(str(yaml_path))
@@ -398,7 +398,7 @@ def test_lab_experiment_run_cli_wiring(tmp_path: Path) -> None:
 
 def test_enumerate_cells_cross_product(tmp_path: Path) -> None:
     """enumerate_cells returns the correct number of cells for each pipeline."""
-    from experiment import enumerate_cells
+    from runners.experiment import enumerate_cells
 
     # plr: 2 datasets × 2 models × 3 prompts × 1 pipeline × 2 attributes = 24
     cfg_plr: dict[str, Any] = {

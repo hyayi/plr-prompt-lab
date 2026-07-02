@@ -79,7 +79,7 @@ def _make_good_dataset(tmp_path: Path) -> Path:
 
 
 def test_good_dataset_passes(tmp_path: Path) -> None:
-    from validate import validate_dataset
+    from evalkit.validate import validate_dataset
 
     ds = _make_good_dataset(tmp_path)
     result = validate_dataset(ds)
@@ -92,7 +92,7 @@ def test_good_dataset_passes(tmp_path: Path) -> None:
 
 
 def test_label_missing_crop_fails(tmp_path: Path, capsys) -> None:
-    from validate import validate_dataset
+    from evalkit.validate import validate_dataset
 
     ds = tmp_path / "missing_crop"
     (ds / "crops").mkdir(parents=True)
@@ -124,7 +124,7 @@ def test_label_missing_crop_fails(tmp_path: Path, capsys) -> None:
 
 
 def test_labels_missing_required_field_fails(tmp_path: Path, capsys) -> None:
-    from validate import validate_dataset
+    from evalkit.validate import validate_dataset
 
     ds = tmp_path / "bad_labels"
     (ds / "crops").mkdir(parents=True)
@@ -155,7 +155,7 @@ def test_labels_missing_required_field_fails(tmp_path: Path, capsys) -> None:
 
 
 def test_crop_without_label_warns_but_passes(tmp_path: Path, capsys) -> None:
-    from validate import validate_dataset
+    from evalkit.validate import validate_dataset
 
     ds = tmp_path / "extra_crop"
     (ds / "crops").mkdir(parents=True)
@@ -186,7 +186,7 @@ def test_crop_without_label_warns_but_passes(tmp_path: Path, capsys) -> None:
 
 
 def test_manifest_missing_attribute_fails(tmp_path: Path, capsys) -> None:
-    from validate import validate_dataset
+    from evalkit.validate import validate_dataset
 
     ds = tmp_path / "bad_manifest"
     (ds / "crops").mkdir(parents=True)
@@ -285,7 +285,7 @@ def test_eval_golden_gender_no_crash(capsys) -> None:
     """eval/golden/gender is a valid dataset structure but labels.jsonl is
     gitignored (absent in checkout). The validator should report a clear error
     about the missing file — not crash, not raise an unhandled exception."""
-    from validate import validate_dataset
+    from evalkit.validate import validate_dataset
 
     gender_ds = _LAB_ROOT / "eval" / "golden" / "gender"
     # If the directory doesn't exist at all, skip (repo checkout variation).

@@ -64,7 +64,7 @@ def test_lab_demo_no_gpu_db_modules() -> None:
     # Run demo inside the current process via demo.run_demo() so we can inspect
     # sys.modules after the call.
     sys.path.insert(0, str(_LAB_ROOT))
-    import demo as demo_mod
+    from runners import demo as demo_mod
 
     import tempfile
     import shutil
@@ -75,7 +75,7 @@ def test_lab_demo_no_gpu_db_modules() -> None:
     orig_demo_dir = None
     try:
         # Temporarily redirect demo_dataset to tmp
-        import demo as dm
+        from runners import demo as dm
         orig_build = dm.build_synthetic_dataset
 
         def _patched_build(demo_dir: Path) -> Path:
@@ -134,7 +134,7 @@ def test_lab_help_lists_demo() -> None:
 def test_lab_demo_keep_dir_leaves_files(tmp_path: Path) -> None:
     """demo.run_demo() with a patched lab_root leaves the expected dataset files."""
     sys.path.insert(0, str(_LAB_ROOT))
-    import demo as demo_mod
+    from runners import demo as demo_mod
 
     # Patch run_demo to write demo_dataset into tmp_path instead of _LAB_ROOT
     # by importing and calling build_synthetic_dataset directly, then run_demo.

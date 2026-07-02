@@ -17,7 +17,7 @@ any Python module — it is purely an operator data-preparation step.
 
 ## Dataset Contract (reference first)
 
-Before doing anything, read `DATASET_SPEC.md` in the lab root. That file is
+Before doing anything, read `docs/DATASET_SPEC.md`. That file is
 authoritative. This skill summarises the layout and points to the parts you
 will fill in:
 
@@ -54,7 +54,7 @@ my_dataset/
         2045.jpg
 ```
 
-Rules (from `DATASET_SPEC.md` section 2):
+Rules (from `docs/DATASET_SPEC.md` section 2):
 - Stem is case-sensitive and must contain no extension (`.jpg` is stripped).
 - You can use any alphanumeric string as `obj_id` (e.g. `1003`, `obj_001`,
   `cam2_frame450_id7`).
@@ -90,7 +90,7 @@ stable accuracy numbers.
 
 Pick one of the three supported attributes. The `attribute` value also
 determines which label vocabulary `validate-dataset` will enforce (see
-`DATASET_SPEC.md` section 5):
+`docs/DATASET_SPEC.md` section 5):
 
 | `attribute`    | Valid `label` values |
 |---------------|----------------------|
@@ -262,7 +262,7 @@ Run `lab validate-dataset` until it exits 0:
 python3 lab.py validate-dataset --dataset my_dataset/
 ```
 
-The command runs ten checks (full list in `DATASET_SPEC.md` section 10) and
+The command runs ten checks (full list in `docs/DATASET_SPEC.md` section 10) and
 prints a `PASS`, `WARN`, or `FAIL` line for each. It always ends with:
 
 ```

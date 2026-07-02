@@ -2,7 +2,7 @@
 """report — turn the eval ledger into ONE self-contained HTML report.
 
 Reads ``eval/ledger.jsonl`` (the append-only version×attribute×combo record
-stream written by ``eval/run_eval.py`` and ``run_search_eval.py``) and emits a
+stream written by ``eval/run_eval.py``) and emits a
 single ``.html`` file that opens offline by double-click.
 
 Self-contained is a HARD requirement: NO CDN, NO external URLs, NO network.
@@ -580,7 +580,7 @@ def build_report(ledger_path: str, out_path: str) -> str:
 
 
 def main() -> int:
-    here = os.path.dirname(os.path.abspath(__file__))
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # lab root
     ap = argparse.ArgumentParser(
         description="Generate a self-contained HTML report from the eval ledger."
     )

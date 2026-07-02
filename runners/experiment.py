@@ -35,7 +35,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-_LAB_ROOT = Path(__file__).parent
+_LAB_ROOT = Path(__file__).resolve().parent.parent  # lab root (runners/ is one below)
 
 
 # =====================================================================
@@ -271,7 +271,7 @@ def _apply_env_axes(cell: Cell) -> None:
 
 def _run_plr_cell(cell: Cell, ledger_path: str) -> None:
     """Run one PLR cell: re_score then run_eval."""
-    import re_score as rs
+    from runners import re_score as rs
     from registry import get_model
 
     # (a) run — re_score

@@ -139,7 +139,7 @@ def _reason_on(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_prompt_versions_produce_different_prompts(tmp_path: Path) -> None:
     """re_score with plr_v1.3_cot vs plr_v1.4_cot vs plr_v0.4 sends distinct
     user prompts on the SAME dataset — the whole point of the prompt axis."""
-    import re_score as rs
+    from runners import re_score as rs
 
     obj_ids = ["p1", "p2"]
 
@@ -179,7 +179,7 @@ def test_prompt_versions_produce_different_prompts(tmp_path: Path) -> None:
 def test_unknown_version_falls_back_to_constants(tmp_path: Path) -> None:
     """A version with no prompts/<v>.yaml (e.g. 'mock_v1') falls back to the
     module constants without error and matches prompt_version=None exactly."""
-    import re_score as rs
+    from runners import re_score as rs
 
     obj_ids = ["a1", "a2"]
 
@@ -239,7 +239,7 @@ def test_experiment_matrix_prompts_differ_per_cell(
     """`run_experiment` with prompts [plr_v1.3_cot, plr_v1.4_cot] → the two
     cells' recorded prompts DIFFER and the ledger stamps two distinct versions."""
     import registry
-    import experiment
+    from runners import experiment
 
     # Build a gender dataset.
     ds_dir = _make_golden_dir(tmp_path / "ds", ["m1", "m2", "m3"])

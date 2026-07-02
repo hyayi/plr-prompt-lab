@@ -325,7 +325,7 @@ class Pipeline:
 
 
 def _plr_run(*args: Any, **kwargs: Any) -> Any:
-    from re_score import re_score
+    from runners.re_score import re_score
 
     return re_score(*args, **kwargs)
 

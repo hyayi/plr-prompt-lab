@@ -98,6 +98,11 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 - `GUIDE.html` (구조+사용법 원페이지, 배포용): `654ca3a` · `d7285e3` · `7634a0a`
 - **`--version` 실-프롬프트-로드 픽스**: `51022f6`(feat) · `2553b13`(docs) — experiment의 프롬프트 축이 이제 진짜로 다른 프롬프트를 비교
 
+### 폴더 재구성 (2026-07-02, 기능별 분류)
+- 루트 과밀 해소(사용자 요청). **parity/공유 표면은 core/ir과 같은 경로여야 해서 루트 고정**: `plr_core.py`·`plr_prompts.py`·`prompts/`·`providers/`·`plr_schema.py`·`quality_gate.py`·`config.py`·`registry.py`·`gemma_model.py`·`gemma_backend.py`.
+- 이동: **`runners/`**(re_score·experiment·demo) · **`evalkit/`**(dataset·validate·provenance·report) · **`docs/`**(GUIDE.html·STRUCTURE.html·HANDOFF·INSTALL·DATASET_SPEC·EXPERIMENT_SPEC). 루트 잔류 문서: README(.ko)·SESSION_HANDOFF·SEED.md(provenance가 루트에서 읽음)·LICENSE·requirements.txt·seed.sh.
+- import 경로: `from runners import re_score` / `from evalkit.dataset import …` 형태로 전환(테스트 포함). 각 이동 모듈의 `_LAB_ROOT`/`here` 앵커는 `.parent.parent`로 보정. seed.sh 파일 목록에서 삭제된 search 모듈 제거.
+
 ### PLR 전용 슬림화 (2026-07-02, PLR 집중 재설계 2단계)
 - **search 실행 표면 제거**(사용자 결정): `search_core.py`·`query_parser.py`·`query_normalizer.py`·`run_search_eval.py`·`scoring.py`·`parser/`·`providers/bootstrap.py` 삭제, CLI(run/eval)의 search 분기·`--mode`/`--pipeline search`/`--k` 제거, registry PIPELINES=plr만, experiment search 셀 제거. seed 헬퍼는 `provenance.read_seed_hash`/`warn_stale_seed`로 이동.
 - ⚠️ **parity 미러는 유지**: `plr_prompts.py`의 query_parser 상수와 `prompts/*.yaml`의 query_parser 블록은 core/ir 바이트-동일 미러라서 남김(§1 참조). provider의 build_query_parser_messages도 미러로 유지.
@@ -168,7 +173,7 @@ python3 lab.py demo                  # GPU 없이 전체 사이클 시연
 | `eval/ledger.jsonl` | 실험 추이 저장소(append-only) |
 | `SEED.md` | 원본 core/ir 해시 |
 
-문서: `README.md` · `GUIDE.html` · `INSTALL.md` · `HANDOFF.md` · `DATASET_SPEC.md` · `EXPERIMENT_SPEC.md` · `skills/prepare-dataset/SKILL.md`
+문서: 루트 `README.md`/`README.ko.md`/`SESSION_HANDOFF.md`/`SEED.md` · **`docs/`** (GUIDE.html · STRUCTURE.html · INSTALL.md · HANDOFF.md · DATASET_SPEC.md · EXPERIMENT_SPEC.md) · `skills/prepare-dataset/SKILL.md`
 
 ---
 
@@ -192,7 +197,7 @@ python3 lab.py demo                  # GPU 없이 전체 사이클 시연
   ```bash
   python3 -m http.server 8899 --bind 0.0.0.0 --directory /home/ziovision/plr-prompt-lab/_serve
   ```
-- GUIDE 수정 후 재배포: `cp GUIDE.html _serve/index.html` (서버는 파일을 매 요청 읽음).
+- GUIDE 수정 후 재배포: `cp docs/GUIDE.html _serve/index.html` (서버는 파일을 매 요청 읽음).
 
 ---
 

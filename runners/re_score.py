@@ -120,7 +120,7 @@ def re_score(
 
     import plr_core
 
-    here = Path(__file__).parent
+    here = Path(__file__).resolve().parent.parent  # lab root (runners/ is one below)
     gdir = Path(golden_dir) if golden_dir else here / "eval" / "golden" / attribute
 
     preds_path = gdir / "predictions.jsonl"

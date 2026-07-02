@@ -26,15 +26,11 @@ echo "seed.sh: dest   = $DST"
 # --- Single-file dev surface (pure: stdlib / PIL / numpy / yaml only) ---
 FILES=(
   plr_core.py
-  search_core.py
   gemma_model.py
   gemma_backend.py
   plr_prompts.py
   plr_schema.py
   quality_gate.py
-  query_parser.py
-  query_normalizer.py
-  scoring.py
   config.py
   registry.py
 )

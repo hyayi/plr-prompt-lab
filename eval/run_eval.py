@@ -35,7 +35,7 @@ if _LAB_ROOT not in sys.path:
 
 def _prompt_hash() -> str:
     """Short stable hash of the active prompt surface (shared helper)."""
-    from provenance import prompt_hash
+    from evalkit.provenance import prompt_hash
 
     return prompt_hash(_LAB_ROOT)
 

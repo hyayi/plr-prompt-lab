@@ -89,7 +89,7 @@ def _read_jsonl(path: Path) -> list[dict]:
 
 
 def test_dataset_accessors_and_manifest(tmp_path: Path) -> None:
-    import dataset as ds_mod
+    from evalkit import dataset as ds_mod
 
     d = tmp_path / "my_dataset"
     (d / "crops").mkdir(parents=True)
@@ -115,7 +115,7 @@ def test_dataset_accessors_and_manifest(tmp_path: Path) -> None:
 
 
 def test_resolve_dataset_dir_precedence(tmp_path: Path) -> None:
-    import dataset as ds_mod
+    from evalkit import dataset as ds_mod
 
     # --dataset given → used verbatim
     explicit = tmp_path / "arbitrary"
@@ -160,7 +160,7 @@ def _run_eval_against(gdir: Path, version: str, ledger_path: Path) -> str:
 def test_run_and_eval_on_arbitrary_dataset(tmp_path: Path) -> None:
     """Build a synthetic dataset at an arbitrary path, re_score it with a mock
     model (the `run` core), then eval it (the `eval` core). GPU-free."""
-    import re_score as rs
+    from runners import re_score as rs
 
     ds_dir = tmp_path / "some" / "where" / "genderset"
     (ds_dir / "crops").mkdir(parents=True)

@@ -13,7 +13,7 @@ from pathlib import Path
 
 from PIL import Image
 
-import re_score
+from runners import re_score
 from registry import get_model
 
 

@@ -141,7 +141,7 @@ def _run_eval(gdir: Path, version: str, ledger_path: Path, lab_root: Path) -> tu
 
 def run_demo(lab_root: Path, keep_dir: bool = False) -> int:
     """Run the full GPU-free demo cycle. Returns exit code (0 on success)."""
-    import re_score as rs
+    from runners import re_score as rs
 
     demo_dir = lab_root / "demo_dataset"
 

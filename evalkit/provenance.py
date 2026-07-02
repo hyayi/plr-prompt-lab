@@ -16,7 +16,7 @@ import hashlib
 import os
 from pathlib import Path
 
-_LAB_ROOT = Path(__file__).resolve().parent
+_LAB_ROOT = Path(__file__).resolve().parent.parent  # lab root (evalkit/ is one below)
 
 # Files that make up the active prompt surface, relative to the lab root.
 # This is the SINGLE SOURCE OF TRUTH shared by prompt_hash() and lab port

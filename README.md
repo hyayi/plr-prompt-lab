@@ -1,6 +1,6 @@
 # plr-prompt-lab  (v2)
 
-> 📖 **처음이라면 [`GUIDE.html`](GUIDE.html)를 브라우저로 여세요** — 구조와 사용법을
+> 📖 **처음이라면 [`docs/GUIDE.html`](docs/GUIDE.html)를 브라우저로 여세요** — 구조와 사용법을
 > 한 장(자체완결 HTML·오프라인)으로 그림과 함께 설명합니다.
 > **한글판 README**: [`README.ko.md`](README.ko.md)
 
@@ -17,8 +17,8 @@ inference step (re-scoring crops) requires a dedicated GPU and human-labeled
 crops — see [Real-run preconditions](#real-run-preconditions) below.
 
 New in v2: selectable `--dataset` parameter, `validate-dataset` subcommand,
-`lab demo` GPU-free onboarding, [DATASET_SPEC.md](DATASET_SPEC.md) format
-spec, and [HANDOFF.md](HANDOFF.md) external prompt-engineer guide.
+`lab demo` GPU-free onboarding, [DATASET_SPEC.md](docs/DATASET_SPEC.md) format
+spec, and [HANDOFF.md](docs/HANDOFF.md) external prompt-engineer guide.
 
 ---
 
@@ -61,7 +61,7 @@ The lab's four selectable dimensions for an experiment:
 | **format/reason** | `formats:` / `reasons:` axes in experiment.yaml (`IR_PLR_FORMAT`/`IR_PLR_REASON`) | Built |
 
 To run the cross-product of several axes at once, use
-`lab experiment run <yaml>` (see [EXPERIMENT_SPEC.md](EXPERIMENT_SPEC.md));
+`lab experiment run <yaml>` (see [EXPERIMENT_SPEC.md](docs/EXPERIMENT_SPEC.md));
 `lab report` turns the ledger into a self-contained HTML report.
 
 ---
@@ -158,7 +158,7 @@ Every command that reads or writes a golden set accepts `--dataset <dir>`.
 When omitted, the command falls back to `eval/golden/<attribute>/` — the
 same layout used before v2, so all existing workflows are unchanged.
 
-A dataset directory must conform to [DATASET_SPEC.md](DATASET_SPEC.md).
+A dataset directory must conform to [DATASET_SPEC.md](docs/DATASET_SPEC.md).
 Validate any new dataset before using it with `lab run`:
 
 ```bash
@@ -192,7 +192,7 @@ the loop to a new team member before provisioning GPU + labels.
 
 ## `HANDOFF.md` — external prompt-engineer guide
 
-[HANDOFF.md](HANDOFF.md) is the guide for a prompt engineer who is improving
+[HANDOFF.md](docs/HANDOFF.md) is the guide for a prompt engineer who is improving
 PLR prompts without touching the production service. It covers:
 
 - What to edit (`prompts/*.yaml`, and when also `plr_prompts.py`).
@@ -250,7 +250,7 @@ which downloads and loads a 4B GGUF model into VRAM.
    before `lab eval` produces a meaningful accuracy number. Run `lab label`
    with the corrected tile IDs after a human reviews the contact sheets.
 
-See [INSTALL.md](INSTALL.md) for the full setup (Python env, CUDA build, model
+See [INSTALL.md](docs/INSTALL.md) for the full setup (Python env, CUDA build, model
 download).
 
 ---

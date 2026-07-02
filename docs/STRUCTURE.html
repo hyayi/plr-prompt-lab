@@ -219,8 +219,8 @@
   <div class="card band" style="--c: var(--orch)">
     <div class="t"><span class="dot"></span>오케스트레이션</div>
     <div class="chips">
-      <span class="chip hl" style="--c: var(--orch)"><b>experiment.py</b> — 교차곱 매트릭스: datasets × models × prompts × pipelines × attributes × <b>formats × reasons</b> · fail-loud-but-continue</span>
-      <span class="chip"><b>demo.py</b> — GPU-free 온보딩 사이클</span>
+      <span class="chip hl" style="--c: var(--orch)"><b>runners/experiment.py</b> — 교차곱 매트릭스: datasets × models × prompts × pipelines × attributes × <b>formats × reasons</b> · fail-loud-but-continue</span>
+      <span class="chip"><b>runners/demo.py</b> — GPU-free 온보딩 사이클</span>
     </div>
   </div>
 
@@ -230,7 +230,7 @@
     <div class="card band" style="--c: var(--run)">
       <div class="t"><span class="dot"></span>러너 (run 단계)</div>
       <div class="chips">
-        <span class="chip hl" style="--c: var(--run)"><b>re_score.py</b></span>
+        <span class="chip hl" style="--c: var(--run)"><b>runners/re_score.py</b></span>
         <span class="chip">re_score() → <b>plr</b> (크롭당 Gemma 1회, 게이트 없음)</span>
       </div>
     </div>
@@ -239,7 +239,7 @@
       <div class="chips">
         <span class="chip">eval/run_eval.py <b>(accuracy·bias·pred_unknown)</b></span>
         <span class="chip hl" style="--c: var(--eval)"><b>eval/ledger.jsonl</b> (append-only)</span>
-        <span class="chip">report.py → <b>report.html</b></span>
+        <span class="chip">evalkit/report.py → <b>report.html</b></span>
       </div>
     </div>
   </div>
@@ -270,8 +270,8 @@
       <div class="t"><span class="dot"></span>인프라</div>
       <div class="chips">
         <span class="chip"><b>registry.py</b> 모델·파이프라인 레지스트리</span>
-        <span class="chip"><b>provenance.py</b> prompt_hash</span>
-        <span class="chip">dataset.py · validate.py</span>
+        <span class="chip"><b>evalkit/provenance.py</b> prompt_hash</span>
+        <span class="chip">evalkit/dataset.py · evalkit/validate.py</span>
         <span class="chip">gemma_model.py (Mock 포함)</span>
         <span class="chip">gemma_backend.py (GPU lazy)</span>
         <span class="chip">config.py</span>
