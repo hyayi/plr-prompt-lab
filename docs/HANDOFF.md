@@ -19,13 +19,13 @@ the live GPU service — and you do not need them.
 
 ## What you edit
 
-### Primary (actual runtime source): `plr_prompts.py` constants
+### Primary (actual runtime source): `prompts/<current-version>.yaml`
 
-The prompt the model **actually** receives is built from string constants in
-`plr_prompts.py`. `build_plr_messages()` assembles them and does **NOT** read
-`prompts/*.yaml` (verified: editing a yaml does not change the built prompt).
-Which constant is used is chosen by two env vars — this is how you switch
-prompt variants:
+Since 2026-07 the live templates are LOADED from
+`prompts/<PROMPT_VERSION_YAML_COT>.yaml` (single source — the historical
+constants were removed after byte-equality verification). Editing the
+current version's yaml IS editing the runtime prompt. Two env vars still
+switch variants:
 
 ```
 IR_PLR_FORMAT = yaml | json     # yaml is current; json is a legacy A/B path
@@ -36,20 +36,18 @@ Both env vars are also available as experiment-matrix axes (`formats:` /
 `reasons:` in experiment.yaml — see EXPERIMENT_SPEC.md), so you can sweep them
 without touching your shell environment.
 
-Constants to edit (to actually change behavior):
+What to edit (to actually change behavior): the yaml blocks of the current
+version file —
 
 ```
-# PLR (attribute) pipeline
-_PLR_SYSTEM_PROMPT
-_PLR_YAML_PERSON_TEMPLATE          # yaml, non-CoT person
-_PLR_YAML_COT_PERSON_TEMPLATE      # yaml, CoT person   (IR_PLR_REASON=on)
-_PLR_YAML_VEHICLE_TEMPLATE         # yaml vehicle
-_PLR_PERSON_USER_TEMPLATE / _PLR_VEHICLE_USER_TEMPLATE   # legacy JSON path
-# search prompt constants — PARITY MIRROR ONLY (the lab no longer runs a
-# search pipeline; these stay byte-identical to core/ir for lab port)
-_QUERY_PARSER_SYSTEM_PROMPT
-_QUERY_PARSER_USER_TEMPLATE
+prompts/plr_v1.5_cot.yaml
+  plr.system                 # role + output discipline
+  plr.person_user            # CoT person (IR_PLR_REASON=on, production)
+  plr.person_user_no_reason  # plain person
+  plr.vehicle_user           # vehicle
+  query_parser.*             # search prompt (core/ir side uses it; keep intact)
 ```
+(The only remaining constants in plr_prompts.py are the legacy JSON path.)
 
 ### Keep `prompts/*.yaml` in parity (declarative mirror — not read at runtime)
 

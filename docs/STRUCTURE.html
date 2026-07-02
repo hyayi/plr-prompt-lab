@@ -262,7 +262,7 @@
     <div class="card band" style="--c: var(--prompt)">
       <div class="t"><span class="dot"></span>프롬프트 소스 (④ 참고)</div>
       <div class="chips">
-        <span class="chip hl" style="--c: var(--prompt)"><b>plr_prompts.py</b> 상수 (기본 = v1.5 강제커밋)</span>
+        <span class="chip hl" style="--c: var(--prompt)"><b>plr_prompts.py</b> 로더 — prompts/&lt;현재버전&gt;.yaml이 단일 소스</span>
         <span class="chip hl" style="--c: var(--prompt)"><b>prompts/*.yaml</b> 프롬프트 버전(템플릿만)</span>
         <span class="chip hl" style="--c: var(--prompt)"><b>configs/*.yaml</b> 실험 조합(prompt 참조+knob)</span>
         <span class="chip hl" style="--c: var(--prompt)"><b>schema/vocab.yaml</b> 선언적 어휘(단일 원천)</span>
@@ -357,7 +357,7 @@
 
 <div class="split">
   <div class="qbox branch-l">
-    <b style="color: var(--prompt)">① 기본 경로 — plr_prompts.py 하드코딩 상수</b>
+    <b style="color: var(--prompt)">① 기본 경로 — prompts/&lt;현재버전&gt;.yaml (plr_prompts가 로드)</b>
     <div class="d"><code>--version</code> 없음 / yaml 없는 버전(mock 등) → 상수 사용<br>
     = 현재 v1.4 · <b>core/ir과 바이트 동일 (이식 대상)</b></div>
     <div style="margin-top:7px">

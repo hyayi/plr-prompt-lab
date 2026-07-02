@@ -139,10 +139,12 @@ copies it home like any other surface file.
 ## Promotion (experiment version → production default)
 
 Winning a lab A/B does NOT deploy anything. Promotion is a separate,
-human-gated step:
-1. Apply the winning text to the `plr_prompts.py` constants AND keep the
-   version yaml byte-in-parity (test_prompt_surface_parity enforces).
-2. Bump `PROMPT_VERSION_YAML_COT` — this is the lazy-reindex trigger.
+human-gated step — and since the 2026-07 declarative-prompt refactor it is
+two lines, not a parity dance:
+1. Ensure the winning version yaml has the `query_parser:` block (copy from
+   the previous production version) — core/ir serves search from it.
+2. Bump `PROMPT_VERSION_YAML_COT` in plr_prompts.py to the new version name
+   (plr_prompts LOADS that yaml — this is also the lazy-reindex trigger).
 3. `lab port` → apply to core/ir → core/ir tests → deploy decision.
 4. Experiment knobs go back to their HOME files, not to the config yaml:
    `enums:` narrowing → schema/vocab.yaml · vocabulary extension →

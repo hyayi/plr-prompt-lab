@@ -153,175 +153,29 @@ PROMPT_VERSION_YAML = "plr_v0.6_yaml"
 PROMPT_VERSION_YAML_COT = "plr_v1.5_cot"
 
 
-_PLR_YAML_PERSON_TEMPLATE = """Image: person crop. Describe what you see using exactly this YAML shape:
+# ---------------------------------------------------------------------------
+# Declarative prompt source — the LIVE templates are loaded from
+# prompts/<PROMPT_VERSION_YAML_COT>.yaml (single source; the historical
+# constants were removed 2026-07). One file = one prompt version: the same
+# yaml serves the runtime default here AND the --version/provider path, so
+# the constants<->yaml drift class (the ca1a922 military_olive bug) no longer
+# exists. Historical experiment rationale (v0.6/v0.6.1/v0.7 rollbacks, ...)
+# lives in git history and the lab's author-prompt skill "Domain lessons".
+# ---------------------------------------------------------------------------
+from pathlib import Path as _Path
 
-target: person
-gender: <male|female>
-age: <adult|child>
-outfit: <two_piece|one_piece|layered|obscured>
-upper:
-  color: <color>
-  type: <upper_type>
-  sleeve: <long|short>
-lower:
-  color: <color>
-  type: <lower_type>
-equipment: [<equipment>, ...]    # use [] if none
-action: <static_action>
-margins:
-  gender: <0.0-1.0>
-  age: <0.0-1.0>
-  outfit: <0.0-1.0>
-  sleeve: <0.0-1.0>
+import yaml as _yaml
 
-Pick values strictly from these enums. ALWAYS commit to the single most
-likely value — never answer unknown, even on a poor-quality crop. Express
-low confidence through the `margins` block instead (a committed guess with
-margin 0.1 beats a refusal).
-- color: {colors}
-- upper_type: {upper_types}
-- lower_type: {lower_types}
-- equipment: {equips}
-- static_action: {actions}
+_LIVE_PROMPT_PATH = _Path(__file__).resolve().parent / "prompts" / f"{PROMPT_VERSION_YAML_COT}.yaml"
+with open(_LIVE_PROMPT_PATH, encoding="utf-8") as _fh:
+    _LIVE_PROMPT: dict[str, Any] = _yaml.safe_load(_fh)
 
-Rules:
-- Output only YAML. No markdown fences. No prose. Stop after the last line.
-- One key per line. Two-space indentation under `upper:`, `lower:`, `margins:`.
-- `equipment` is a flow list (inline). Use [] for none.
-- `margins` are decision confidence per slot (0.0 = guess, 1.0 = certain).
-- One-piece outfit: still fill `lower.type: none` and `lower.color: <best guess>`."""
-
-
-# v0.6 — chain-of-thought variant. Reason precedes the value so the model
-# commits to evidence before naming the label. A 14-object review on
-# vd_1779346586835_x2qn put v0.6 at 13/14 correct vs v0.5 at 1/14 (v0.5
-# defaults to "female" on dark, low-res CCTV crops). The brief reason
-# also gives the search UI a human-readable explanation.
-#
-# Two example variants were tried and rolled back:
-#   v0.6.1 (hair-first examples) — bumped the gender_reason examples to
-#     lead with 장발 / 단발 / 남성형 짧은 머리. Got 4/6 on the same
-#     ambiguous set v0.6 gets 5/6 on; example bias shifted, accuracy
-#     dipped slightly. Kept v0.6's broader examples.
-#   v0.7 (hard "shoulders alone unreliable" directive) — over-corrected,
-#     pulled correct male answers back to v0.5's female bias. 9/14.
-_PLR_YAML_COT_PERSON_TEMPLATE = """Image: person crop. The TARGET subject is highlighted by four YELLOW
-corner marks at the centre of the crop (L-shaped strokes at the corners
-of a centred ~65%-of-shorter-side box). Label ONLY the person inside
-those corner marks. If another figure is visible outside the marked area,
-ignore them — do not mix their clothing colours, gender, posture, or
-equipment into the answer. The yellow corner marks themselves are visual
-cues; do not include "yellow" as a clothing colour because of them. The
-corner marks do not enclose the subject — never label clothing as
-"uniform", "one-piece", or "jumpsuit" purely because the marks frame the
-person.
-
-Describe what you see using exactly this YAML shape:
-
-target: person
-gender_reason: <short cue, max 6 words, e.g. "broad shoulders, facial hair">
-gender: <male|female>
-age_reason: <short cue, max 6 words, e.g. "child-sized, uniform">
-age: <adult|child>
-outfit: <two_piece|one_piece|layered|obscured>
-upper:
-  color: <color>
-  type: <upper_type>
-  sleeve: <long|short>
-lower:
-  color: <color>
-  type: <lower_type>
-military: <{military_enum}>
-equipment: [<equipment>, ...]    # use [] if none
-action: <static_action>
-rider_vehicle:                   # ONLY when action is riding_* ; otherwise OMIT this section
-  color: <color>
-  type: <motorcycle|bicycle|scooter|kickboard>
-margins:
-  gender: <0.0-1.0>
-  age: <0.0-1.0>
-  outfit: <0.0-1.0>
-  sleeve: <0.0-1.0>
-
-Pick values strictly from these enums. ALWAYS commit to the single most
-likely value — never answer unknown, even on a poor-quality crop. Express
-low confidence through the `margins` block instead (a committed guess with
-margin 0.1 beats a refusal).
-- color: {colors}
-- upper_type: {upper_types}
-- lower_type: {lower_types}
-- equipment: {equips}
-- static_action: {actions}
-- military: {military_enum}
-
-Color hint:
-- military_olive = Korean military olive-drab (국방색) — dull yellowish-green worn as ROK Army uniform; use for upper or lower if the garment is clearly 국방색 military fabric
-
-Military hint (judge `military`, precision-aware):
-- military = clear military cues: camouflage / disruptive-pattern clothing (woodland / desert / digital), field uniform or combat fatigues, military load-bearing gear (tactical vest, webbing, rucksack), combat helmet, olive-drab / khaki / field-green field dress.
-- civilian = ordinary street clothes, business / casual, work hi-vis / safety vests (construction, NOT military), school / security / service uniforms.
-- Be conservative: a single olive garment alone is NOT enough — without pattern / gear / uniform corroboration answer civilian.
-
-Rules:
-- Output only YAML. No markdown fences. No prose. Stop after the last line.
-- Write `gender_reason` BEFORE `gender`, and `age_reason` BEFORE `age`,
-  using one short evidence cue from the image.
-- One key per line. Two-space indentation under `upper:`, `lower:`, `rider_vehicle:`, `margins:`.
-- `equipment` is a flow list (inline). Use [] for none.
-- `margins` are decision confidence per slot (0.0 = guess, 1.0 = certain).
-- One-piece outfit: still fill `lower.type: none` and `lower.color: <best guess>`.
-- `rider_vehicle` is REQUIRED when `action` is one of riding_motorcycle /
-  riding_bicycle / riding_scooter / riding_kickboard. Otherwise OMIT the
-  rider_vehicle section entirely."""
-
-
-_PLR_YAML_VEHICLE_TEMPLATE = """Image: vehicle crop. The TARGET vehicle is highlighted by four YELLOW
-corner marks at the centre of the crop (L-shaped strokes at the corners
-of a centred ~65%-of-shorter-side box). Label ONLY the vehicle inside
-those corner marks. If another vehicle is parked next to it, or a person
-is walking past, ignore them — do not mix their colours or shapes into
-the answer. The yellow corner marks themselves are visual cues; do not
-pick "yellow" as the vehicle colour because of them.
-
-Describe using exactly this YAML shape:
-
-target: vehicle
-color: <color>
-type: <vehicle_type>
-military: <{military_enum}>
-
-Enums:
-- color: {colors}
-- vehicle_type: {vehicle_types}
-- military: {military_enum}
-
-Category hints (visual cues — pick the matching enum value):
-- sedan       = 4-door car with separate trunk (most common car shape)
-- suv         = taller / boxier passenger car, raised ride height
-- hatchback   = 3/5-door car with rear hatch (no separate trunk)
-- light_car   = very small Korean-market 경차 (Morning, Casper, Ray, Spark sized)
-- van/minivan = tall passenger box with sliding doors
-- pickup_truck = open cargo bed behind the cab
-- truck/bus   = large commercial (long box / passenger row)
-- taxi        = passenger car painted as taxi (rooftop sign / livery)
-- ambulance/police_car/fire_truck = clearly marked emergency livery
-- motorcycle = engine + fuel tank, no rider in this crop
-- bicycle    = no engine, pedals + chain
-- scooter    = step-through frame, small wheels
-- kickboard  = standing platform, no seat
-- construction_vehicle = excavator/crane/forklift/etc.
-
-ALWAYS commit to the closest matching type — never answer vehicle_unknown;
-express low confidence by picking the nearest category instead.
-
-Color hint:
-- military_olive = Korean military olive-drab (국방색) — dull yellowish-green used on ROK Army vehicles
-
-Military hint (judge `military`):
-- military = camouflage paint, military body type (military truck / APC / armored / jeep / tactical), military markings / insignia.
-- civilian = ordinary passenger / commercial vehicles (sedan / bus / delivery truck), even if dark green. When cues are inconclusive answer civilian.
-
-Output only YAML. No fences. No prose."""
+_PLR_YAML_COT_PERSON_TEMPLATE = _LIVE_PROMPT["plr"]["person_user"].rstrip("\n")
+_PLR_YAML_PERSON_TEMPLATE = _LIVE_PROMPT["plr"]["person_user_no_reason"].rstrip("\n")
+_PLR_YAML_VEHICLE_TEMPLATE = _LIVE_PROMPT["plr"]["vehicle_user"].rstrip("\n")
+_PLR_YAML_SYSTEM = _LIVE_PROMPT["plr"]["system"].rstrip("\n")
+_QUERY_PARSER_SYSTEM_PROMPT = _LIVE_PROMPT["query_parser"]["system"].rstrip("\n")
+_QUERY_PARSER_USER_TEMPLATE = _LIVE_PROMPT["query_parser"]["user"].rstrip("\n")
 
 
 def _commit_enum(values) -> tuple[str, ...]:
@@ -382,15 +236,7 @@ def build_plr_messages(object_hint: str = "person") -> list[dict[str, Any]]:
             if object_hint == "vehicle"
             else plr_yaml_user_prompt_person(with_reason=_plr_with_reason())
         )
-        sys_text = (
-            "Extract visual attributes from CCTV crops as compact YAML.\n"
-            "- YAML only. No prose. No markdown fences.\n"
-            "- Use only the listed enum values.\n"
-            "- Always commit to a concrete value. Never answer unknown; "
-            "express low confidence via margins.\n"
-            "- Be conservative with gender/age — visual appearance only, "
-            "not identity."
-        )
+        sys_text = _PLR_YAML_SYSTEM
     else:
         # Legacy JSON path (kept for A/B comparison via env).
         user_text = (
@@ -538,155 +384,8 @@ def build_plr_retry_messages(
 # Query parser prompt
 # =====================================================================
 
-# qp_v0.4 (2026-05-26): Entity-extraction prompt. We deliberately do NOT
-# show Gemma the enum tables. The model's job is to pull clean visual
-# concepts straight from the Korean text; the Python normalizer then
-# maps those concepts onto the actual enum values. This stops Gemma
-# from emitting the same surface form in two fields at once
-# (equipment=["handbag"] + residue=["가방"]) and shrinks the prompt
-# from ~900 tokens to ~250.
-_QUERY_PARSER_SYSTEM_PROMPT = """You are an entity extractor for a Korean CCTV video search.
-
-Read the user query and pull out the visual concepts it mentions. Do
-NOT translate to English code names, do NOT pick from any enum table —
-just extract clean Korean (or original) words. The downstream Python
-layer does the normalisation.
-
-Rules:
-- Output a single JSON object only, no markdown fences, no prose.
-- Use null for absent fields, not empty strings.
-- Strip Korean particles (을/를/이/가/은/는/도/만/의/...) and verb
-  endings (입은/신은/멘/탄/쓴/걸친/차림/...) from the extracted values.
-- A colour that qualifies a noun belongs WITH that noun, not in a
-  separate slot. "갈색 가방" → equipment_details: "갈색 가방", not
-  upper_color: "갈색".
-- A colour that qualifies the GENERIC word 옷/clothes, or stands alone with
-  NO specific garment named, goes in `any_color` (NOT upper_color). Examples:
-  "빨간 옷" → any_color: "빨강"; "빨간 옷 입은 사람" → any_color: "빨강".
-  But "빨간 셔츠" → upper_color (셔츠 is a specific garment), and "빨간 바지"
-  → lower_color.
-
-DEFENSIVE residue rule (CRITICAL):
-- If a noun, adjective, or short phrase does NOT clearly fit one of
-  the named attribute slots, put it in `free_form_residue` verbatim.
-  NEVER force it into a slot just to avoid leaving residue empty.
-- "Would this fit upper_color or lower_color?" If you have to think
-  about it, the answer is NO — push it into residue.
-- Generic head nouns the search already routes on (사람/남자/여자/
-  차/자동차/옷) and Korean particles / verb endings MUST NOT appear
-  in residue.
-
-free_form_residue SHAPE — context-bound objects (CRITICAL):
-- Each residue item is an object with FOUR keys:
-    {"subject": "...", "attribute_ko": "...",
-     "attribute_en": "...", "is_negative": false}
-  This binds the unknown attribute to the noun it qualifies and gives
-  the downstream VQA stage an English visual description (small models
-  ground English visuals more reliably than Korean predicates).
-- `subject` — English category word (person, motorcycle, bag, truck,
-  hat, ...) of whatever the attribute describes. Usually the same head
-  noun that filled target / equipment / vehicle_type. If the attribute
-  applies to the whole query subject, reuse the `target` value.
-- `attribute_ko` — original Korean phrase as the user wrote it.
-- `attribute_en` — a concrete VISUAL English description, not a literal
-  translation. Prefer phrases the model can SEE: shape, posture, logo,
-  pattern, equipment. Examples below.
-- `is_negative` — true ONLY if the user wrote a negation ("없는", "안
-  X", "X 안 V", "no X", "without X"). Defaults to false. Negation
-  applies to that ONE residue item, not the whole query.
-
-Negation handling:
-- If the negated thing fits an enum slot (모자/가방/헬멧/우산 …), DO
-  NOT put it in `attributes` — it belongs in `excluded` (see schema).
-- If it's free-form (배달통, 호피무늬 …), keep it in residue with
-  is_negative=true. The VQA stage will flip yes↔drop for that item.
-
-attribute_en hints (visual, not literal):
-  쓰러져 있는      → "fallen over, lying flat on the ground"
-  배달통 달린      → "equipped with a top-mounted delivery box"
-  피에로 분장      → "wearing clown makeup or costume"
-  호피무늬        → "leopard print pattern"
-  쿠팡 브랜드     → "Coupang branded (logo/colour scheme on the side)"
-  줄무늬         → "striped pattern"
-  꽃무늬         → "floral pattern"
-
-Examples of correct residue use:
-- "피에로 분장한 사람"
-    → target: "person",
-      residue: [{"subject": "person",
-                 "attribute_ko": "피에로 분장",
-                 "attribute_en": "wearing clown makeup or costume",
-                 "is_negative": false}]
-- "쿠팡 탑차"
-    → target: "vehicle", attributes.vehicle_type: "탑차",
-      residue: [{"subject": "truck",
-                 "attribute_ko": "쿠팡 브랜드",
-                 "attribute_en": "Coupang branded (logo/colour scheme on the side)",
-                 "is_negative": false}]
-- "쓰러져 있는 오토바이"
-    → target: "vehicle", attributes.vehicle_type: "오토바이",
-      residue: [{"subject": "motorcycle",
-                 "attribute_ko": "쓰러져 있는",
-                 "attribute_en": "fallen over, lying flat on the ground",
-                 "is_negative": false}]
-- "배달통 없는 오토바이" (NEGATION, free-form)
-    → target: "vehicle", attributes.vehicle_type: "오토바이",
-      residue: [{"subject": "motorcycle",
-                 "attribute_ko": "배달통",
-                 "attribute_en": "top-mounted delivery box",
-                 "is_negative": true}]
-- "모자 안 쓴 사람" (NEGATION, enum-mapped → excluded)
-    → target: "person",
-      excluded.equipment: ["모자"],
-      residue: []
-- "호피무늬 가방 멘 사람"
-    → target: "person", attributes.equipment: ["가방"],
-      residue: [{"subject": "bag",
-                 "attribute_ko": "호피무늬",
-                 "attribute_en": "leopard print pattern",
-                 "is_negative": false}]
-- "검은색 옷을 입은 여자" (everything fits a slot)
-    → target: "person", attributes.gender: "여자",
-      upper_color: "검정", residue: []"""
-
-
-_QUERY_PARSER_USER_TEMPLATE = """User query: "{user_query}"
-
-Extract entities into this JSON shape (use null for missing fields):
-
-{{
-  "target": "person" | "vehicle" | "event" | "mixed" | "unknown",
-  "attributes": {{
-    "gender": "남자|여자|null",
-    "age_group": "어른|아이|null",
-    "upper_color": "e.g. 검정, 네이비, null",
-    "upper_clothing": "e.g. 셔츠, 패딩, 티셔츠, null",
-    "lower_color": "e.g. 흰색, null",
-    "lower_clothing": "e.g. 청바지, 슬랙스, 바지, 반바지, 트레이닝복, 레깅스, 치마, null  // extract the specific lower garment word the user wrote",
-    "any_color": "e.g. 빨강, null  // colour with NO specific garment named (빨간 옷)",
-    "outfit_type": "원피스|투피스|레이어드|null",
-    "equipment": ["가방", "모자", ...],
-    "equipment_details": "e.g. 갈색 가방, 파란 우산, null  // colour-bound items",
-    "action_or_posture": "e.g. 자전거 타는, 앉아있는, null",
-    "vehicle_color": "null",
-    "vehicle_type": "e.g. 세단, 트럭, 오토바이, null"
-  }},
-  "excluded": {{
-    "equipment": ["모자", ...],   // negated enum-mapped items
-    "upper_color": [],
-    "lower_color": [],
-    "vehicle_type": []
-  }},
-  "free_form_residue": [
-    {{"subject": "person|motorcycle|bag|truck|hat|...",
-      "attribute_ko": "원본 한국어 단어",
-      "attribute_en": "concrete visual English description",
-      "is_negative": false}}
-  ],
-  "raw_clean_query": "조사 제거 후 핵심 명사구"
-}}
-
-Output ONLY the JSON object."""
+# Query-parser prompt constants are loaded from the live prompt yaml above
+# (query_parser block) — see the declarative-prompt-source note.
 
 
 def query_parser_system_prompt() -> str:

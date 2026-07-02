@@ -80,7 +80,7 @@ python3 -m pytest tests/ -q  <span class="c"># 83 passed 확인</span></code></p
   <b>기본(--version 없음)</b> = <code>plr_prompts.py</code> 상수 (현재 <b>plr_v1.5_cot 강제커밋</b> —
   unknown 없음, 저신뢰는 margins로).
   <b>버전 지정</b> = <code>lab run --version V</code>가 <code>prompts/V.yaml</code>을 로드 — 실험은 항상 이 경로로.
-  새 버전은 <b>yaml만 추가</b>하고, 채택 시 상수+yaml parity로 승격(테스트가 강제) 후 <code>lab port</code>.
+  새 버전은 <b>yaml만 추가</b>, 채택 시 <code>PROMPT_VERSION_YAML_COT</code> bump가 승격의 전부 → <code>lab port</code>.
 </div>
 
 <h2><span class="n">5</span> 데이터셋 — 구조는 고정, 라벨은 자유</h2>

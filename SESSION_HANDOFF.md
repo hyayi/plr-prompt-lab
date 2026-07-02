@@ -51,11 +51,9 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 
 ## 3. ⭐ 핵심 구조: 프롬프트 (여러 번 헷갈렸던 부분 — 정확히 이해할 것)
 
-**런타임 프롬프트 소스는 두 갈래:**
-1. **기본** (`--version` 없음) = `plr_prompts.py`의 **하드코딩 상수** (= 현재 버전 **v1.5 강제커밋**). `IR_PLR_FORMAT`(yaml/json) × `IR_PLR_REASON`(on/off) **env**가 어느 상수를 쓸지 선택. → core/ir과 바이트 동일(이식 대상).
-2. **`lab run --version <V>`** = `prompts/<V>.yaml`을 `FilePromptProvider`로 **로드** (커밋 `51022f6`에서 배선). 없는 버전/mock은 상수로 폴백.
-
-**증거**: `prompts/*.yaml` 편집만으론 기본 프롬프트 안 바뀜(상수가 authoritative). 하지만 `--version plr_v1.3_cot` vs `plr_v1.4_cot`는 실제로 다른 프롬프트를 보냄(해시 `34008…` ≠ `85bf4…`).
+**(2026-07-02 단일 소스화 — 과거의 "두 갈래" 혼란 종결)** 런타임 프롬프트 소스는 이제 **하나**:
+1. **기본** (`--version` 없음) = `plr_prompts.py`가 **`prompts/<PROMPT_VERSION_YAML_COT>.yaml`을 import 시 로드** (= 현재 plr_v1.5_cot). 하드코딩 상수는 삭제됨(바이트 동등성 스냅샷 검증 후). `IR_PLR_REASON`(on/off)이 CoT/plain 템플릿 선택, `IR_PLR_FORMAT=json`은 레거시 JSON 상수 경로(A/B용, 상수 유지).
+2. **`lab run --version <V>`** = 같은 yaml 패밀리를 `FilePromptProvider`로 로드. **이제 yaml 편집이 곧 프롬프트 변경** — "yaml만 고치면 됨"이 (과거엔 틀렸지만) 지금은 맞음. 승격 = 새 버전 yaml 작성 + `PROMPT_VERSION_YAML_COT` bump가 전부.
 
 **프롬프트 "종류"** (한 버전 yaml 안 = `plr_prompts.py` 상수):
 - `system` (고정 역할지시)
@@ -68,7 +66,7 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 - 특정 **버전** 개선 → `prompts/<V>.yaml` 편집 (`lab run --version V`가 로드)
 - **기본/현재(v1.5)** 및 **core/ir 이식** → `plr_prompts.py` 상수 편집 + `prompts/plr_v1.5_cot.yaml` parity 유지 (`tests/test_prompt_surface_parity.py`가 강제)
 
-**주의**: HANDOFF.md 초기 버전이 "yaml만 고치면 됨"이라 **틀렸었고**, 실증 후 정정함(커밋 `7634a0a`, `2553b13`).
+**역사**: 초기 HANDOFF가 "yaml만 고치면 됨"이라 했다가 틀림이 실증돼 정정(7634a0a) → 2026-07-02 프롬프트 선언화로 그 직관이 드디어 **참**이 됨(87ab817).
 
 ---
 
@@ -193,7 +191,7 @@ python3 lab.py demo                  # GPU 없이 전체 사이클 시연
 |---|---|
 | `lab.py` | 단일 CLI 진입점 |
 | `prompts/*.yaml` | 버전별 프롬프트(`--version`이 로드) — plr + query_parser 블록 |
-| `plr_prompts.py` | 프롬프트 **상수**(기본/런타임 실사용) + `parse_plr_response` (query_parser 상수는 parity 미러로만 존재) |
+| `plr_prompts.py` | **프롬프트 로더**(prompts/<현재버전>.yaml → 라이브 템플릿) + `parse_plr_response` (레거시 JSON 상수만 잔존) |
 | `re_score.py` | plr 실행 러너 (재채점 → predictions/attributes.jsonl) |
 | `eval/run_eval.py` | 채점(accuracy/bias/pred_unknown) + ledger |
 | `plr_core.py` | `run_plr`(속성 추론 코어) — `build_messages` 주입구 |
