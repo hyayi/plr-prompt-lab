@@ -487,7 +487,28 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="path to core/ir repo (default: CORE_IR_PATH env, "
                          "else ../ziomilitary/core/ir if present)")
 
+    # -- validate-dataset --
+    vd = sub.add_parser(
+        "validate-dataset",
+        help="Validate a dataset directory against the PLR dataset spec.",
+    )
+    vd.add_argument("--dataset", "-D", required=True,
+                    help="path to the dataset directory to validate")
+
     return p
+
+
+# =====================================================================
+# Subcommand: validate-dataset
+# =====================================================================
+
+
+def _cmd_validate_dataset(args: argparse.Namespace) -> int:
+    """Validate a dataset directory against the PLR dataset spec."""
+    from validate import validate_dataset
+
+    ok = validate_dataset(args.dataset)
+    return 0 if ok else 1
 
 
 # =====================================================================
@@ -500,6 +521,7 @@ _DISPATCH = {
     "run": _cmd_run,
     "eval": _cmd_eval,
     "port": _cmd_port,
+    "validate-dataset": _cmd_validate_dataset,
 }
 
 
