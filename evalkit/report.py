@@ -239,6 +239,98 @@ def _heat_color(frac: float) -> str:
 # =====================================================================
 
 
+
+_CMP_CSS = (
+    "<style>table.cmp{border-collapse:collapse;margin:12px 0 24px;font-size:13px}"
+    "table.cmp th,table.cmp td{border:1px solid #ccc;padding:4px 10px;text-align:center}"
+    "table.cmp th{background:#f2f4f8}</style>"
+)
+
+
+def _latest_per_combo(records: list[dict]) -> list[dict]:
+    """Most recent record per (attribute, model, version, dataset)."""
+    latest: dict[tuple, dict] = {}
+    for r in records:
+        key = (r.get("attribute"), r.get("model"), r.get("version"), r.get("dataset"))
+        latest[key] = r  # ledger is append-only chronological -> last wins
+    return list(latest.values())
+
+
+def _build_summary_table(records: list[dict], title: str = "전체 실험 비교") -> str:
+    """Overall comparison table — the default cross-experiment view: one row
+    per latest (attribute, model, version, dataset) combo with the headline
+    metrics side by side."""
+    rows = _latest_per_combo(records)
+    if not rows:
+        return ""
+    out = [_CMP_CSS, f"<h2>{html.escape(title)}</h2>",
+           '<table class="cmp"><tr><th>attribute</th><th>version</th><th>model</th>'
+           '<th>dataset</th><th>n</th><th>accuracy</th><th>macro F1</th>'
+           '<th>bias</th><th>pred unknown</th></tr>']
+
+    def _m(r, k):
+        v = r.get(k)
+        return _fmt(v) if isinstance(v, (int, float)) else "&mdash;"
+
+    for r in sorted(rows, key=lambda x: (str(x.get("attribute")), str(x.get("version")))):
+        bias = r.get("bias") or {}
+        pu = r.get("pred_unknown") or {}
+        ds = str(r.get("dataset") or "")
+        ds = ds.rsplit("/", 1)[-1] if "/" in ds else ds
+        out.append(
+            "<tr>"
+            f"<td>{html.escape(str(r.get('attribute') or ''))}</td>"
+            f"<td>{html.escape(str(r.get('version') or ''))}</td>"
+            f"<td>{html.escape(str(r.get('model') or ''))}</td>"
+            f"<td>{html.escape(ds)}</td>"
+            f"<td>{r.get('n') if r.get('n') is not None else r.get('n_queries', '')}</td>"
+            f"<td>{_m(r, 'accuracy')}</td>"
+            f"<td>{_m(r, 'macro_f1')}</td>"
+            f"<td>{_fmt(bias['rate']) if isinstance(bias.get('rate'), (int, float)) else '&mdash;'}</td>"
+            f"<td>{_fmt(pu['rate']) if isinstance(pu.get('rate'), (int, float)) else '&mdash;'}</td>"
+            "</tr>")
+    out.append("</table>")
+    return "\n".join(out)
+
+
+def _build_confusions(records: list[dict]) -> str:
+    """Confusion matrix of the LATEST record per attribute (rows=true,
+    cols=pred), with per-class recall/precision/F1 alongside."""
+    latest: dict[str, dict] = {}
+    for r in records:
+        if r.get("confusion"):
+            latest[str(r.get("attribute"))] = r
+    if not latest:
+        return ""
+    out = ["<h2>Confusion (attribute별 최신 레코드)</h2>"]
+    for attr, r in sorted(latest.items()):
+        conf = r["confusion"]
+        classes = sorted({*conf.keys(), *(c for row in conf.values() for c in row)})
+        recall = r.get("recall") or {}
+        precision = r.get("precision") or {}
+        f1 = r.get("f1") or {}
+        out.append(f"<h3>{html.escape(attr)} &middot; {html.escape(str(r.get('version') or ''))}</h3>")
+        out.append('<table class="cmp"><tr><th>true &#92; pred</th>'
+                   + "".join(f"<th>{html.escape(c)}</th>" for c in classes)
+                   + "<th>recall</th><th>precision</th><th>F1</th></tr>")
+        for t in classes:
+            row = conf.get(t, {})
+            total = sum(row.values()) or 1
+            cells = []
+            for c in classes:
+                v = row.get(c, 0)
+                shade = f' style="background:{_heat_color(v / total)}"' if v else ""
+                cells.append(f"<td{shade}>{v or ''}</td>")
+
+            def _p(d, key=t):
+                return _fmt(d[key]) if isinstance(d.get(key), (int, float)) else "&mdash;"
+
+            out.append(f"<tr><th>{html.escape(t)}</th>" + "".join(cells)
+                       + f"<td>{_p(recall)}</td><td>{_p(precision)}</td><td>{_p(f1)}</td></tr>")
+        out.append("</table>")
+    return "\n".join(out)
+
+
 def _build_header(records: list[dict]) -> str:
     attrs = sorted({r.get("attribute", "unknown") for r in records})
     dates = sorted(str(r.get("date", "")) for r in records if r.get("date"))
@@ -524,7 +616,7 @@ table{border-collapse:collapse;margin-top:8px;font-size:13px;}
 # =====================================================================
 
 
-def render_html(records: list[dict]) -> str:
+def render_html(records: list[dict], compare_ledger: str | None = None) -> str:
     """Render the full self-contained HTML string from ledger records."""
     if not records:
         body = (
@@ -542,8 +634,13 @@ def render_html(records: list[dict]) -> str:
     else:
         body = (
             _build_header(records)
+            + _build_summary_table(records)
+            + (_build_summary_table(load_ledger(compare_ledger),
+                                    title=f"비교 대상 실험군 — {compare_ledger}")
+               if compare_ledger else "")
             + _build_trends(records)
             + _build_matrix(records)
+            + _build_confusions(records)
             + _build_prompt_change(records)
         )
 
@@ -560,14 +657,14 @@ def render_html(records: list[dict]) -> str:
     )
 
 
-def build_report(ledger_path: str, out_path: str) -> str:
+def build_report(ledger_path: str, out_path: str, compare_ledger: str | None = None) -> str:
     """Load the ledger, render, and write the self-contained HTML file.
 
     Returns the output path. Empty/missing ledger produces a valid "no records"
     report rather than crashing.
     """
     records = load_ledger(ledger_path)
-    html_str = render_html(records)
+    html_str = render_html(records, compare_ledger=compare_ledger)
     out_dir = os.path.dirname(os.path.abspath(out_path))
     os.makedirs(out_dir, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:

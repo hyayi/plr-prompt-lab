@@ -212,6 +212,24 @@ def main() -> None:
         if cid:
             recall[c] = round(sum(preds[i] == c for i in cid) / len(cid), 4)
 
+    # Per-class precision + F1, and macro-F1 over classes that appear in the
+    # ground truth (classes only ever predicted have recall undefined).
+    precision = {}
+    for c in classes:
+        pid = [i for i in eval_ids if preds[i] == c]
+        if pid:
+            precision[c] = round(sum(labels[i] == c for i in pid) / len(pid), 4)
+    f1 = {}
+    for c in classes:
+        r, pr = recall.get(c), precision.get(c)
+        if r is None and pr is None:
+            continue
+        r, pr = r or 0.0, pr or 0.0
+        f1[c] = round(2 * pr * r / (pr + r), 4) if (pr + r) > 0 else 0.0
+    gt_classes = [c for c in classes if c in recall]
+    macro_f1 = (round(sum(f1.get(c, 0.0) for c in gt_classes) / len(gt_classes), 4)
+                if gt_classes else None)
+
     # Confidence / quality splits (values are optional per prediction row).
     is_correct = {i: labels[i] == preds[i] for i in eval_ids}
     margins = {i: pred_rows[i].get("margin") for i in eval_ids}
@@ -219,9 +237,25 @@ def main() -> None:
     margin_stats = _signal_stats(margins, eval_ids, is_correct, args.margin_threshold)
     quality_stats = _signal_stats(qualities, eval_ids, is_correct, args.quality_threshold)
 
+    # Headline bias pair: dataset manifest declaration wins over the preset.
+    pair = None
+    try:
+        import yaml
+        with open(os.path.join(gdir, "manifest.yaml"), encoding="utf-8") as f:
+            _mani = yaml.safe_load(f) or {}
+        bp = _mani.get("bias_pair")
+        if isinstance(bp, (list, tuple)) and len(bp) == 2:
+            pair = (str(bp[0]), str(bp[1]))
+    except FileNotFoundError:
+        pass
+    except Exception as exc:  # noqa: BLE001 — malformed manifest is validate's job
+        print(f"WARNING: manifest.yaml unreadable for bias_pair: {exc}", file=sys.stderr)
+    if pair is None:
+        pair = BIAS_PAIR.get(args.attribute)
+
     bias = None
-    if args.attribute in BIAS_PAIR:
-        t_cls, as_cls = BIAS_PAIR[args.attribute]
+    if pair:
+        t_cls, as_cls = pair
         tid = [i for i in eval_ids if labels[i] == t_cls]
         if tid:
             bias = {"pair": f"{t_cls}->{as_cls}",
@@ -252,7 +286,10 @@ def main() -> None:
                   f"high acc={st['high']['accuracy']} (n={st['high']['n']})  "
                   f"low acc={st['low']['accuracy']} (n={st['low']['n']})  "
                   f"mean correct/wrong: {st['mean_correct']}/{st['mean_wrong']}")
-    print("recall: " + ", ".join(f"{k}={v}" for k, v in recall.items()))
+    print("recall:    " + ", ".join(f"{k}={v}" for k, v in recall.items()))
+    print("precision: " + ", ".join(f"{k}={v}" for k, v in precision.items()))
+    print("f1:        " + ", ".join(f"{k}={v}" for k, v in f1.items())
+          + (f"   macro_f1={macro_f1}" if macro_f1 is not None else ""))
     print("confusion (rows=true, cols=pred):")
     print("        " + "".join(f"{c:>10}" for c in classes))
     for t in classes:
@@ -262,7 +299,8 @@ def main() -> None:
     record = {
         "attribute": args.attribute, "version": args.version,
         "date": args.date or datetime.now().isoformat(timespec="seconds"),
-        "n": n, "accuracy": round(acc, 4), "recall": recall, "bias": bias,
+        "n": n, "accuracy": round(acc, 4), "recall": recall,
+        "precision": precision, "f1": f1, "macro_f1": macro_f1, "bias": bias,
         "confusion": {t: dict(confusion[t]) for t in classes},
         # plr_v1.5_cot forced-commit metrics: model unknown rate (over all
         # matched ids) and how many crops were human-unlabelable (excluded).

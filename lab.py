@@ -506,6 +506,18 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="output HTML path (default: report.html)")
     rp.add_argument("--ledger", default=os.path.join(_LAB_ROOT, "eval", "ledger.jsonl"),
                     help="ledger.jsonl path (default: eval/ledger.jsonl)")
+    rp.add_argument("--compare", default=None, metavar="LEDGER_B",
+                    help="second ledger to compare side-by-side (experiment-set vs experiment-set)")
+
+    # -- gallery --
+    ga = sub.add_parser(
+        "gallery",
+        help="Crops-vs-labels visual HTML for one dataset (wrong-first).",
+    )
+    ga.add_argument("--dataset", "-D", required=True,
+                    help="dataset directory (crops/ + labels.jsonl [+ predictions.jsonl])")
+    ga.add_argument("--out", default=None,
+                    help="output HTML path (default: <dataset>/gallery.html)")
 
     return p
 
@@ -556,7 +568,22 @@ def _cmd_report(args: argparse.Namespace) -> int:
     """
     from evalkit.report import build_report
 
-    build_report(ledger_path=args.ledger, out_path=args.out)
+    build_report(ledger_path=args.ledger, out_path=args.out,
+                 compare_ledger=getattr(args, "compare", None))
+    return 0
+
+
+# =====================================================================
+# Subcommand: gallery
+# =====================================================================
+
+
+def _cmd_gallery(args: argparse.Namespace) -> int:
+    """Self-contained crops-vs-labels HTML (wrong-first). GPU-free."""
+    from evalkit.gallery import build_gallery
+
+    out = build_gallery(args.dataset, out_path=getattr(args, "out", None))
+    print(f"[gallery] written: {out}")
     return 0
 
 
@@ -586,6 +613,7 @@ _DISPATCH = {
     "validate-dataset": _cmd_validate_dataset,
     "demo": _cmd_demo,
     "report": _cmd_report,
+    "gallery": _cmd_gallery,
     "experiment": None,  # nested — dispatched via _EXPERIMENT_DISPATCH below
 }
 

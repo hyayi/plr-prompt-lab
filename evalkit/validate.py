@@ -110,6 +110,7 @@ def _check_labels(
     ds_path: Path,
     attribute: str | None,
     report: _Report,
+    declared_labels: list | None = None,
 ) -> set[str]:
     """Check labels.jsonl: present, each line valid JSON with required fields,
     labels in allowed vocabulary.
@@ -121,7 +122,14 @@ def _check_labels(
         report.error("labels.jsonl not found")
         return set()
 
-    vocab: frozenset[str] | None = _ATTR_VOCAB.get(attribute or "") if attribute else None
+    # Label vocabulary: the dataset's own manifest declaration wins (generic
+    # datasets bring their own label set); the built-in PLR presets remain as
+    # the fallback for gender/vehicle_type/military. Unknown attribute with
+    # no declaration -> no vocabulary check (warned at the manifest step).
+    if declared_labels:
+        vocab: frozenset[str] | None = frozenset(str(x) for x in declared_labels)
+    else:
+        vocab = _ATTR_VOCAB.get(attribute or "") if attribute else None
     obj_ids: set[str] = set()
     line_errors = 0
 
@@ -224,7 +232,14 @@ def validate_dataset(path: str | Path, *, verbose: bool = True) -> bool:
     attribute: str | None = manifest.get("attribute") if manifest else None
 
     # 2. labels.jsonl
-    labeled_ids = _check_labels(ds_path, attribute, report)
+    declared = manifest.get("labels") if isinstance(manifest.get("labels"), (list, tuple)) else None
+    if attribute and not declared and attribute not in _ATTR_VOCAB:
+        report.warn(
+            f"attribute {attribute!r} is not a built-in preset and manifest.yaml "
+            "declares no `labels:` — label vocabulary cannot be checked "
+            "(declare labels/pred_path for generic datasets, see docs/DATASET_SPEC.md)"
+        )
+    labeled_ids = _check_labels(ds_path, attribute, report, declared_labels=declared)
 
     # 3. crops/
     crop_ids = _check_crops(ds_path, labeled_ids, report)

@@ -10,12 +10,13 @@ dependency at import time is PIL. The model is injected by the caller
 (LabGemmaModel or a MockModel for tests). The quality gate was removed with
 the plr_v1.5_cot single-view contract — every crop goes to the model.
 
-Military note: HINT["military"] = "person" because the military attribute
-lives on the person's attributes dict (plr_v1.4_cot: Gemma judges
-military/civilian from camouflage / field-uniform cues on the person crop,
-not a separate object type). The vehicle military flag (_attach_military_flags)
-is also populated by plr_core for vehicle crops — if a future military golden
-set covers vehicles, pass object_type_hint="vehicle" explicitly.
+Attribute handling is SPEC-driven (evalkit.dataset.attribute_spec): the
+dataset's manifest.yaml may declare its own labels / pred_path / margin_path /
+bias_pair / object_type_hint; gender / vehicle_type / military are built-in
+presets and double as the reference examples. (Military note: the preset uses
+object_type_hint="person" because the military attribute lives on the person
+attributes dict; for a vehicle military set declare object_type_hint: vehicle
+in the manifest.)
 """
 
 from __future__ import annotations
@@ -29,67 +30,19 @@ from PIL import Image
 
 
 # =====================================================================
-# Attribute → object_type_hint mapping
-# =====================================================================
-
-HINT: dict[str, str] = {
-    "gender": "person",
-    "vehicle_type": "vehicle",
-    "military": "person",   # see module docstring
-}
-
-
-# =====================================================================
-# Attribute extraction helpers
+# Reason extraction (presets only — pred/margin come from the attribute spec)
 # =====================================================================
 
 
-def _extract_pred_reason(attribute: str, plr_json: dict[str, Any]) -> tuple[str, str]:
-    """Extract (pred, reason) for one attribute from a full PLR JSON.
-
-    Mirrors the SQL expressions in eval/build_golden.py ATTR dict:
-      gender      -> attributes.gender_scores.{selected, reason}
-      vehicle_type-> attributes.type_topk[0].label
-      military    -> attributes.military
-    """
-    attrs = plr_json.get("attributes") or {}
-
-    if attribute == "gender":
-        gs = attrs.get("gender_scores") or {}
-        pred = gs.get("selected") or "unknown"
-        reason = gs.get("reason") or ""
-        # reason may be stored as an evidence list — normalise to str
-        if isinstance(reason, list):
-            reason = ", ".join(str(x) for x in reason)
-        return str(pred), str(reason)
-
-    if attribute == "vehicle_type":
-        topk = attrs.get("type_topk") or []
-        pred = topk[0].get("label", "unknown") if topk else "unknown"
-        return str(pred), ""
-
-    if attribute == "military":
-        pred = attrs.get("military") or "unknown"
-        return str(pred), ""
-
-    raise ValueError(f"Unknown attribute: {attribute!r}. Add it to HINT and _extract_pred_reason.")
-
-
-def _extract_margin(attribute: str, plr_json: dict[str, Any]) -> float | None:
-    """Model confidence (decision_margin) for one attribute, when the prompt
-    emits it. plr_v1.5_cot forced-commit replaced unknown with
-    "commit + margin", so eval uses this to verify the margin actually
-    carries signal (low margin <-> errors). Only the person prompt emits a
-    margins block (gender/age/outfit/sleeve); vehicle and military do not ->
-    None, and eval skips the confidence split for those attributes."""
-    attrs = plr_json.get("attributes") or {}
-    if attribute == "gender":
-        m = (attrs.get("gender_scores") or {}).get("decision_margin")
-        try:
-            return float(m) if m is not None else None
-        except (TypeError, ValueError):
-            return None
-    return None
+def _extract_reason(attribute: str, plr_json: dict[str, Any]) -> str:
+    """Human-readable evidence cue for the prediction. Only the gender preset
+    prompt emits one (gender_reason); other attributes return ""."""
+    if attribute != "gender":
+        return ""
+    reason = ((plr_json.get("attributes") or {}).get("gender_scores") or {}).get("reason") or ""
+    if isinstance(reason, list):
+        reason = ", ".join(str(x) for x in reason)
+    return str(reason)
 
 
 # =====================================================================
@@ -167,7 +120,20 @@ def re_score(
         )
     obj_id_set: set[str] = set(obj_ids)
 
-    object_type_hint = HINT.get(attribute, "person")
+    # Attribute spec: manifest declaration (labels/pred_path/...) wins,
+    # built-in PLR presets (gender/vehicle_type/military) fill the gaps —
+    # the label SET is the dataset author's choice, the STRUCTURE is fixed.
+    from evalkit.dataset import attribute_spec, resolve_json_path
+    spec = attribute_spec(gdir, attribute)
+    pred_path = spec.get("pred_path")
+    if not pred_path:
+        raise ValueError(
+            f"No pred_path for attribute {attribute!r}: it is not a built-in "
+            "preset (gender/vehicle_type/military), so the dataset's "
+            "manifest.yaml must declare `labels:` and `pred_path:` "
+            "(see docs/DATASET_SPEC.md)."
+        )
+    object_type_hint = spec.get("object_type_hint") or "person"
 
     # Version-specific prompt wiring. Only when a real yaml-backed version is
     # requested do we build a per-version message builder; otherwise build_messages
@@ -216,8 +182,16 @@ def re_score(
             build_messages=build_messages,
         )
 
-        pred, reason = _extract_pred_reason(attribute, plr_json)
-        margin = _extract_margin(attribute, plr_json)
+        pred_val = resolve_json_path(plr_json, pred_path)
+        pred = str(pred_val) if pred_val not in (None, "") else "unknown"
+        reason = _extract_reason(attribute, plr_json)
+        margin = None
+        if spec.get("margin_path"):
+            m = resolve_json_path(plr_json, spec["margin_path"])
+            try:
+                margin = float(m) if m is not None else None
+            except (TypeError, ValueError):
+                margin = None
 
         new_preds.append({
             "obj_id": obj_id, "pred": pred, "reason": reason,
