@@ -573,6 +573,28 @@ def _build_parser() -> argparse.ArgumentParser:
     dm.add_argument("--keep", action="store_true",
                     help="Keep demo_dataset/ directory after the run (default: removed).")
 
+    # -- experiment --
+    exp = sub.add_parser(
+        "experiment",
+        help="Run an experiment matrix defined by an experiment.yaml.",
+    )
+    exp_sub = exp.add_subparsers(dest="experiment_cmd", metavar="<experiment_cmd>")
+    exp_sub.required = True
+
+    exp_run = exp_sub.add_parser(
+        "run",
+        help="Run the cross-product matrix from an experiment.yaml.",
+    )
+    exp_run.add_argument(
+        "experiment_yaml",
+        help="Path to the experiment.yaml file.",
+    )
+    exp_run.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit nonzero if ANY cell fails (default: only exit nonzero when ALL cells fail).",
+    )
+
     return p
 
 
@@ -590,6 +612,24 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     from demo import run_demo
     keep = getattr(args, "keep", False)
     return run_demo(lab_root=_LAB_ROOT_PATH, keep_dir=keep)
+
+
+# =====================================================================
+# Subcommand: experiment
+# =====================================================================
+
+
+def _cmd_experiment_run(args: argparse.Namespace) -> int:
+    """Run the cross-product experiment matrix defined in an experiment.yaml.
+
+    Delegates to experiment.run_experiment().
+    """
+    from experiment import run_experiment
+
+    return run_experiment(
+        experiment_yaml=args.experiment_yaml,
+        strict=getattr(args, "strict", False),
+    )
 
 
 # =====================================================================
@@ -617,6 +657,11 @@ _DISPATCH = {
     "port": _cmd_port,
     "validate-dataset": _cmd_validate_dataset,
     "demo": _cmd_demo,
+    "experiment": None,  # nested — dispatched via _EXPERIMENT_DISPATCH below
+}
+
+_EXPERIMENT_DISPATCH = {
+    "run": _cmd_experiment_run,
 }
 
 
@@ -631,6 +676,13 @@ def main() -> None:
         args.label_args = extras
     elif extras:
         parser.error("unrecognized arguments: " + " ".join(extras))
+
+    if args.cmd == "experiment":
+        handler = _EXPERIMENT_DISPATCH.get(args.experiment_cmd)
+        if handler is None:
+            parser.error(f"Unknown experiment subcommand: {args.experiment_cmd!r}")
+        sys.exit(handler(args))
+
     handler = _DISPATCH[args.cmd]
     sys.exit(handler(args))
 
