@@ -250,13 +250,14 @@
 <!-- PROMPTS -->
 <section id="prompts">
   <h2><span class="num">06</span>프롬프트 &amp; 파이프라인 구조 (실제)</h2>
-  <p class="sub">“프롬프트”는 한 파일이 아니다 — <b>런타임 상수 ↔ yaml 미러</b>의 이중 표현이고, 버전별 파일·plr/search 두 계열로 나뉜다.
-     이 랩은 운영 <code>core/ir</code>을 그대로 lean 추출한 것 — <b>구조·내용 동일</b>(<code>plr_prompts.py</code> 바이트 일치).</p>
+  <p class="sub">“프롬프트”는 한 파일이 아니다 — 버전별 파일, plr/search 두 계열, system/템플릿 종류로 나뉜다.
+     런타임 소스는 <b>두 갈래</b>: 기본은 <code>plr_prompts.py</code> 상수(=현재 버전), <code>--version</code>을 주면 그 버전 <code>prompts/&lt;V&gt;.yaml</code>을 로드한다.
+     이 랩은 운영 <code>core/ir</code>에서 lean 추출 — 구조·내용 동일(<code>plr_prompts.py</code> 바이트 일치).</p>
 
-  <h3>① 런타임이 실제 쓰는 것 = <code>plr_prompts.py</code> 상수 8개</h3>
-  <p style="font-size:14.5px;color:#48515b;margin:2px 0 8px"><code>run_plr → build_plr_messages</code>가 이 상수들로 메시지를 조립한다. 어느 상수를 쓸지는
-    <code>IR_PLR_FORMAT</code>(yaml/json) × <code>IR_PLR_REASON</code>(on/off) <b>env</b>가 고른다. <b>yaml은 안 읽는다</b> —
-    핫패스에서 <code>get_provider("prompt")</code> 미호출(실증: yaml 편집해도 조립된 프롬프트 불변).</p>
+  <h3>① 기본 경로 = <code>plr_prompts.py</code> 상수 8개 (= 현재 버전 v1.4)</h3>
+  <p style="font-size:14.5px;color:#48515b;margin:2px 0 8px"><code>--version</code> 없이 돌리면 <code>build_plr_messages</code>가 이 상수들로 메시지를 조립한다.
+    <code>IR_PLR_FORMAT</code>(yaml/json) × <code>IR_PLR_REASON</code>(on/off) <b>env</b>가 어느 상수를 쓸지 고른다. 이 기본 경로는
+    <b>core/ir과 바이트 동일</b>(parity·<code>lab port</code>가 이식하는 대상).</p>
   <table>
     <tr><th style="width:120px">파이프라인</th><th style="width:120px">종류</th><th>상수 (plr_prompts.py)</th></tr>
     <tr><td rowspan="3"><span class="pill">plr</span> 속성</td><td>system</td><td><code>_PLR_SYSTEM_PROMPT</code></td></tr>
@@ -266,7 +267,7 @@
     <tr><td>템플릿</td><td><code>_QUERY_PARSER_USER_TEMPLATE</code> &nbsp;<span style="color:#6b7480">+ <code>parser/qp_v0.4.yaml</code> 시노님 사전(색·성별·차종)</span></td></tr>
   </table>
 
-  <h3>② 선언적 미러 = <code>prompts/*.yaml</code> (버전별 3개)</h3>
+  <h3>② 버전 프롬프트 소스 = <code>prompts/&lt;버전&gt;.yaml</code> (3개)</h3>
   <div class="svgwrap"><pre style="background:#fff;color:#1f2933;margin:0">
 prompts/                                parser/
 ├── plr_v0.4.yaml                       └── qp_v0.4.yaml   <span class="c"># search 시노님 사전(결정론)</span>
@@ -275,17 +276,18 @@ prompts/                                parser/
       ├── <b style="color:#0d7d76">plr:</b>          { system, person_user, person_user_no_reason, vehicle_user }
       └── <b style="color:#b26a00">query_parser:</b> { system, user }
   </pre></div>
-  <p style="font-size:14.5px;color:#48515b;margin:2px 0 0">버전별로 나뉜 이 yaml들은 <b>상수와 동일하게 유지되는 미러</b>다. core/ir은 parity 테스트(<code>test_prompt_source_parity.py</code>)로 강제하고, 랩은 <code>lab port</code> diff로 확인한다(lab yaml == core/ir yaml, 확인됨). <code>prompt_hash</code>도 <code>prompts/*.yaml</code> + <code>plr_prompts.py</code> + <code>plr_core.py</code>를 함께 해싱한다.</p>
+  <p style="font-size:14.5px;color:#48515b;margin:2px 0 0"><code>lab run --version plr_v1.3_cot</code>은 <code>FilePromptProvider</code>로 그 파일을 로드해 <b>그 버전의 프롬프트</b>를 모델에 보낸다 —
+    그래서 experiment의 <code>prompts:[v1.3, v1.4]</code>가 <b>진짜 다른 프롬프트로 비교</b>된다(실증: v1.3=<code>34008…</code> ≠ v1.4=<code>85bf4…</code>). 없는 버전·mock은 상수로 폴백.
+    각 파일 = 한 버전 { <code>plr</code>:{system, person_user, …}, <code>query_parser</code>:{system, user} }. (기본/현재 v1.4는 상수와 parity 유지 — <code>prompt_hash</code>·<code>lab port</code>가 확인.)</p>
 
   <div class="note" style="margin-top:16px">
-    <b>⚠️ 편집 대상 (중요)</b> — 모델 동작을 바꾸려면 <b><code>plr_prompts.py</code> 상수</b>를 고쳐야 한다(런타임 실사용).
-    <code>prompts/*.yaml</code>은 사람이 읽는 선언적 spec이자 <code>lab port</code>가 이식하는 대상이므로 <b>둘을 함께</b> 맞춘다 —
-    parity로 묶여 있어 어긋나면 잡힌다. <u>yaml만 고치면 핫패스는 바뀌지 않는다.</u>
+    <b>⚠️ 편집 대상</b> — 특정 <b>버전</b>의 프롬프트를 고치려면 그 <code>prompts/&lt;V&gt;.yaml</code>을 편집한다(<code>lab run --version V</code>가 실제로 로드).
+    <b>기본/현재(v1.4)</b> 및 <b>core/ir로 이식되는 것</b>은 <code>plr_prompts.py</code> 상수 — v1.4를 바꾸면 상수 + <code>prompts/plr_v1.4_cot.yaml</code>을 <b>함께</b>(parity). <code>prompt_hash</code>·<code>lab port</code>가 어긋남을 잡는다.
   </div>
 
   <h3>바꿀 수 있는 축</h3>
   <div class="grid c3">
-    <div class="tile"><h4>① 프롬프트 변경</h4><p><code>plr_prompts.py</code> 상수 <b>+ 동일 <code>prompts/*.yaml</code></b>(parity)를 편집. system 또는 템플릿, plr 또는 search 계열. <code>--version</code>으로 버전 스위치·비교.</p></div>
+    <div class="tile"><h4>① 프롬프트 변경</h4><p><code>--version</code>이 그 버전 <code>prompts/&lt;V&gt;.yaml</code>을 실제 로드 → 버전 스위치가 <b>진짜 프롬프트를 바꾼다</b>. 새 변형은 yaml 하나 추가로 비교. (기본/현재는 상수+yaml parity.)</p></div>
     <div class="tile"><h4>② 파이프라인 변경</h4><p><code>--pipeline plr|search</code> — 어느 판별/검색 경로를 쓸지. 코어는 <code>run_plr</code> / <code>run_search</code>.</p></div>
     <div class="tile"><h4>③ 추론 토글</h4><p><code>IR_PLR_REASON=on</code> → CoT(<code>_..._COT_PERSON_TEMPLATE</code>) / off → 비CoT. 정확도 ↔ 토큰 트레이드오프.</p></div>
   </div>

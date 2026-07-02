@@ -59,8 +59,15 @@ used for versioned diffing and `lab port` — **not loaded on the runtime path**
 Keep them identical to the constants: core/ir enforces this with
 `tests/test_prompt_source_parity.py`; the lab checks it via `lab port` diff.
 
-**So a prompt change = edit the `plr_prompts.py` constant AND its mirror in the
-matching `prompts/*.yaml`.** Editing the yaml alone changes nothing at runtime.
+**Two edit paths:**
+- To iterate a **specific version** for experiments: edit that `prompts/<version>.yaml`.
+  `lab run --version <version>` loads it via `FilePromptProvider`, so the change
+  takes effect for that version (this is how the experiment prompt-axis compares
+  real prompt variants in one checkout).
+- To change the **default / current** prompt (what runs without `--version`, and
+  what `lab port` ships to core/ir): edit the `plr_prompts.py` constants **and**
+  keep `prompts/plr_v1.4_cot.yaml` in parity with them.
+
 Also update `parse_plr_response()` in `plr_prompts.py` if you change the output
 schema (add/rename a field).
 
