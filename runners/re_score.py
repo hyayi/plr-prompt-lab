@@ -144,21 +144,29 @@ def re_score(
     build_messages = None
     stamped_version: str | None = None
     variant = None
-    if prompt_version and (here / "prompts" / f"{prompt_version}.yaml").exists():
-        from providers.file_prompt_provider import FilePromptProvider
-
+    if prompt_version:
         from runners.variant import apply_sampling, load_variant
 
-        build_messages = (
-            lambda hint: FilePromptProvider(version_override=prompt_version)
-            .build_plr_messages(hint)
-        )
-        stamped_version = prompt_version
-        # Variant bundle: the version yaml also carries enum overrides
-        # (handled inside FilePromptProvider), preprocessing and sampling
-        # knobs — the WHOLE input combination is versioned as one unit.
+        # --version accepts a VARIANT name (variants/<n>.yaml — a composed
+        # experiment combination referencing a prompt version) or a plain
+        # prompt version (prompts/<V>.yaml). Names matching neither
+        # (mock_v1, demo tags) fall back to the module constants.
         variant = load_variant(here, prompt_version)
-        apply_sampling(model, variant)
+        prompt_yaml_ver = variant.prompt if variant else prompt_version
+        if (here / "prompts" / f"{prompt_yaml_ver}.yaml").exists():
+            from providers.file_prompt_provider import FilePromptProvider
+
+            _enum_overrides = dict(variant.enums) if variant else None
+            build_messages = (
+                lambda hint: FilePromptProvider(
+                    version_override=prompt_yaml_ver,
+                    enum_overrides=_enum_overrides,
+                ).build_plr_messages(hint)
+            )
+            # Ledger tag = what the user named: the variant (combination)
+            # name, or the bare prompt version.
+            stamped_version = prompt_version
+            apply_sampling(model, variant)
 
     new_preds: list[dict[str, Any]] = []
     new_attrs: list[dict[str, Any]] = []

@@ -56,7 +56,11 @@ class FilePromptProvider(PromptProvider):
     # the config default.
     _VERSION: str = ""
 
-    def __init__(self, version_override: str | None = None) -> None:
+    def __init__(
+        self,
+        version_override: str | None = None,
+        enum_overrides: dict | None = None,
+    ) -> None:
         ver = version_override or self._VERSION
         if not ver:
             # Resolve from config when not pinned by a subclass.
@@ -71,12 +75,15 @@ class FilePromptProvider(PromptProvider):
         # plr_prompts._commit_enum). Per-version so older yamls (v1.3/v1.4)
         # keep reproducing their historical prompts byte-for-byte.
         self._commit_enums: bool = bool(self._data.get("commit_enums", False))
-        # Variant enum overrides: the version yaml may pin its own enum lists
-        # (`enums: {colors: [...], ...}`) — the injected list then comes from
-        # the yaml verbatim instead of plr_schema. This makes the enum
-        # vocabulary part of the versioned variant bundle; at promotion the
-        # winning lists are baked into plr_schema itself.
-        self._enum_overrides: dict[str, list] = dict(self._data.get("enums") or {})
+        # Enum overrides: injected lists may come verbatim from the version
+        # yaml (`enums:` key) or from the constructor (a lab variant file
+        # composing prompt + knobs); constructor wins per key. Production
+        # yamls declare none; at promotion winning lists are baked into
+        # plr_schema itself.
+        self._enum_overrides: dict[str, list] = {
+            **dict(self._data.get("enums") or {}),
+            **dict(enum_overrides or {}),
+        }
 
     # ------------------------------------------------------------------
     # PromptProvider contract

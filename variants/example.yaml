@@ -1,0 +1,14 @@
+# variants/<name>.yaml — 실험 조합 파일 (프롬프트 버전 × 인풋 knob)
+# 같은 프롬프트를 복사 없이 여러 조합으로 실험: `lab run --version example`
+# ledger에는 이 파일명(example)이 version으로 찍히고, prompt_hash가
+# variants/*.yaml을 해시하므로 조합 provenance는 자동.
+prompt: plr_v1.5_cot          # 필수 — prompts/<V>.yaml 참조 (템플릿은 거기에만 존재)
+
+# --- 선택 knob (생략 = 운영 기본값) ---
+# enums:                      # 주입 enum 목록 오버라이드 (verbatim)
+#   colors: [black, white, red]
+# preprocess:
+#   marker: false             # 노란 코너 마커 생략 (기본 true)
+# sampling:
+#   max_tokens: 256           # 기본 512
+#   temperature: 0.2          # 기본 0.0

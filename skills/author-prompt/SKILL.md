@@ -71,15 +71,6 @@ python3 lab.py experiment run my_ab.yaml   # prompts: [plr_v1.5_cot, plr_v1.6_co
 #   - <change 1>: <rationale, cite obj_ids/metrics if from improve-prompt>
 format: yaml            # wire format the templates emit (parser follows IR_PLR_FORMAT)
 commit_enums: true      # provider injects *unknown*-filtered enum lists
-# --- variant knobs (optional — omit for production defaults). The yaml
-# versions the WHOLE input combination; prompt_hash stamps it automatically.
-# enums:                # override injected enum lists (verbatim)
-#   colors: [black, white, red]
-# preprocess:
-#   marker: false       # skip the yellow corner marker (default: true)
-# sampling:
-#   max_tokens: 256     # default 512
-#   temperature: 0.2    # default 0.0
 plr:
   system: |-
     <system prompt — role + output discipline + commit rule>
@@ -95,6 +86,23 @@ plr:
 #   user: |-             # version at promotion time.
 #     ...
 ```
+
+## Variants — experiment COMBINATIONS (variants/<name>.yaml)
+
+A prompt yaml holds templates ONLY. To cross a prompt with other input
+knobs (enum lists, preprocessing, sampling) WITHOUT copying template text,
+write a variant file (see `variants/example.yaml`):
+
+```yaml
+prompt: plr_v1.5_cot        # references the prompt version above
+enums: { colors: [black, white, red] }
+preprocess: { marker: false }
+sampling: { max_tokens: 256, temperature: 0.2 }
+```
+
+`lab run --version <variant-name>` resolves the combination; the ledger
+stamps the variant name; prompt_hash covers variants/*.yaml. Same prompt ×
+N knob-sets = N variant files, zero template copies.
 
 ## Domain lessons (encoded history — do not relearn these the hard way)
 

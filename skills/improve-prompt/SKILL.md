@@ -53,11 +53,11 @@ loop indefinitely.
 - For each pattern, propose a CONCRETE change with the causal story: *why*
   this change should fix *this* pattern. Cite the pattern's obj_ids and
   observations as grounds.
-- The levers are ALL the input knobs, not just wording — every one is
-  versioned in the same variant yaml (see skills/author-prompt):
-  ① prompt template text ② `enums:` (offered vocabulary — e.g. drop a label
-  the model abuses) ③ `preprocess.marker` (image pre-processing)
-  ④ `sampling:` (max_tokens / temperature). Pick the lever the evidence
+- The levers are ALL the input knobs, not just wording:
+  ① prompt template text (a new prompts/<V>.yaml)
+  ② `enums:` ③ `preprocess.marker` ④ `sampling:` — knobs ②-④ go into a
+  variants/<name>.yaml that REFERENCES the prompt version (no template
+  copies; see skills/author-prompt §Variants). Pick the lever the evidence
   points at: a vocabulary-confusion pattern wants an enum change, not more
   instructions.
 - Anti-patterns to avoid: piling on generic instructions ("be more careful"),
@@ -95,9 +95,10 @@ If any fail → back to 2 (next round). After round 3 → emit `unresolved`.
 
 1. **분석 리포트** — error patterns with obj_ids + image observations +
    metrics (including margin/quality calibration reading).
-2. **프롬프트 수정안** — a ready `prompts/<new_version>.yaml` draft
-   (copy current version, apply changes, bump the version name, add a header
-   comment documenting the rationale per change).
+2. **수정안** — a ready draft: a new `prompts/<new_version>.yaml` (template
+   changes) and/or a `variants/<name>.yaml` (knob changes referencing an
+   existing prompt), with a header comment documenting the rationale per
+   change.
 3. **예상 효과** — the judge-approved measurable predictions.
 4. **검증 계획** — the exact `lab experiment run` yaml comparing
    current vs new version on the same dataset.
