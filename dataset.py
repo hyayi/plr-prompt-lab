@@ -9,7 +9,7 @@ Layout (all optional except crops/ + labels for a real run)::
 
     <dataset>/
         crops/<obj_id>.jpg      # object crops (gitignored in the repo layout)
-        labels.jsonl            # {"obj_id": ..., "true": ...}   human ground truth
+        labels.jsonl            # {"obj_id": ..., "label": ...}  human ground truth
         predictions.jsonl       # {"obj_id": ..., "pred": ...}   model output
         attributes.jsonl        # {"obj_id": ..., "plr_json": {...}}
         queries.jsonl           # {"query": ..., "relevant": [obj_id, ...]}   (search)

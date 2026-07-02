@@ -171,7 +171,9 @@ def _cmd_label(args: argparse.Namespace) -> int:
     sys.argv = ["make_labels"]
     # When --dataset is given, point make_labels.py at the dataset's files
     # unless the user already passed the corresponding flag verbatim.
-    forwarded = list(args.label_args)
+    forwarded = list(getattr(args, "label_args", []))
+    if forwarded and forwarded[0] == "--":
+        forwarded = forwarded[1:]  # drop an optional argparse separator
     if getattr(args, "dataset", None):
         ds = Path(args.dataset)
         if "--index-map" not in forwarded:
@@ -441,9 +443,9 @@ def _build_parser() -> argparse.ArgumentParser:
     la.add_argument("--dataset", default=None,
                     help="dataset dir (default: eval/golden/gender). Supplies "
                          "--index-map/--pred/--out to make_labels.py.")
-    la.add_argument("label_args", nargs=argparse.REMAINDER,
-                    help="Arguments forwarded verbatim to make_labels.py "
-                         "(e.g. --female-in-male M3,M7 --male-in-female F2)")
+    # Correction flags (--female-in-male M3,M7 / --male-in-female F2 / --unknown M40)
+    # are NOT declared here — they are captured as extras by parse_known_args in
+    # main() and forwarded verbatim to make_labels.py, so any flag order works.
 
     # -- run --
     ru = sub.add_parser(
@@ -555,7 +557,15 @@ _DISPATCH = {
 
 def main() -> None:
     parser = _build_parser()
-    args = parser.parse_args()
+    # `label` forwards correction flags (--female-in-male, ...) verbatim to
+    # make_labels.py. argparse.REMAINDER can't capture option-looking tokens
+    # that follow a consumed optional (--dataset), so use parse_known_args and
+    # route the unknowns to `label`; any other command with extras is an error.
+    args, extras = parser.parse_known_args()
+    if args.cmd == "label":
+        args.label_args = extras
+    elif extras:
+        parser.error("unrecognized arguments: " + " ".join(extras))
     handler = _DISPATCH[args.cmd]
     sys.exit(handler(args))
 

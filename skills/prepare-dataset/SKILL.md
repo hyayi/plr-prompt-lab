@@ -154,11 +154,12 @@ flags map directly to the contact-sheet tile IDs):
 ```bash
 python3 lab.py label \
     --dataset my_dataset/ \
-    -- \
     --female-in-male M3,M7 \
     --male-in-female F2 \
     --unknown M40
 ```
+
+Correction flags work in any order; no `--` separator is needed.
 
 Tile IDs that are not mentioned keep the model's prediction. Tiles in
 `--unknown` get label `unknown` regardless of prediction. Run `lab label
@@ -168,9 +169,8 @@ When `--dataset` is given, `lab label` automatically resolves
 `my_dataset/index_map.json`, `my_dataset/predictions.jsonl`, and writes to
 `my_dataset/labels.jsonl` — you do not need to pass those paths separately.
 
-Note: `make_labels.py` uses a `"true"` key internally; `validate-dataset` and
-`lab eval` expect the key `"label"` in `labels.jsonl`. After running
-`lab label`, verify the output schema matches the spec:
+`make_labels.py` writes the `"label"` key that `validate-dataset` and `lab eval`
+expect in `labels.jsonl`. After running `lab label`, verify the output schema:
 
 ```bash
 python3 -c "
@@ -178,21 +178,6 @@ import json
 rows = [json.loads(l) for l in open('my_dataset/labels.jsonl') if l.strip()]
 assert all('obj_id' in r and 'label' in r for r in rows), 'schema mismatch'
 print(f'OK — {len(rows)} rows')
-"
-```
-
-If `make_labels.py` writes `true` instead of `label`, rename the key:
-
-```bash
-python3 -c "
-import json, pathlib
-p = pathlib.Path('my_dataset/labels.jsonl')
-rows = [json.loads(l) for l in p.read_text().splitlines() if l.strip()]
-fixed = [{'obj_id': r['obj_id'], 'label': r.get('label', r.get('true', 'unknown')),
-           **{k:v for k,v in r.items() if k not in ('obj_id','label','true')}}
-         for r in rows]
-p.write_text('\n'.join(json.dumps(r) for r in fixed) + '\n')
-print('fixed', len(fixed), 'rows')
 "
 ```
 
