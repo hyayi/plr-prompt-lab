@@ -95,14 +95,10 @@ _MOCK_YAML_V2_ALL_MALE = textwrap.dedent("""\
 """)
 
 
-class MockModel:
-    """Model stub — returns canned PLR YAML; ignores messages and image."""
-
-    def __init__(self, yaml_text: str = _MOCK_YAML_V1_ALL_FEMALE) -> None:
-        self._yaml = yaml_text
-
-    def generate(self, messages: list[dict[str, Any]], image: Any) -> str:  # noqa: ARG002
-        return self._yaml
+# The canonical MockModel now lives in gemma_model (shared by demo/registry/
+# tests).  Import it here; the local YAML constants above are still used to
+# build the synthetic golden dirs and to exercise the version-switchable stub.
+from gemma_model import MockModel  # noqa: E402
 
 
 # =====================================================================

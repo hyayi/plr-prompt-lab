@@ -203,26 +203,61 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     This is the GPU step at real runtime — the CLI wires it but does not
     import Gemma at module level.
+
+    --model  selects the model via the registry (default 'gemma'; 'mock' is
+             GPU-free).  --pipeline selects 'plr' (re_score) or 'search'
+             (run_search_over_golden); default 'plr'.
     """
     import re_score as rs
     from dataset import resolve_dataset_dir
+    from registry import get_model, get_pipeline
 
-    # Set version env vars so re_score.re_score() picks them up.
-    if args.version:
-        os.environ["IR_PLR_FORMAT"] = args.version
+    # IR_PLR_FORMAT selects the WIRE format (yaml|json) the prompt/parser use —
+    # not the ledger version tag. Only propagate --version when it names a wire
+    # format; a version tag like 'plr_v1.4_cot' or 'mock_v1' must NOT clobber the
+    # format (that routed parsing to the JSON path and broke yaml runs).
+    if args.version and args.version.strip().lower() in {"yaml", "json"}:
+        os.environ["IR_PLR_FORMAT"] = args.version.strip().lower()
 
-    # LabGemmaModel is imported lazily here so the CLI is importable without GPU.
-    from gemma_model import LabGemmaModel
+    model_name = getattr(args, "model", "gemma")
+    pipeline_name = getattr(args, "pipeline", "plr")
+    # Resolve the pipeline early so an unknown name fails fast with a clear error.
+    get_pipeline(pipeline_name)
 
     attribute = args.attribute
     ds_dir = resolve_dataset_dir(_LAB_ROOT, attribute, getattr(args, "dataset", None))
-    print(f"[run] re_score attribute={attribute!r} version={args.version!r} dataset={str(ds_dir)!r}")
-    meta = rs.re_score(attribute, LabGemmaModel(), golden_dir=str(ds_dir))
+
+    if pipeline_name == "search":
+        # Search pipeline: run retrieval over the golden set. The dictionary
+        # path (model=None) is GPU-free; a real model would parse queries.
+        if getattr(args, "dataset", None):
+            search_dir = ds_dir
+        else:
+            search_dir = Path(_LAB_ROOT) / "eval" / "golden" / "search"
+        queries_path = search_dir / "queries.jsonl"
+        if not queries_path.exists():
+            print(f"[run] {queries_path} not found — nothing to search")
+            return 0
+        print(f"[run] search over golden dataset={str(search_dir)!r}")
+        rs.run_search_over_golden(
+            queries_path=str(queries_path),
+            attributes_path=str(search_dir / "attributes.jsonl"),
+            model=None,  # dictionary path, no GPU needed
+        )
+        print("[run] search done")
+        return 0
+
+    # PLR pipeline (default): re_score with the selected model.
+    # get_model('mock') is GPU-free; 'gemma' constructs LabGemmaModel (weights
+    # load lazily on first .generate).
+    model = get_model(model_name)
+    print(f"[run] re_score attribute={attribute!r} version={args.version!r} "
+          f"model={model_name!r} dataset={str(ds_dir)!r}")
+    meta = rs.re_score(attribute, model, golden_dir=str(ds_dir))
     print(f"[run] re_score done: {meta}")
 
-    # Run search over golden if queries.jsonl exists.
-    # When --dataset is given, the dataset dir carries its own queries.jsonl;
-    # otherwise fall back to the shared eval/golden/search/ layout.
+    # Also run search over golden if this dataset carries queries.jsonl, so the
+    # historical behaviour (re_score then search when queries exist) is kept.
     if getattr(args, "dataset", None):
         search_dir = ds_dir
     else:
@@ -255,8 +290,21 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     """
     core_ir = _resolve_core_ir(getattr(args, "core_ir", None))
     from dataset import resolve_dataset_dir
+    from registry import get_pipeline
 
-    if args.mode == "attr":
+    # Reconcile --pipeline with the historical --mode: --pipeline plr == attr,
+    # search == search.  If --pipeline is given it takes precedence and sets the
+    # effective mode; otherwise --mode is used verbatim (default 'attr'), so old
+    # commands behave exactly as before.
+    model_name = getattr(args, "model", "gemma")
+    pipeline_name = getattr(args, "pipeline", None)
+    if pipeline_name:
+        mode = get_pipeline(pipeline_name).eval_mode
+    else:
+        mode = args.mode
+        pipeline_name = "search" if mode == "search" else "plr"
+
+    if mode == "attr":
         import importlib.util
 
         spec = importlib.util.spec_from_file_location(
@@ -269,7 +317,9 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         ds_dir = resolve_dataset_dir(_LAB_ROOT, args.attribute, getattr(args, "dataset", None))
         orig_argv = sys.argv
         sys.argv = ["run_eval", "--attribute", args.attribute,
-                    "--golden", str(ds_dir)]
+                    "--golden", str(ds_dir),
+                    "--model", model_name, "--pipeline", pipeline_name,
+                    "--dataset", str(ds_dir)]
         if args.version:
             sys.argv += ["--version", args.version]
         if args.ledger:
@@ -281,7 +331,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         finally:
             sys.argv = orig_argv
 
-    elif args.mode == "search":
+    elif mode == "search":
         import run_search_eval as rse
 
         ledger_path = args.ledger or os.path.join(
@@ -290,10 +340,12 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         # With --dataset, read queries/results from the dataset dir; otherwise
         # run_search_eval.main falls back to eval/golden/search/ defaults.
         results_path = queries_path = None
+        dataset_name = None
         if getattr(args, "dataset", None):
             ds_dir = Path(args.dataset)
             results_path = str(ds_dir / "search_results.jsonl")
             queries_path = str(ds_dir / "queries.jsonl")
+            dataset_name = str(ds_dir)
         rse.main(
             version=args.version or "plr_v1.4_cot",
             ledger_path=ledger_path,
@@ -301,9 +353,12 @@ def _cmd_eval(args: argparse.Namespace) -> int:
             core_ir_path=core_ir,
             results_path=results_path,
             queries_path=queries_path,
+            dataset=dataset_name,
+            model=model_name,
+            pipeline=pipeline_name,
         )
     else:
-        print(f"Unknown mode: {args.mode!r}", file=sys.stderr)
+        print(f"Unknown mode: {mode!r}", file=sys.stderr)
         return 1
 
     return 0
@@ -458,6 +513,10 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="PLR attribute to re-score")
     ru.add_argument("--dataset", default=None,
                     help="dataset dir (default: eval/golden/<attribute>)")
+    ru.add_argument("--model", default="gemma",
+                    help="registry model name (default: gemma; 'mock' is GPU-free)")
+    ru.add_argument("--pipeline", default="plr", choices=["plr", "search"],
+                    help="pipeline: 'plr' (re_score, default) or 'search' (retrieval)")
 
     # -- eval --
     ev = sub.add_parser(
@@ -467,7 +526,13 @@ def _build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--attribute", "-A", required=True,
                     help="PLR attribute (for attr mode) or 'search'")
     ev.add_argument("--mode", choices=["attr", "search"], default="attr",
-                    help="'attr' (default) = run_eval.py; 'search' = run_search_eval.py")
+                    help="'attr' (default) = run_eval.py; 'search' = run_search_eval.py. "
+                         "Alias of --pipeline: attr==plr, search==search.")
+    ev.add_argument("--model", default="gemma",
+                    help="registry model name recorded in the ledger (default: gemma)")
+    ev.add_argument("--pipeline", default=None, choices=["plr", "search"],
+                    help="pipeline: 'plr' (==--mode attr) or 'search' (==--mode search). "
+                         "Overrides --mode when given.")
     ev.add_argument("--version", default="plr_v1.4_cot",
                     help="PLR version tag")
     ev.add_argument("--ledger", default=None, help="ledger.jsonl path override")

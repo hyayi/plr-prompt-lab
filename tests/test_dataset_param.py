@@ -58,12 +58,12 @@ _MOCK_RED_VEHICLE_YAML = textwrap.dedent("""\
 """)
 
 
-class MockModel:
-    def __init__(self, yaml_text: str = _MOCK_PLR_YAML) -> None:
-        self._yaml = yaml_text
+# Canonical MockModel now lives in gemma_model; bind this file's default YAML.
+import functools  # noqa: E402
 
-    def generate(self, messages: list[dict[str, Any]], image: Any) -> str:  # noqa: ARG002
-        return self._yaml
+from gemma_model import MockModel as _MockModel  # noqa: E402
+
+MockModel = functools.partial(_MockModel, _MOCK_PLR_YAML)
 
 
 def _tiny_jpg(path: Path, rgb: tuple[int, int, int] = (128, 128, 128)) -> None:

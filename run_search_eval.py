@@ -28,6 +28,17 @@ import os
 import sys
 from datetime import datetime
 
+_LAB_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _LAB_ROOT not in sys.path:
+    sys.path.insert(0, _LAB_ROOT)
+
+
+def _prompt_hash() -> str:
+    """Short stable hash of the active prompt surface (shared helper)."""
+    from provenance import prompt_hash
+
+    return prompt_hash(_LAB_ROOT)
+
 
 def _jsonl(path: str) -> list[dict]:
     with open(path) as f:
@@ -118,6 +129,9 @@ def main(
     seed_hash: str | None = None,
     gemma_repo: str | None = None,
     core_ir_path: str | None = None,
+    dataset: str | None = None,
+    model: str = "gemma",
+    pipeline: str = "search",
 ) -> dict:
     """Run search eval, print diff vs prior ledger, append ledger record.
 
@@ -171,6 +185,11 @@ def main(
         "n_queries": n_queries,
         "seed_hash": seed_hash or "",
         "gemma_repo": gemma_repo or "",
+        # ---- Experiment-combination keys (P2-1) ----
+        "dataset": dataset if dataset is not None else os.path.dirname(q_path),
+        "model": model,
+        "pipeline": pipeline,
+        "prompt_hash": _prompt_hash(),
     }
 
     with open(l_path, "a", encoding="utf-8") as f:
@@ -247,6 +266,12 @@ def _argparse_main() -> None:
     ap.add_argument("--date", default=None)
     ap.add_argument("--core-ir", default=None, dest="core_ir",
                     help="path to core/ir repo (for stale-seed check)")
+    ap.add_argument("--dataset", default=None,
+                    help="dataset path/name for the ledger (default: queries dir)")
+    ap.add_argument("--model", default="gemma",
+                    help="registry model name (default: gemma)")
+    ap.add_argument("--pipeline", default="search",
+                    help="pipeline name (default: search)")
     args = ap.parse_args()
 
     main(
@@ -257,6 +282,9 @@ def _argparse_main() -> None:
         k=args.k,
         date=args.date,
         core_ir_path=args.core_ir,
+        dataset=args.dataset,
+        model=args.model,
+        pipeline=args.pipeline,
     )
 
 

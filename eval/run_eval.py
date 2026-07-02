@@ -22,8 +22,22 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from collections import Counter, defaultdict
 from datetime import datetime
+
+# Lab root (one level above eval/) must be importable for the shared provenance
+# helper whether this runs standalone or loaded via importlib from lab.py.
+_LAB_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _LAB_ROOT not in sys.path:
+    sys.path.insert(0, _LAB_ROOT)
+
+
+def _prompt_hash() -> str:
+    """Short stable hash of the active prompt surface (shared helper)."""
+    from provenance import prompt_hash
+
+    return prompt_hash(_LAB_ROOT)
 
 # Per-attribute "bias" metric: (true_class -> mistaken_as) whose rate we headline.
 # For gender the user's concern is women predicted male, so ("female","male").
@@ -99,6 +113,14 @@ def main() -> None:
     ap.add_argument("--date", default=None)
     ap.add_argument("--core-ir", default=None, dest="core_ir",
                     help="path to core/ir repo (for stale-seed warning)")
+    # Experiment-combination keys (P2-1). Optional/back-compat: default to the
+    # historical (gemma + plr) combination; --dataset defaults to --golden.
+    ap.add_argument("--model", default="gemma",
+                    help="registry model name that produced predictions (default: gemma)")
+    ap.add_argument("--pipeline", default="plr",
+                    help="pipeline name (default: plr)")
+    ap.add_argument("--dataset", default=None,
+                    help="dataset path/name for the ledger (default: --golden path)")
     args = ap.parse_args()
 
     seed_hash = _read_seed_hash(here)
@@ -165,6 +187,11 @@ def main() -> None:
         "confusion": {t: dict(confusion[t]) for t in classes},
         "seed_hash": seed_hash or "",
         "gemma_repo": gemma_repo,
+        # ---- Experiment-combination keys (P2-1) ----
+        "dataset": args.dataset or gdir,
+        "model": args.model,
+        "pipeline": args.pipeline,
+        "prompt_hash": _prompt_hash(),
     }
     with open(args.ledger, "a") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")

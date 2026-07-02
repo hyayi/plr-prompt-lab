@@ -19,6 +19,7 @@ returns `GenResult.raw`.
 
 from __future__ import annotations
 
+import textwrap
 from typing import Any, Protocol, runtime_checkable
 
 
@@ -84,3 +85,67 @@ class LabGemmaModel:
             image, messages, max_tokens=512, temperature=0.0
         )
         return gen.raw
+
+
+# =====================================================================
+# MockModel — the ONE deterministic model stub shared by demo, the
+# experiment/registry layer, and the tests.  Behaviour is intentionally
+# identical to the per-test stubs it replaces: `.generate(messages, image)`
+# returns a canned PLR YAML string, ignoring both arguments.  Moved here
+# (out of tests/) so demo.py, registry.py and the tests all import ONE
+# implementation instead of each carrying their own copy.
+# =====================================================================
+
+# v1 default: all-female person predictions (accuracy 1.0 vs a female golden).
+MOCK_YAML_V1_ALL_FEMALE = textwrap.dedent("""\
+    target: person
+    gender: female
+    gender_reason: long hair, slender build
+    age: adult
+    outfit: two_piece
+    upper.color: black
+    upper.type: jacket
+    lower.color: black
+    lower.type: pants
+    action: standing
+    military: civilian
+    margins:
+      gender: 0.9
+      age: 1.0
+      outfit: 0.8
+""")
+
+# v2: all-male person predictions — a different gender distribution so a
+# two-version run produces a visible Δ.
+MOCK_YAML_V2_ALL_MALE = textwrap.dedent("""\
+    target: person
+    gender: male
+    gender_reason: broad shoulders, short hair
+    age: adult
+    outfit: two_piece
+    upper.color: navy
+    upper.type: jacket
+    lower.color: black
+    lower.type: pants
+    action: standing
+    military: civilian
+    margins:
+      gender: 0.9
+      age: 1.0
+      outfit: 0.8
+""")
+
+
+class MockModel:
+    """Deterministic Model stub — returns canned PLR YAML without any GPU call.
+
+    Satisfies the ``Model`` protocol: ``generate(messages, image) -> str``.
+    Both arguments are ignored; the same canned YAML is returned every call so
+    demo/experiment/test cycles are fully reproducible with no model weights.
+    """
+
+    def __init__(self, yaml_text: str = MOCK_YAML_V1_ALL_FEMALE) -> None:
+        self._yaml = yaml_text
+
+    def generate(self, messages: list[dict[str, Any]], image: Any) -> str:  # noqa: ARG002
+        return self._yaml

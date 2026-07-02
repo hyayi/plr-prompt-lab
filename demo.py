@@ -16,54 +16,16 @@ from pathlib import Path
 from typing import Any
 
 # =====================================================================
-# MockModel — same canned YAML the tests use, self-contained here
+# MockModel — the ONE canonical stub now lives in gemma_model (shared by
+# demo, registry and the tests).  Import it here and alias the YAML
+# constants so the rest of this module is unchanged.
 # =====================================================================
 
-_MOCK_YAML_V1 = textwrap.dedent("""\
-    target: person
-    gender: female
-    gender_reason: long hair, slender build
-    age: adult
-    outfit: two_piece
-    upper.color: black
-    upper.type: jacket
-    lower.color: black
-    lower.type: pants
-    action: standing
-    military: civilian
-    margins:
-      gender: 0.9
-      age: 1.0
-      outfit: 0.8
-""")
-
-_MOCK_YAML_V2 = textwrap.dedent("""\
-    target: person
-    gender: male
-    gender_reason: broad shoulders, short hair
-    age: adult
-    outfit: two_piece
-    upper.color: navy
-    upper.type: jacket
-    lower.color: black
-    lower.type: pants
-    action: standing
-    military: civilian
-    margins:
-      gender: 0.85
-      age: 1.0
-      outfit: 0.8
-""")
-
-
-class MockModel:
-    """Minimal model stub — returns canned PLR YAML without any GPU call."""
-
-    def __init__(self, yaml_text: str = _MOCK_YAML_V1) -> None:
-        self._yaml = yaml_text
-
-    def generate(self, messages: list[dict[str, Any]], image: Any) -> str:  # noqa: ARG002
-        return self._yaml
+from gemma_model import (  # noqa: E402
+    MockModel,
+    MOCK_YAML_V1_ALL_FEMALE as _MOCK_YAML_V1,
+    MOCK_YAML_V2_ALL_MALE as _MOCK_YAML_V2,
+)
 
 
 # =====================================================================

@@ -236,3 +236,153 @@ def reset_singletons() -> None:
 def registered_versions(slot: str) -> list[str]:
     """Return the list of registered version strings for a slot."""
     return list(_registry.get(slot, {}).keys())
+
+
+# ===========================================================================
+# Model / Pipeline registry (Phase-2, P2-1)
+# ---------------------------------------------------------------------------
+# A SEPARATE, higher-level registry from the provider slots above: it names the
+# experiment axes the lab CLI and the P2-2 experiment runner select over —
+# WHICH model (gemma vs mock) and WHICH pipeline (plr vs search).  Kept in this
+# module so there is one obvious place to discover selectable parameters.
+#
+# `MODELS`    : name -> zero-arg factory returning a gemma_model.Model.
+# `PIPELINES` : name -> Pipeline descriptor (the run/eval seam P2-2 builds on).
+# ===========================================================================
+
+from dataclasses import dataclass  # noqa: E402
+from typing import Callable  # noqa: E402
+
+
+def _make_gemma_model() -> Any:
+    """Factory for the real (GPU) Gemma model.  Imported lazily so that merely
+    listing/registering models never pulls the heavy backend."""
+    from gemma_model import LabGemmaModel
+
+    return LabGemmaModel()
+
+
+def _make_mock_model() -> Any:
+    """Factory for the deterministic, GPU-free MockModel (usable outside tests)."""
+    from gemma_model import MockModel
+
+    return MockModel()
+
+
+# name -> factory().  Factories are zero-arg and construct a fresh Model.
+MODELS: dict[str, Callable[[], Any]] = {
+    "gemma": _make_gemma_model,
+    "mock": _make_mock_model,
+}
+
+
+def get_model(name: str) -> Any:
+    """Return a fresh model instance for a registered name.
+
+    `get_model("mock")` is fully GPU-free; `get_model("gemma")` constructs the
+    real LabGemmaModel (weights load lazily on first .generate).
+    """
+    try:
+        factory = MODELS[name]
+    except KeyError:
+        raise ValueError(
+            f"Unknown model {name!r}. Available: {sorted(MODELS)}"
+        ) from None
+    return factory()
+
+
+def list_models() -> list[str]:
+    """Registered model names, for help text."""
+    return sorted(MODELS)
+
+
+@dataclass(frozen=True)
+class Pipeline:
+    """Descriptor for one experiment pipeline (the run→eval pair).
+
+    Fields:
+      name        : registry key ("plr" | "search").
+      description : one-line human summary for help text.
+      eval_mode   : the value lab's ``eval --mode`` uses for this pipeline
+                    ("attr" for plr, "search" for search) — this is how
+                    ``--pipeline`` reconciles with the existing ``--mode`` flag:
+                    ``--pipeline plr`` == ``--mode attr``, ``--pipeline search``
+                    == ``--mode search``.
+      run_fn      : callable that performs the "run" step (re-score / retrieve).
+      eval_fn     : callable that performs the "eval" step (score + ledger).
+
+    ``run_fn`` / ``eval_fn`` are thin, lazily-bound accessors (they import their
+    target module on call) so importing ``registry`` stays GPU/DB-free.  The
+    P2-2 experiment runner dispatches uniformly over these; lab run/eval use
+    ``eval_mode`` + ``run_fn`` to route.
+    """
+
+    name: str
+    description: str
+    eval_mode: str
+    run_fn: Callable[..., Any]
+    eval_fn: Callable[..., Any]
+
+
+def _plr_run(*args: Any, **kwargs: Any) -> Any:
+    from re_score import re_score
+
+    return re_score(*args, **kwargs)
+
+
+def _plr_eval(*args: Any, **kwargs: Any) -> Any:
+    import importlib.util
+    import os as _os
+
+    spec = importlib.util.spec_from_file_location(
+        "run_eval",
+        _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "eval", "run_eval.py"),
+    )
+    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    return mod.main(*args, **kwargs)
+
+
+def _search_run(*args: Any, **kwargs: Any) -> Any:
+    from re_score import run_search_over_golden
+
+    return run_search_over_golden(*args, **kwargs)
+
+
+def _search_eval(*args: Any, **kwargs: Any) -> Any:
+    from run_search_eval import main as _main
+
+    return _main(*args, **kwargs)
+
+
+PIPELINES: dict[str, Pipeline] = {
+    "plr": Pipeline(
+        name="plr",
+        description="attribute extraction: re_score → run_eval (eval --mode attr)",
+        eval_mode="attr",
+        run_fn=_plr_run,
+        eval_fn=_plr_eval,
+    ),
+    "search": Pipeline(
+        name="search",
+        description="text retrieval: run_search_over_golden → run_search_eval (eval --mode search)",
+        eval_mode="search",
+        run_fn=_search_run,
+        eval_fn=_search_eval,
+    ),
+}
+
+
+def get_pipeline(name: str) -> Pipeline:
+    """Return the Pipeline descriptor for a registered name ("plr" | "search")."""
+    try:
+        return PIPELINES[name]
+    except KeyError:
+        raise ValueError(
+            f"Unknown pipeline {name!r}. Available: {sorted(PIPELINES)}"
+        ) from None
+
+
+def list_pipelines() -> list[str]:
+    """Registered pipeline names, for help text."""
+    return sorted(PIPELINES)
