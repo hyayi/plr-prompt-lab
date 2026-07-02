@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>plr-prompt-lab — 프로젝트 구조 시각화</title>
+<style>
+  :root {
+    --bg: #0b1120;
+    --panel: #111a2e;
+    --panel2: #16213b;
+    --line: #263452;
+    --text: #dbe4f5;
+    --muted: #8fa1c0;
+    --cli: #38bdf8;      /* sky   — CLI */
+    --orch: #a78bfa;     /* violet— 오케스트레이션 */
+    --run: #fbbf24;      /* amber — 러너 */
+    --eval: #34d399;     /* emerald— 평가 */
+    --core: #f472b6;     /* pink  — 순수 코어 */
+    --prompt: #fb923c;   /* orange— 프롬프트 소스 */
+    --infra: #94a3b8;    /* slate — 인프라 */
+    --ok: #34d399;
+    --warn: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 20px 80px;
+    background:
+      radial-gradient(1200px 500px at 20% -10%, #16294d 0%, transparent 60%),
+      radial-gradient(900px 400px at 90% 0%, #23163f 0%, transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: "Pretendard", "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo",
+                 "Segoe UI", -apple-system, sans-serif;
+    line-height: 1.55;
+  }
+  main { max-width: 1060px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -.3px; }
+  h1 .repo { color: var(--cli); }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 34px; }
+  h2 {
+    font-size: 17px; margin: 46px 0 16px; display: flex; align-items: center; gap: 10px;
+  }
+  h2 .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 8px; font-size: 13px; font-weight: 700;
+    background: linear-gradient(135deg, #38bdf8, #a78bfa); color: #0b1120;
+  }
+  section { margin-bottom: 8px; }
+  .caption { color: var(--muted); font-size: 13px; margin: 10px 2px 0; }
+  code { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; font-size: .92em; color: #c9d6f2; }
+
+  /* ---------- generic card ---------- */
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 16px; position: relative;
+  }
+  .card .t { font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .card .d { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+  .dot { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+
+  /* colored layer bands */
+  .band { border-left: 4px solid var(--c, var(--infra)); }
+  .band .dot { background: var(--c, var(--infra)); }
+  .band .t { color: var(--c, var(--text)); }
+  .band .t code, .band .t .plain { color: var(--text); }
+
+  /* file chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .chip {
+    font-family: ui-monospace, Consolas, monospace; font-size: 11.5px;
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 7px;
+    padding: 3px 8px; color: #b8c6e4; white-space: nowrap;
+  }
+  .chip b { color: var(--text); font-weight: 600; }
+  .chip.hl { border-color: color-mix(in srgb, var(--c, var(--cli)) 55%, transparent); color: var(--text); }
+
+  /* arrows */
+  .down { display: flex; justify-content: center; padding: 6px 0; color: #5b6f96; font-size: 17px; }
+  .down.lbl { flex-direction: column; align-items: center; gap: 2px; }
+  .down .txt { font-size: 11.5px; color: var(--muted); }
+
+  /* ---------- ① ecosystem ---------- */
+  .eco { display: grid; grid-template-columns: 1fr 64px 1fr; gap: 0 0; align-items: stretch; }
+  .eco .bigcard { padding: 18px; }
+  .eco .hconn {
+    display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 4px;
+    color: var(--muted); font-size: 11px; text-align: center;
+  }
+  .eco .hconn .arr { font-size: 20px; color: var(--prompt); line-height: 1; }
+  .star { color: #fbbf24; }
+  .tag {
+    display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .4px;
+    border-radius: 5px; padding: 1.5px 7px; margin-left: 6px; vertical-align: 1px;
+  }
+  .tag.lab { background: rgba(56,189,248,.15); color: var(--cli); border: 1px solid rgba(56,189,248,.4); }
+  .tag.prod { background: rgba(248,113,113,.13); color: var(--warn); border: 1px solid rgba(248,113,113,.4); }
+  .tag.priv { background: rgba(148,163,184,.13); color: var(--infra); border: 1px solid rgba(148,163,184,.4); }
+  .inner { background: var(--panel2); border: 1px dashed var(--line); border-radius: 10px; padding: 9px 12px; margin-top: 10px; font-size: 12.5px; }
+  .inner code { font-size: 11.5px; }
+
+  /* ---------- ② stack ---------- */
+  .stack { display: flex; flex-direction: column; }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 760px) { .split { grid-template-columns: 1fr; } .eco { grid-template-columns: 1fr; } .eco .hconn { flex-direction: row; padding: 8px 0; } }
+
+  /* ---------- ③ pipelines ---------- */
+  .flow { display: flex; flex-direction: column; gap: 0; }
+  .node {
+    background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--c, var(--infra));
+    border-radius: 11px; padding: 9px 13px; font-size: 13px;
+  }
+  .node b { font-size: 13px; }
+  .node .d { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  .node.data { border-style: dashed; border-left-style: solid; background: transparent; }
+  .merge {
+    background: linear-gradient(135deg, rgba(52,211,153,.12), rgba(56,189,248,.10));
+    border: 1px solid rgba(52,211,153,.45); border-radius: 12px; padding: 12px 16px; text-align: center;
+  }
+  .merge b { color: var(--ok); }
+
+  /* ---------- ④ prompt two-source ---------- */
+  .qbox {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 14px; font-size: 13px; text-align: center;
+  }
+  .qbox .d { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
+  .branch-l { border-top: 3px solid var(--prompt); }
+  .branch-r { border-top: 3px solid var(--cli); }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 4px; }
+  .badge {
+    font-size: 11.5px; border-radius: 8px; padding: 5px 11px;
+    background: rgba(52,211,153,.1); border: 1px solid rgba(52,211,153,.4); color: #a7f3d0;
+  }
+  .badge code { color: #d1fae5; }
+  .badge .k {
+    display: inline-block; font-family: ui-monospace, monospace; font-size: 9.5px; font-weight: 700;
+    letter-spacing: .5px; background: rgba(52,211,153,.25); color: #d1fae5;
+    border-radius: 4px; padding: 1px 5px; margin-right: 5px; vertical-align: .5px;
+  }
+  .pill-env {
+    display: inline-block; font-family: ui-monospace, monospace; font-size: 10.5px;
+    background: rgba(251,191,36,.12); border: 1px solid rgba(251,191,36,.4); color: #fde68a;
+    border-radius: 6px; padding: 1px 7px; margin: 2px 2px 0;
+  }
+
+  /* legend */
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0 0; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+  footer { margin-top: 56px; color: #5b6f96; font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+
+<h1><span class="repo">plr-prompt-lab</span> — 프로젝트 구조 시각화</h1>
+<div class="sub">
+  PLR(객체 속성 추출) + 텍스트검색의 프롬프트·파이프라인을 <b>측정하며 개선</b>하는 독립 실험 도구
+  &nbsp;·&nbsp; 2026-07-02 기준 (HEAD <code>21fcacc</code>, 79 tests green)
+</div>
+
+<!-- ================= ① 저장소 생태계 ================= -->
+<section>
+<h2><span class="num">1</span> 저장소 생태계 — lab이 어디에 놓여 있나</h2>
+
+<div class="eco">
+  <div class="card bigcard band" style="--c: var(--cli)">
+    <div class="t"><span class="dot"></span>plr-prompt-lab <span class="tag lab">LAB · 이 REPO</span></div>
+    <div class="d">별도 git repo. 실험 전용 — DB / redis / 운영 서비스에 <b>절대 접근하지 않음</b> (import 격리 확인됨).</div>
+    <div class="inner">
+      개선 흐름: 프롬프트 수정 → 골든셋 eval → <code>lab port</code>로 diff 확인 →
+      <b>사람이</b> <code>--apply</code> 결정
+    </div>
+  </div>
+
+  <div class="hconn">
+    <div class="arr">⟶</div>
+    <div><code>lab&nbsp;port</code><br>이식 통로</div>
+    <div class="arr" style="transform: scaleX(-1)">⟶</div>
+    <div>SEED <code>c2fc1cf</code><br>lean 추출 원본</div>
+  </div>
+
+  <div class="card bigcard band" style="--c: var(--warn)">
+    <div class="t"><span class="dot" style="background: var(--warn)"></span>ziomilitary / core/ir <span class="tag prod">운영 원본</span></div>
+    <div class="d">submodule, branch <code>fix/ir-classmap</code>, HEAD <code>1690f25</code> (미배포). 이식 후
+      <code>test_prompt_source_parity.py</code>가 게이트.</div>
+    <div class="inner">
+      deploy repo <code>ziomilitary/.omc/</code> — plans · specs · 세션 진행 로그
+    </div>
+  </div>
+</div>
+
+<div class="chips" style="margin-top:12px">
+  <span class="chip">~/gender_eval 등 — 실측 크롭 데이터 <b>(repo 밖 · 프라이버시상 미배포)</b></span>
+  <span class="chip">_serve/index.html — GUIDE 배포 사본 (<b>:8899</b> http.server)</span>
+</div>
+</section>
+
+<!-- ================= ② 모듈 아키텍처 ================= -->
+<section>
+<h2><span class="num">2</span> 모듈 아키텍처 — 계층별 역할</h2>
+
+<div class="stack">
+
+  <div class="card band" style="--c: var(--cli)">
+    <div class="t"><span class="dot"></span>CLI — 단일 진입점</div>
+    <div class="chips">
+      <span class="chip hl" style="--c: var(--cli)"><b>lab.py</b></span>
+      <span class="chip">build-golden</span><span class="chip">label</span><span class="chip">validate-dataset</span>
+      <span class="chip">run</span><span class="chip">eval</span><span class="chip">experiment run</span>
+      <span class="chip">report</span><span class="chip">port</span><span class="chip">demo</span>
+    </div>
+  </div>
+
+  <div class="down">▼</div>
+
+  <div class="card band" style="--c: var(--orch)">
+    <div class="t"><span class="dot"></span>오케스트레이션</div>
+    <div class="chips">
+      <span class="chip hl" style="--c: var(--orch)"><b>experiment.py</b> — 교차곱 매트릭스: datasets × models × prompts × pipelines × attributes × <b>formats × reasons</b> · fail-loud-but-continue</span>
+      <span class="chip"><b>demo.py</b> — GPU-free 온보딩 사이클</span>
+    </div>
+  </div>
+
+  <div class="down">▼</div>
+
+  <div class="split">
+    <div class="card band" style="--c: var(--run)">
+      <div class="t"><span class="dot"></span>러너 (run 단계)</div>
+      <div class="chips">
+        <span class="chip hl" style="--c: var(--run)"><b>re_score.py</b></span>
+        <span class="chip">re_score() → <b>plr</b></span>
+        <span class="chip">run_search_over_golden() → <b>search</b></span>
+      </div>
+    </div>
+    <div class="card band" style="--c: var(--eval)">
+      <div class="t"><span class="dot"></span>평가 (eval 단계) → 추이 → 리포트</div>
+      <div class="chips">
+        <span class="chip">eval/run_eval.py <b>(accuracy·bias)</b></span>
+        <span class="chip">run_search_eval.py <b>(recall@k)</b></span>
+        <span class="chip hl" style="--c: var(--eval)"><b>eval/ledger.jsonl</b> (append-only)</span>
+        <span class="chip">report.py → <b>report.html</b></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="down">▼</div>
+
+  <div class="card band" style="--c: var(--core)">
+    <div class="t"><span class="dot"></span>순수 코어 <span class="plain" style="font-weight:400; color:var(--muted); font-size:12px">— core/ir과 공유 심볼 · DB/redis 무접근</span></div>
+    <div class="chips">
+      <span class="chip hl" style="--c: var(--core)"><b>plr_core.py</b> run_plr (build_messages 주입구)</span>
+      <span class="chip hl" style="--c: var(--core)"><b>search_core.py</b> run_search (하드필터+랭킹)</span>
+      <span class="chip"><b>query_parser.py</b> 질의→슬롯 (사전/gemma, build_messages 주입구)</span>
+      <span class="chip">scoring.py</span>
+      <span class="chip">query_normalizer.py</span>
+      <span class="chip">plr_schema.py</span>
+      <span class="chip">quality_gate.py</span>
+    </div>
+  </div>
+
+  <div class="down">▼</div>
+
+  <div class="split">
+    <div class="card band" style="--c: var(--prompt)">
+      <div class="t"><span class="dot"></span>프롬프트 소스 (④ 참고)</div>
+      <div class="chips">
+        <span class="chip hl" style="--c: var(--prompt)"><b>plr_prompts.py</b> 상수 (기본 = v1.4)</span>
+        <span class="chip hl" style="--c: var(--prompt)"><b>prompts/*.yaml</b> 버전별 (--version)</span>
+        <span class="chip">providers/file_prompt_provider.py</span>
+        <span class="chip">parser/qp_v0.4.yaml 시노님 사전</span>
+      </div>
+    </div>
+    <div class="card band" style="--c: var(--infra)">
+      <div class="t"><span class="dot"></span>인프라</div>
+      <div class="chips">
+        <span class="chip"><b>registry.py</b> 모델·파이프라인 레지스트리</span>
+        <span class="chip"><b>provenance.py</b> prompt_hash</span>
+        <span class="chip">dataset.py · validate.py</span>
+        <span class="chip">gemma_model.py (Mock 포함)</span>
+        <span class="chip">gemma_backend.py (GPU lazy)</span>
+        <span class="chip">config.py</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="legend">
+  <span><i class="dot" style="display:inline-block;background:var(--cli)"></i> CLI</span>
+  <span><i class="dot" style="display:inline-block;background:var(--orch)"></i> 오케스트레이션</span>
+  <span><i class="dot" style="display:inline-block;background:var(--run)"></i> 러너</span>
+  <span><i class="dot" style="display:inline-block;background:var(--eval)"></i> 평가·리포트</span>
+  <span><i class="dot" style="display:inline-block;background:var(--core)"></i> 순수 코어</span>
+  <span><i class="dot" style="display:inline-block;background:var(--prompt)"></i> 프롬프트</span>
+  <span><i class="dot" style="display:inline-block;background:var(--infra)"></i> 인프라</span>
+</div>
+</section>
+
+<!-- ================= ③ 데이터 흐름 ================= -->
+<section>
+<h2><span class="num">3</span> 데이터 흐름 — 두 파이프라인</h2>
+
+<div class="split">
+
+  <!-- plr -->
+  <div class="flow">
+    <div class="card" style="text-align:center; border-color: rgba(251,191,36,.5)">
+      <div class="t" style="justify-content:center; color: var(--run)">PLR 파이프라인 — 속성 추출 (accuracy · bias)</div>
+    </div>
+    <div class="down">▼</div>
+    <div class="node data" style="--c: var(--infra)"><b>crops/*.jpg</b> + <b>labels.jsonl</b> <span class="d">골든셋 (build-golden → label)</span></div>
+    <div class="down">▼</div>
+    <div class="node" style="--c: var(--core)"><b>quality_gate</b> → <b>plr_core.run_plr</b> <span class="d">model + 프롬프트(상수 또는 --version yaml)</span></div>
+    <div class="down">▼</div>
+    <div class="node data" style="--c: var(--infra)"><b>predictions.jsonl</b> + <b>attributes.jsonl</b> <span class="d">attributes는 search 후보로 재사용 ↘</span></div>
+    <div class="down">▼</div>
+    <div class="node" style="--c: var(--eval)"><b>eval/run_eval.py</b> <span class="d">accuracy · recall(class) · bias · confusion</span></div>
+  </div>
+
+  <!-- search -->
+  <div class="flow">
+    <div class="card" style="text-align:center; border-color: rgba(56,189,248,.5)">
+      <div class="t" style="justify-content:center; color: var(--cli)">SEARCH 파이프라인 — 텍스트 검색 (recall@k)</div>
+    </div>
+    <div class="down">▼</div>
+    <div class="node data" style="--c: var(--infra)"><b>queries.jsonl</b> <span class="d">{query, relevant:[obj_id…]}</span></div>
+    <div class="down">▼</div>
+    <div class="node" style="--c: var(--core)"><b>query_parser</b> <span class="d">① dictionary 경로 (model=None · GPU-free) ② gemma 경로 (--version yaml 프롬프트)</span></div>
+    <div class="down">▼</div>
+    <div class="node" style="--c: var(--core)"><b>search_core.run_search</b> <span class="d">후보 = plr의 attributes.jsonl · 하드필터 + 속성매칭 랭킹</span></div>
+    <div class="down">▼</div>
+    <div class="node data" style="--c: var(--infra)"><b>search_results.jsonl</b></div>
+    <div class="down">▼</div>
+    <div class="node" style="--c: var(--eval)"><b>run_search_eval.py</b> <span class="d">recall@k · precision@k</span></div>
+  </div>
+
+</div>
+
+<div class="down lbl"><span>▼</span><span class="txt">두 파이프라인 공통 꼬리</span></div>
+
+<div class="merge">
+  <b>eval/ledger.jsonl</b> <span style="color:var(--muted)">(조합키: dataset · model · pipeline · prompt_hash · version)</span>
+  &nbsp;⟶&nbsp; <b>report.py</b> ⟶ <b>report.html</b> <span style="color:var(--muted)">(추이 · 모델×프롬프트 히트맵 · 프롬프트변화→Δ)</span>
+</div>
+</section>
+
+<!-- ================= ④ 프롬프트 2-소스 ================= -->
+<section>
+<h2><span class="num">4</span> 프롬프트 2-소스 구조 — 이 프로젝트의 핵심</h2>
+
+<div class="qbox" style="border-color: rgba(167,139,250,.5)">
+  <b>"모델에게 실제로 나가는 프롬프트는 무엇인가?"</b>
+  <div class="d">두 갈래 — 여기가 여러 번 헷갈렸던 지점 (yaml만 고쳐서는 기본 프롬프트가 안 바뀜)</div>
+</div>
+
+<div class="down">▼</div>
+
+<div class="split">
+  <div class="qbox branch-l">
+    <b style="color: var(--prompt)">① 기본 경로 — plr_prompts.py 하드코딩 상수</b>
+    <div class="d"><code>--version</code> 없음 / yaml 없는 버전(mock 등) → 상수 사용<br>
+    = 현재 v1.4 · <b>core/ir과 바이트 동일 (이식 대상)</b></div>
+    <div style="margin-top:7px">
+      <span class="pill-env">IR_PLR_FORMAT = yaml|json</span>
+      <span class="pill-env">IR_PLR_REASON = on|off</span>
+    </div>
+    <div class="d">env가 어느 상수를 쓸지 선택 → experiment의 <code>formats:/reasons:</code> 축이 이걸 스윕</div>
+  </div>
+
+  <div class="qbox branch-r">
+    <b style="color: var(--cli)">② 버전 경로 — prompts/&lt;V&gt;.yaml</b>
+    <div class="d"><code>lab run --version V</code> → <b>FilePromptProvider</b>가 로드<br>
+    plr 블록(v1.3 ≠ v1.4 실제 해시 다름) + query_parser 블록(search, 2026-07-02 배선)</div>
+    <div style="margin-top:7px">
+      <span class="pill-env">yaml의 format: 키가 wire format 고정</span>
+      <span class="pill-env">IR_PLR_REASON은 양쪽 공통</span>
+    </div>
+  </div>
+</div>
+
+<div class="down">▼</div>
+
+<div class="qbox" style="border-color: rgba(244,114,182,.5)">
+  <b style="color: var(--core)">주입구 (build_messages=None — 하위호환 seam)</b>
+  <div class="d"><code>plr_core.run_plr(build_messages=…)</code> — PLR 프롬프트 &nbsp;·&nbsp;
+  <code>query_parser.parse_query(build_messages=…)</code> — 검색 프롬프트<br>
+  None이면 상수 경로와 <b>바이트 동일</b> (운영 동작 보존)</div>
+</div>
+
+<div class="down">▼</div>
+
+<div class="qbox">
+  <b>model.generate(messages, image)</b>
+  <div class="d">gemma (GPU, lazy load) / mock (GPU-free) — registry.py에서 선택</div>
+</div>
+
+<div class="down lbl"><span>▼</span><span class="txt">drift 방어 — 두 소스가 어긋나는 순간을 잡는 3중 게이트</span></div>
+
+<div class="badges">
+  <span class="badge"><span class="k">TEST</span><code>tests/test_prompt_surface_parity.py</code> — 상수 ↔ yaml 자동 parity 게이트 (+ query_parser 블록)</span>
+  <span class="badge"><span class="k">DIFF</span><code>lab port</code> — lab ↔ core/ir 표면 diff (읽기전용, --apply는 사람)</span>
+  <span class="badge"><span class="k">HASH</span><code>provenance.prompt_hash</code> — ledger에 프롬프트 상태 각인</span>
+</div>
+</section>
+
+<footer>
+  plr-prompt-lab · STRUCTURE.html (자체완결 · 외부 의존성 없음) — GUIDE.html과 함께 배포 가능
+</footer>
+
+</main>
+</body>
+</html>
