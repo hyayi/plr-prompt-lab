@@ -11,6 +11,8 @@ Subcommands:
   eval          Score predictions vs golden labels (attr or search mode).
   port          Diff / apply lab prompt surface against core/ir (read-only by
                 default; --apply copies lab files into core/ir).
+  demo          GPU-free onboarding: run a full mock cycle on a synthetic
+                dataset so a new user can see the loop end-to-end immediately.
 
 Usage:
     python3 lab.py <cmd> [options]
@@ -25,6 +27,7 @@ from pathlib import Path
 
 # Add lab root to path so sibling modules are importable.
 _LAB_ROOT = os.path.dirname(os.path.abspath(__file__))
+_LAB_ROOT_PATH = Path(_LAB_ROOT)
 if _LAB_ROOT not in sys.path:
     sys.path.insert(0, _LAB_ROOT)
 
@@ -495,7 +498,31 @@ def _build_parser() -> argparse.ArgumentParser:
     vd.add_argument("--dataset", "-D", required=True,
                     help="path to the dataset directory to validate")
 
+    # -- demo --
+    dm = sub.add_parser(
+        "demo",
+        help="GPU-free onboarding: run a full mock cycle on a synthetic dataset.",
+    )
+    dm.add_argument("--keep", action="store_true",
+                    help="Keep demo_dataset/ directory after the run (default: removed).")
+
     return p
+
+
+# =====================================================================
+# Subcommand: demo
+# =====================================================================
+
+
+def _cmd_demo(args: argparse.Namespace) -> int:
+    """GPU-free onboarding: full mock cycle on a synthetic dataset.
+
+    Delegates to demo.run_demo() which lives in demo.py alongside this file.
+    No GPU, no DB, no Redis required.
+    """
+    from demo import run_demo
+    keep = getattr(args, "keep", False)
+    return run_demo(lab_root=_LAB_ROOT_PATH, keep_dir=keep)
 
 
 # =====================================================================
@@ -522,6 +549,7 @@ _DISPATCH = {
     "eval": _cmd_eval,
     "port": _cmd_port,
     "validate-dataset": _cmd_validate_dataset,
+    "demo": _cmd_demo,
 }
 
 

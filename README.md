@@ -1,4 +1,4 @@
-# plr-prompt-lab
+# plr-prompt-lab  (v2)
 
 Standalone prompt/pipeline eval-cycle for PLR (Person-Level Recognition) **attribute
 scoring (A)** and **text-search (B)**, lean-extracted from `core/ir` at HEAD
@@ -8,6 +8,10 @@ The lab can iterate on prompts, scoring logic, and the eval harness **without
 a database, Redis, or a GPU** for the mock/synthetic path. The real Gemma
 inference step (re-scoring crops) requires a dedicated GPU and human-labeled
 crops — see [Real-run preconditions](#real-run-preconditions) below.
+
+New in v2: selectable `--dataset` parameter, `validate-dataset` subcommand,
+`lab demo` GPU-free onboarding, [DATASET_SPEC.md](DATASET_SPEC.md) format
+spec, and [HANDOFF.md](HANDOFF.md) external prompt-engineer guide.
 
 ---
 
@@ -21,6 +25,7 @@ The lab holds a **lean snapshot** of the PLR dev surface from `core/ir`:
 - `search_core.py`, `scoring.py`, `query_parser.py` — pure search/scoring
 - `prompts/` — PLR prompt YAMLs (`plr_v0.4`, `plr_v1.3_cot`, `plr_v1.4_cot`)
 - `eval/` — golden sets, runner scripts, ledger
+- `demo.py` — self-contained MockModel + synthetic dataset for `lab demo`
 
 **Not copied** (service/DB/redis/embedding layer): `storage.py`, `redis_handler.py`,
 `indexing.py`, `main.py`, `scheduler.py`, `text_embed.py`, `backfill.py`, etc.
@@ -37,6 +42,24 @@ imports.
 
 ---
 
+## Parameter model
+
+The lab's four selectable dimensions for an experiment:
+
+| Dimension | How to select | Status |
+|---|---|---|
+| **Dataset** | `--dataset /path/to/dir` (default: `eval/golden/<attribute>/`) | Built |
+| **Prompt** | Edit `prompts/*.yaml` and pass `--version <name>` to `lab run` + `lab eval` | Built |
+| **Model** | Hard-wired to Gemma-4-E4B GGUF (real runs) or MockModel (demo/tests) | Roadmap |
+| **Pipeline** | Hard-wired to `plr_core.run_plr` | Roadmap |
+
+**Roadmap (Phase 2 — not yet built)**: a model registry (swap GGUF without
+editing code), a pipeline registry (swap scoring/search logic), an experiment
+matrix runner (all combinations), and an HTML report generator. These are
+planned but not implemented; do not depend on them yet.
+
+---
+
 ## The cycle
 
 ```
@@ -44,7 +67,7 @@ build-golden  ──►  label  ──►  run  ──►  eval  ──►  port
     │                               │          │
     │  (real data, operator step)   │          └──► ledger.jsonl delta
     │                               └──► re-runs Gemma on crops (GPU)
-    └── eval/golden/<attr>/crops/<obj_id>.jpg
+    └── <dataset>/crops/<obj_id>.jpg
 ```
 
 ### A — PLR attribute eval (gender, vehicle_type, military)
@@ -53,21 +76,23 @@ build-golden  ──►  label  ──►  run  ──►  eval  ──►  port
 ┌─────────────────────────────────────────────────────────────────────┐
 │  1. build-golden  (operator step — real video + DB required)        │
 │     lab build-golden --video <vd_id> --attribute gender             │
-│     → eval/golden/gender/crops/<obj_id>.jpg                         │
-│     → eval/golden/gender/index_map.json                             │
-│     → eval/golden/gender/predictions.jsonl  (bootstrap)             │
+│     → <dataset>/crops/<obj_id>.jpg                                  │
+│     → <dataset>/index_map.json                                      │
+│     → <dataset>/predictions.jsonl  (bootstrap)                      │
 │                                                                     │
 │  2. label  (human step)                                             │
-│     lab label --female-in-male M3,M7 --male-in-female F2           │
-│     → eval/golden/gender/labels.jsonl                               │
+│     lab label --dataset <dataset> --female-in-male M3,M7           │
+│     → <dataset>/labels.jsonl                                        │
 │                                                                     │
 │  3. run  (GPU step)                                                 │
 │     lab run --attribute gender --version plr_v1.4_cot               │
-│     → eval/golden/gender/predictions.jsonl  (overwritten)           │
-│     → eval/golden/gender/attributes.jsonl                           │
+│              --dataset <dataset>                                    │
+│     → <dataset>/predictions.jsonl  (overwritten)                    │
+│     → <dataset>/attributes.jsonl                                    │
 │                                                                     │
 │  4. eval                                                            │
 │     lab eval --attribute gender --version plr_v1.4_cot              │
+│              --dataset <dataset>                                    │
 │     → prints accuracy/confusion/bias + Δ vs prior version           │
 │     → appends record to eval/ledger.jsonl                           │
 │                                                                     │
@@ -84,12 +109,14 @@ build-golden  ──►  label  ──►  run  ──►  eval  ──►  port
 │                                                                     │
 │  2. run  (also writes attributes.jsonl)                             │
 │     lab run --attribute gender --version plr_v1.4_cot               │
-│     → eval/golden/search/queries.jsonl  (hand-authored)             │
-│     → eval/golden/search/attributes.jsonl  (from run)               │
-│     → eval/golden/search/search_results.jsonl  (from run)           │
+│              --dataset <dataset>                                    │
+│     → <dataset>/queries.jsonl  (hand-authored)                      │
+│     → <dataset>/attributes.jsonl  (from run)                        │
+│     → <dataset>/search_results.jsonl  (from run)                    │
 │                                                                     │
 │  3. eval --mode search                                              │
 │     lab eval --attribute search --mode search --version plr_v1.4_cot│
+│              --dataset <dataset>                                    │
 │     → prints recall@k / precision@k + Δ vs prior version            │
 │     → appends record to eval/ledger.jsonl                           │
 └─────────────────────────────────────────────────────────────────────┘
@@ -100,20 +127,26 @@ build-golden  ──►  label  ──►  run  ──►  eval  ──►  port
 ## Commands
 
 ```bash
-# Build golden set (real data, operator step — see preconditions)
-python3 lab.py build-golden --video <vd_...> --attribute gender
+# GPU-free onboarding — see the full loop immediately, no data needed
+python3 lab.py demo
 
-# Label (human)
-python3 lab.py label --female-in-male M3,M7 --male-in-female F2
+# Build golden set (real data, operator step — see preconditions)
+python3 lab.py build-golden --video <vd_...> --attribute gender [--dataset <dir>]
+
+# Label (human step)
+python3 lab.py label [--dataset <dir>] --female-in-male M3,M7 --male-in-female F2
 
 # Re-score with Gemma (GPU step)
-python3 lab.py run --attribute gender --version plr_v1.4_cot
+python3 lab.py run --attribute gender --version plr_v1.4_cot [--dataset <dir>]
 
 # Evaluate PLR attribute
-python3 lab.py eval --attribute gender --version plr_v1.4_cot
+python3 lab.py eval --attribute gender --version plr_v1.4_cot [--dataset <dir>]
 
 # Evaluate text-search (recall@k)
-python3 lab.py eval --attribute search --mode search --version plr_v1.4_cot
+python3 lab.py eval --attribute search --mode search --version plr_v1.4_cot [--dataset <dir>]
+
+# Validate a dataset directory
+python3 lab.py validate-dataset --dataset <dir>
 
 # Diff (or apply) lab prompt surface to core/ir
 python3 lab.py port [--apply] [--core-ir /path/to/core/ir]
@@ -124,23 +157,74 @@ python3 -m pytest tests/ -q
 
 ---
 
+## `--dataset` parameter
+
+Every command that reads or writes a golden set accepts `--dataset <dir>`.
+When omitted, the command falls back to `eval/golden/<attribute>/` — the
+same layout used before v2, so all existing workflows are unchanged.
+
+A dataset directory must conform to [DATASET_SPEC.md](DATASET_SPEC.md).
+Validate any new dataset before using it with `lab run`:
+
+```bash
+python3 lab.py validate-dataset --dataset /path/to/my_dataset/
+```
+
+The `prepare-dataset` skill (see `skills/`) automates the build-golden +
+label steps into a single guided workflow.
+
+---
+
+## `lab demo` — GPU-free onboarding
+
+```bash
+python3 lab.py demo
+```
+
+Runs a complete mock eval cycle with **no GPU, no database, no model download**:
+
+1. Builds a 5-crop synthetic dataset in `demo_dataset/` (tiny JPEGs + labels).
+2. Calls `re_score()` twice with a built-in `MockModel` — v1 predicts female
+   (accuracy 1.0), v2 predicts male (accuracy 0.0).
+3. Runs `run_eval()` for each version and prints accuracy + Δ.
+4. Prints a walkthrough of what happened and pointers to next steps.
+5. Cleans up `demo_dataset/` on exit (pass `--keep` to retain it).
+
+Use `lab demo` to verify a fresh install is wired correctly, or to demonstrate
+the loop to a new team member before provisioning GPU + labels.
+
+---
+
+## `HANDOFF.md` — external prompt-engineer guide
+
+[HANDOFF.md](HANDOFF.md) is the guide for a prompt engineer who is improving
+PLR/text-search prompts without touching the production service. It covers:
+
+- What to edit (`prompts/*.yaml`, and when also `plr_prompts.py`).
+- What not to touch (inference core, storage — neither is present in the lab).
+- The full iteration loop: prepare dataset → `lab run` → `lab eval` → read Δ →
+  iterate → `lab port` → hand diff + winning YAML back to ZioVision.
+- Real-run preconditions (GPU + model) vs the GPU-free `lab demo`.
+- Hand-back mechanics: `lab port` produces a read-only diff; the external
+  engineer sends the diff and winning prompt YAML to ZioVision, who apply it
+  gated on re-eval inside `core/ir`.
+
+---
+
 ## Cold-start preconditions
 
 A clean checkout cannot run `eval` until all three conditions are met:
 
-1. **Crops seeded** — `eval/golden/<attr>/crops/<obj_id>.jpg` must exist for
-   every `obj_id` in `predictions.jsonl`. Produced by `lab build-golden` (which
-   pulls crops from the indexed video's objects dir in `RESULT_PATH`). The
-   `eval/golden/*/crops/` directories are gitignored — they are never committed.
+1. **Crops seeded** — `<dataset>/crops/<obj_id>.jpg` must exist for every
+   `obj_id` in `predictions.jsonl`. Produced by `lab build-golden`. The
+   `eval/golden/*/crops/` directories are gitignored — never committed.
 
-2. **`labels.jsonl` produced** — `eval/golden/<attr>/labels.jsonl` must exist.
-   Produced by `lab label` after a human reviews the contact sheets and names
-   the misclassified tiles. Until a human labels the set, this file does not
-   exist and `run_eval.py` will raise `FileNotFoundError`.
+2. **`labels.jsonl` produced** — `<dataset>/labels.jsonl` must exist.
+   Produced by `lab label` after a human reviews the contact sheets. Until
+   a human labels the set, `run_eval.py` raises `FileNotFoundError`.
 
 3. **`ledger.jsonl` created on first eval** — `eval/ledger.jsonl` is created
-   automatically on the first `lab eval` run (it is appended, not read, on the
-   first run). It does not need to pre-exist; the file is created on first write.
+   automatically on the first `lab eval` run. It does not need to pre-exist.
 
 ---
 
@@ -167,15 +251,12 @@ which downloads and loads a 4B GGUF model into VRAM.
    ```
 
 2. **Human-labeled golden set required.**
-   `eval/golden/gender/labels.jsonl` (and equivalent for other attributes) must
-   exist and contain human-verified ground truth before `lab eval` produces a
-   meaningful accuracy number. The gender golden set currently has **no human
-   labels** — all predictions are model-bootstrapped. A labeler must review the
-   contact sheets (`gender_MALE.png`, `gender_FEMALE.png`) and run `lab label`
-   with the corrected tile IDs before the first real measurement.
+   `<dataset>/labels.jsonl` must exist and contain human-verified ground truth
+   before `lab eval` produces a meaningful accuracy number. Run `lab label`
+   with the corrected tile IDs after a human reviews the contact sheets.
 
-These are **operator steps** — the lab CLI is wired and the code path is
-complete; only execution awaits GPU availability and human labels.
+See [INSTALL.md](INSTALL.md) for the full setup (Python env, CUDA build, model
+download).
 
 ---
 
