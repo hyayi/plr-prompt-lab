@@ -13,6 +13,8 @@ Subcommands:
                 default; --apply copies lab files into core/ir).
   demo          GPU-free onboarding: run a full mock cycle on a synthetic
                 dataset so a new user can see the loop end-to-end immediately.
+  report        Turn the eval ledger into ONE self-contained HTML report
+                (trends, model×prompt matrix, prompt-change→metric-delta).
 
 Usage:
     python3 lab.py <cmd> [options]
@@ -595,6 +597,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Exit nonzero if ANY cell fails (default: only exit nonzero when ALL cells fail).",
     )
 
+    # -- report --
+    rp = sub.add_parser(
+        "report",
+        help="Generate a self-contained HTML report from the eval ledger.",
+    )
+    rp.add_argument("--out", default=os.path.join(_LAB_ROOT, "report.html"),
+                    help="output HTML path (default: report.html)")
+    rp.add_argument("--ledger", default=os.path.join(_LAB_ROOT, "eval", "ledger.jsonl"),
+                    help="ledger.jsonl path (default: eval/ledger.jsonl)")
+
     return p
 
 
@@ -633,6 +645,22 @@ def _cmd_experiment_run(args: argparse.Namespace) -> int:
 
 
 # =====================================================================
+# Subcommand: report
+# =====================================================================
+
+
+def _cmd_report(args: argparse.Namespace) -> int:
+    """Generate a self-contained HTML report from the eval ledger.
+
+    Delegates to report.build_report(). GPU-free, network-free.
+    """
+    from report import build_report
+
+    build_report(ledger_path=args.ledger, out_path=args.out)
+    return 0
+
+
+# =====================================================================
 # Subcommand: validate-dataset
 # =====================================================================
 
@@ -657,6 +685,7 @@ _DISPATCH = {
     "port": _cmd_port,
     "validate-dataset": _cmd_validate_dataset,
     "demo": _cmd_demo,
+    "report": _cmd_report,
     "experiment": None,  # nested — dispatched via _EXPERIMENT_DISPATCH below
 }
 
