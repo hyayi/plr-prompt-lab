@@ -51,7 +51,7 @@
 
 <h2><span class="n">1</span> 30초 시작 — GPU 없이 전체 루프 체험</h2>
 <pre><code>python3 lab.py demo          <span class="c"># mock 모델로 run→eval→Δ 전체 사이클</span>
-python3 -m pytest tests/ -q  <span class="c"># 83 passed 확인</span></code></pre>
+python3 -m pytest tests/ -q  <span class="c"># 90 passed 확인</span></code></pre>
 
 <h2><span class="n">2</span> 실험 사이클</h2>
 <pre><code>데이터셋 준비 ──► lab run ──► lab eval ──► lab report / lab gallery
@@ -75,11 +75,11 @@ python3 -m pytest tests/ -q  <span class="c"># 83 passed 확인</span></code></p
 <tr><td><code>lab port [--apply]</code></td><td>lab ↔ core/ir 프롬프트 표면 diff / 반납</td></tr>
 </table>
 
-<h2><span class="n">4</span> 프롬프트 — 두 소스, 한 가지 규칙</h2>
+<h2><span class="n">4</span> 프롬프트 — 단일 소스 (yaml)</h2>
 <div class="card" style="--c:var(--orange)">
-  <b>기본(--version 없음)</b> = <code>plr_prompts.py</code> 상수 (현재 <b>plr_v1.5_cot 강제커밋</b> —
-  unknown 없음, 저신뢰는 margins로).
-  <b>버전 지정</b> = <code>lab run --version V</code>가 <code>prompts/V.yaml</code>을 로드 — 실험은 항상 이 경로로.
+  <b>기본(--version 없음)</b> = <code>prompts/&lt;현재버전&gt;.yaml</code>을 plr_prompts가 로드
+  (현재 <b>plr_v1.5_cot 강제커밋</b>). <b>yaml 편집 = 프롬프트 변경</b> — 상수는 제거됨(단일 소스).
+  <b>버전 지정</b> = <code>lab run --version V</code>가 <code>prompts/V.yaml</code>(또는 <code>configs/V.yaml</code> 조합)을 로드.
   새 버전은 <b>yaml만 추가</b>, 채택 시 <code>PROMPT_VERSION_YAML_COT</code> bump가 승격의 전부 → <code>lab port</code>.
 </div>
 
