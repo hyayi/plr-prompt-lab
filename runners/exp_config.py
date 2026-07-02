@@ -81,6 +81,7 @@ def load_config(lab_root: str | Path, name: str | None) -> ExpConfig | None:
         if not enums_path.exists():
             raise ValueError(f"{path}: enums file {enums!r} not found — dangling reference")
         enums = yaml.safe_load(enums_path.read_text(encoding="utf-8")) or {}
+    _validate_enum_overrides(dict(enums), path)
 
     pre = data.get("preprocess") or {}
     samp = data.get("sampling") or {}
@@ -92,6 +93,47 @@ def load_config(lab_root: str | Path, name: str | None) -> ExpConfig | None:
         max_tokens=int(samp["max_tokens"]) if samp.get("max_tokens") is not None else None,
         temperature=float(samp["temperature"]) if samp.get("temperature") is not None else None,
     )
+
+
+# Config enum overrides may only NARROW the vocabulary. The parser
+# (plr_prompts.parse_plr_response / _coerce_topk_labels / _norm_*) coerces
+# every slot back onto the plr_schema enums, so a value the schema does not
+# know is silently rewritten to a fallback — the model would answer with the
+# new word and the pipeline would throw it away (a half-experiment).
+# EXTENDING a vocabulary is therefore a CODE change: plr_schema enum + the
+# parser normalisation, promoted together via lab port.
+_ENUM_KEY_TO_SCHEMA = {
+    "colors": "COLOR_ENUM",
+    "upper_types": "UPPER_TYPE_ENUM",
+    "lower_types": "LOWER_TYPE_ENUM",
+    "equips": "EQUIPMENT_TYPE_ENUM",
+    "actions": "STATIC_ACTION_ENUM",
+    "military": "MILITARY_ENUM",
+    "vehicle_types": "VEHICLE_TYPE_ENUM",
+}
+
+
+def _validate_enum_overrides(enums: dict, cfg_path: Path) -> None:
+    import plr_schema
+
+    for key, values in enums.items():
+        schema_name = _ENUM_KEY_TO_SCHEMA.get(key)
+        if schema_name is None:
+            raise ValueError(
+                f"{cfg_path}: unknown enums key {key!r}. "
+                f"Valid keys: {sorted(_ENUM_KEY_TO_SCHEMA)}"
+            )
+        allowed = set(getattr(plr_schema, schema_name))
+        extra = [v for v in values if v not in allowed]
+        if extra:
+            raise ValueError(
+                f"{cfg_path}: enums.{key} EXTENDS the schema vocabulary with "
+                f"{extra} — the parser normalises every slot back onto "
+                f"plr_schema.{schema_name}, so the model's new answers would be "
+                f"silently coerced away. Config overrides may only NARROW a "
+                f"vocabulary; extending one is a code change (plr_schema enum + "
+                f"parser), promoted via lab port."
+            )
 
 
 def apply_sampling(model: Any, cfg: ExpConfig | None) -> None:

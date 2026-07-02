@@ -105,6 +105,14 @@ sampling: { max_tokens: 256, temperature: 0.2 }
 stamps the config name; prompt_hash covers configs/*.yaml. Same prompt ×
 N knob-sets = N config files, zero template copies.
 
+**Enum overrides may only NARROW the vocabulary** (subset — enforced,
+fail-loud). The parser coerces every slot back onto the plr_schema enums
+(measured: color `crimson`→`gray`, action `crawling`→`posture_unknown`), so
+offering the model a word the schema doesn't know is a half-experiment —
+the answer gets thrown away at parse time. EXTENDING a vocabulary is a code
+change: plr_schema enum + parser normalisation together, promoted via
+`lab port` (see Promotion §4).
+
 ## Domain lessons (encoded history — do not relearn these the hard way)
 
 - **Measure before you change** (`eval/README.md`): the gender prompt

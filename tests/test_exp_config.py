@@ -173,3 +173,35 @@ def test_config_changes_prompt_hash() -> None:
         assert prompt_hash(_LAB_ROOT) != before, "configs/ must be hashed"
     finally:
         path.unlink()
+
+
+def test_enum_override_extension_fails_loud() -> None:
+    """Config enums may only NARROW: extending past the schema vocabulary is
+    rejected (the parser would coerce the new answers away)."""
+    from runners.exp_config import load_config
+
+    path = _write_config("test_extend", """\
+        prompt: plr_v1.5_cot
+        enums:
+          colors: [black, crimson]
+        """)
+    try:
+        with pytest.raises(ValueError, match="EXTENDS"):
+            load_config(_LAB_ROOT, "test_extend")
+    finally:
+        path.unlink()
+
+
+def test_enum_override_unknown_key_fails_loud() -> None:
+    from runners.exp_config import load_config
+
+    path = _write_config("test_badkey", """\
+        prompt: plr_v1.5_cot
+        enums:
+          colours: [black]
+        """)
+    try:
+        with pytest.raises(ValueError, match="unknown enums key"):
+            load_config(_LAB_ROOT, "test_badkey")
+    finally:
+        path.unlink()
