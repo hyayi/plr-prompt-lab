@@ -50,9 +50,16 @@ loop indefinitely.
 - Output: pattern list, each with obj_ids, image observations, and metrics.
 
 ### 2. 제안자 (Proposer)
-- For each pattern, propose a CONCRETE prompt change (exact wording, exact
-  location in the template) with the causal story: *why* this text should fix
-  *this* pattern. Cite the pattern's obj_ids and observations as grounds.
+- For each pattern, propose a CONCRETE change with the causal story: *why*
+  this change should fix *this* pattern. Cite the pattern's obj_ids and
+  observations as grounds.
+- The levers are ALL the input knobs, not just wording — every one is
+  versioned in the same variant yaml (see skills/author-prompt):
+  ① prompt template text ② `enums:` (offered vocabulary — e.g. drop a label
+  the model abuses) ③ `preprocess.marker` (image pre-processing)
+  ④ `sampling:` (max_tokens / temperature). Pick the lever the evidence
+  points at: a vocabulary-confusion pattern wants an enum change, not more
+  instructions.
 - Anti-patterns to avoid: piling on generic instructions ("be more careful"),
   changes that contradict the forced-commit contract (never re-introduce
   unknown), enum/vocabulary edits that break the query-side enum contract.

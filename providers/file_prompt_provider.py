@@ -71,6 +71,12 @@ class FilePromptProvider(PromptProvider):
         # plr_prompts._commit_enum). Per-version so older yamls (v1.3/v1.4)
         # keep reproducing their historical prompts byte-for-byte.
         self._commit_enums: bool = bool(self._data.get("commit_enums", False))
+        # Variant enum overrides: the version yaml may pin its own enum lists
+        # (`enums: {colors: [...], ...}`) — the injected list then comes from
+        # the yaml verbatim instead of plr_schema. This makes the enum
+        # vocabulary part of the versioned variant bundle; at promotion the
+        # winning lists are baked into plr_schema itself.
+        self._enum_overrides: dict[str, list] = dict(self._data.get("enums") or {})
 
     # ------------------------------------------------------------------
     # PromptProvider contract
@@ -96,15 +102,20 @@ class FilePromptProvider(PromptProvider):
 
         if self._commit_enums:
             from plr_prompts import _commit_enum
-            _e = _commit_enum
+            _base = _commit_enum
         else:
-            _e = tuple
+            _base = tuple
+
+        def _e(values, _key=None):
+            if _key and _key in self._enum_overrides:
+                return tuple(str(v) for v in self._enum_overrides[_key])
+            return _base(values)
 
         if object_hint == "vehicle":
             user_text = plr["vehicle_user"].rstrip("\n").format(
-                colors=", ".join(_e(COLOR_ENUM)),
-                vehicle_types=", ".join(_e(VEHICLE_TYPE_ENUM)),
-                military_enum="|".join(_e(MILITARY_ENUM)),
+                colors=", ".join(_e(COLOR_ENUM, "colors")),
+                vehicle_types=", ".join(_e(VEHICLE_TYPE_ENUM, "vehicle_types")),
+                military_enum="|".join(_e(MILITARY_ENUM, "military")),
             )
         else:
             # person path — CoT (reason) vs plain depends on env + template key.
@@ -130,12 +141,12 @@ class FilePromptProvider(PromptProvider):
                 )
             else:
                 fmt_kwargs = dict(
-                    colors=", ".join(_e(COLOR_ENUM)),
-                    upper_types=", ".join(_e(UPPER_TYPE_ENUM)),
-                    lower_types=", ".join(_e(LOWER_TYPE_ENUM)),
-                    equips=", ".join(_e(EQUIPMENT_TYPE_ENUM)),
-                    actions=", ".join(_e(STATIC_ACTION_ENUM)),
-                    military_enum="|".join(_e(MILITARY_ENUM)),
+                    colors=", ".join(_e(COLOR_ENUM, "colors")),
+                    upper_types=", ".join(_e(UPPER_TYPE_ENUM, "upper_types")),
+                    lower_types=", ".join(_e(LOWER_TYPE_ENUM, "lower_types")),
+                    equips=", ".join(_e(EQUIPMENT_TYPE_ENUM, "equips")),
+                    actions=", ".join(_e(STATIC_ACTION_ENUM, "actions")),
+                    military_enum="|".join(_e(MILITARY_ENUM, "military")),
                 )
             user_text = plr[tmpl_key].rstrip("\n").format(**fmt_kwargs)
 

@@ -71,6 +71,15 @@ python3 lab.py experiment run my_ab.yaml   # prompts: [plr_v1.5_cot, plr_v1.6_co
 #   - <change 1>: <rationale, cite obj_ids/metrics if from improve-prompt>
 format: yaml            # wire format the templates emit (parser follows IR_PLR_FORMAT)
 commit_enums: true      # provider injects *unknown*-filtered enum lists
+# --- variant knobs (optional — omit for production defaults). The yaml
+# versions the WHOLE input combination; prompt_hash stamps it automatically.
+# enums:                # override injected enum lists (verbatim)
+#   colors: [black, white, red]
+# preprocess:
+#   marker: false       # skip the yellow corner marker (default: true)
+# sampling:
+#   max_tokens: 256     # default 512
+#   temperature: 0.2    # default 0.0
 plr:
   system: |-
     <system prompt — role + output discipline + commit rule>
@@ -113,3 +122,8 @@ human-gated step:
    version yaml byte-in-parity (test_prompt_surface_parity enforces).
 2. Bump `PROMPT_VERSION_YAML_COT` — this is the lazy-reindex trigger.
 3. `lab port` → apply to core/ir → core/ir tests → deploy decision.
+4. Variant knobs go back to their HOME files, not to the yaml:
+   `enums:` → plr_schema.py enum tuples · `preprocess.marker` →
+   indexing's marker call site · `sampling:` → the gemma generate call
+   sites. A knob that wins in the lab but is not carried home silently
+   reverts in production.

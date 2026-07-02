@@ -98,6 +98,12 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 - `GUIDE.html` (구조+사용법 원페이지, 배포용): `654ca3a` · `d7285e3` · `7634a0a`
 - **`--version` 실-프롬프트-로드 픽스**: `51022f6`(feat) · `2553b13`(docs) — experiment의 프롬프트 축이 이제 진짜로 다른 프롬프트를 비교
 
+### Variant 번들 — 인풋 조합 전체의 버저닝 (2026-07-02)
+- **원리(사용자 확정)**: 모델 인풋 = 템플릿 텍스트 + 주입 enum + 이미지 전처리(마커) + 샘플링 파라미터. 이 조합 전체를 `prompts/<V>.yaml` **한 파일로 버저닝** — `prompt_hash`가 yaml을 해시하므로 조합 provenance 자동 각인.
+- variant 키(전부 옵션, 기본=운영값): `enums:`(주입 enum 오버라이드 — provider가 처리, **lab·core/ir provider 동일 패치로 바이트 parity 유지**), `preprocess.marker:`(false면 run_plr `_pre_marked=True`로 마커 생략), `sampling.max_tokens/temperature:`(LabGemmaModel 속성으로 전달 — 하드코딩을 `__init__` 파라미터화).
+- 승격 매핑: 템플릿→plr_prompts 상수 · enums→plr_schema · marker→indexing 호출부 · sampling→gemma 호출부 (author-prompt 스킬 §Promotion에 기록 — "lab에서 이겼는데 안 가져가면 운영에서 조용히 원복"됨).
+- seed.sh에서 gemma_model.py 제외(LabGemmaModel/MockModel로 lab-분기). `runners/variant.py` 신설. 86 tests green.
+
 ### 필수 기능 완성 (2026-07-02, 사용자 요구 6종)
 - **generic 데이터셋**: manifest.yaml이 `labels`/`pred_path`/`margin_path`/`bias_pair`/`object_type_hint` 선언 → validate/re_score/run_eval이 스펙 기반 동작 (`evalkit.dataset.attribute_spec`). gender/vehicle_type/military는 내장 프리셋(예시). 템플릿: `examples/dataset_template/` (validate PASS).
 - **지표 완성**: precision·F1(클래스별+macro) ledger 추가; report.html에 **전체 실험 비교표** + **confusion 매트릭스**(recall/precision/F1 컬럼) 렌더링.

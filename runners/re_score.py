@@ -143,14 +143,22 @@ def re_score(
     # import-clean and to avoid pulling the registry/bootstrap.
     build_messages = None
     stamped_version: str | None = None
+    variant = None
     if prompt_version and (here / "prompts" / f"{prompt_version}.yaml").exists():
         from providers.file_prompt_provider import FilePromptProvider
+
+        from runners.variant import apply_sampling, load_variant
 
         build_messages = (
             lambda hint: FilePromptProvider(version_override=prompt_version)
             .build_plr_messages(hint)
         )
         stamped_version = prompt_version
+        # Variant bundle: the version yaml also carries enum overrides
+        # (handled inside FilePromptProvider), preprocessing and sampling
+        # knobs — the WHOLE input combination is versioned as one unit.
+        variant = load_variant(here, prompt_version)
+        apply_sampling(model, variant)
 
     new_preds: list[dict[str, Any]] = []
     new_attrs: list[dict[str, Any]] = []
@@ -174,12 +182,16 @@ def re_score(
         # gate no longer withholds crops from the model, so every crop gets
         # exactly one call. run_plr's qreport parameter only steers its (now
         # unused) coarse_only branch — pin the normal mode.
+        # preprocess.marker=false (variant knob): pass the RAW crop with
+        # _pre_marked=True so run_plr skips drawing the corner marker.
+        skip_marker = variant is not None and not variant.marker
         plr_json = plr_core.run_plr(
             pil,
             SimpleNamespace(mode="normal_plr"),
             model,
             object_type_hint=object_type_hint,
             build_messages=build_messages,
+            _pre_marked=skip_marker,
         )
 
         pred_val = resolve_json_path(plr_json, pred_path)

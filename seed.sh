@@ -24,12 +24,11 @@ echo "seed.sh: source = $SRC"
 echo "seed.sh: dest   = $DST"
 
 # --- Single-file dev surface (pure: stdlib / PIL / numpy / yaml only) ---
-# NOTE: config.py and registry.py are NOT re-seeded — both diverged from
+# NOTE: config.py, registry.py and gemma_model.py are NOT re-seeded — both diverged from
 # core/ir on purpose (lab-lean config; registry carries the lab's MODELS/
-# PIPELINES section). Sync them manually if the shared slot layer changes.
+# PIPELINES section; gemma_model carries LabGemmaModel/MockModel). Sync them manually if the shared slot layer changes.
 FILES=(
   plr_core.py
-  gemma_model.py
   gemma_backend.py
   plr_prompts.py
   plr_schema.py

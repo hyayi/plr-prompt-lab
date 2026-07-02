@@ -75,14 +75,22 @@ class LabGemmaModel:
     The backend is loaded lazily on first `.generate` via the `load_backend()`
     singleton, so constructing the model (and `import gemma_model`) never loads
     the GGUF weights.
+
+    Sampling parameters are part of the INPUT contract (a variant yaml may
+    override them per experiment — see runners/variant.py); the defaults are
+    the production values.
     """
+
+    def __init__(self, max_tokens: int = 512, temperature: float = 0.0) -> None:
+        self.max_tokens = max_tokens
+        self.temperature = temperature
 
     def generate(self, messages: list[dict[str, Any]], image: Any) -> str:
         # Lazy import: keep `import gemma_model` free of the heavy GPU backend.
         from gemma_backend import load_backend
 
         gen = load_backend().generate(
-            image, messages, max_tokens=512, temperature=0.0
+            image, messages, max_tokens=self.max_tokens, temperature=self.temperature
         )
         return gen.raw
 
