@@ -1,5 +1,8 @@
 # plr-prompt-lab  (v2)
 
+> 📖 **처음이라면 [`GUIDE.html`](GUIDE.html)를 브라우저로 여세요** — 구조와 사용법을
+> 한 장(자체완결 HTML·오프라인)으로 그림과 함께 설명합니다.
+
 Standalone prompt/pipeline eval-cycle for PLR (Person-Level Recognition) **attribute
 scoring (A)** and **text-search (B)**, lean-extracted from `core/ir` at HEAD
 `c2fc1cf20a6fbd3ad4272aec8439d438a4febf34` (see [SEED.md](SEED.md)).
