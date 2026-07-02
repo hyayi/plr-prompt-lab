@@ -3,435 +3,126 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>plr-prompt-lab — 구조 &amp; 사용법 가이드</title>
+<title>plr-prompt-lab — 사용 가이드</title>
 <style>
-  :root{
-    --bg:#f6f7f9; --panel:#ffffff; --ink:#1f2933; --muted:#6b7480;
-    --line:#e3e7ec; --teal:#0d7d76; --teal-soft:#e3f2f0; --amber:#b26a00;
-    --amber-soft:#fbf0dd; --code:#1d2530; --code-ink:#e8edf2; --blue:#2f5d7c;
-  }
+  :root{--bg:#0b1120;--panel:#111a2e;--panel2:#16213b;--line:#263452;--text:#dbe4f5;
+        --muted:#8fa1c0;--acc:#38bdf8;--amber:#fbbf24;--green:#34d399;--pink:#f472b6;--orange:#fb923c}
   *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{
-    margin:0; background:var(--bg); color:var(--ink);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Roboto,sans-serif;
-    font-size:16px; line-height:1.7; -webkit-font-smoothing:antialiased;
-  }
-  .wrap{max-width:1000px; margin:0 auto; padding:0 22px}
-  code,pre,.mono{font-family:"SF Mono",ui-monospace,Menlo,Consolas,"Noto Sans KR",monospace}
-
-  /* hero */
-  header.hero{
-    background:linear-gradient(160deg,#12343b 0%,#1b4a4a 60%,#215e56 100%);
-    color:#eaf3f1; padding:52px 0 40px;
-  }
-  header.hero .wrap{display:block}
-  .eyebrow{font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:#8fd0c6; margin:0 0 10px}
-  h1{margin:0 0 12px; font-size:34px; line-height:1.2; font-weight:750}
-  .lede{font-size:18px; color:#cfe4df; max-width:70ch; margin:0}
-  .hero-goal{margin-top:22px; padding:14px 18px; background:rgba(255,255,255,.08);
-    border-left:4px solid #57c4b4; border-radius:6px; font-size:15.5px; color:#e6f4f0}
-
-  /* toc */
-  nav.toc{background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5}
-  nav.toc .wrap{display:flex; flex-wrap:wrap; gap:6px 18px; padding:11px 22px}
-  nav.toc a{color:var(--blue); text-decoration:none; font-size:14px; font-weight:600; padding:3px 2px}
-  nav.toc a:hover{color:var(--teal); text-decoration:underline}
-
-  section{padding:36px 0 6px}
-  h2{font-size:23px; margin:0 0 4px; padding-left:13px; border-left:5px solid var(--teal); line-height:1.25}
-  h2 .num{color:var(--teal); font-weight:800; margin-right:8px}
-  .sub{color:var(--muted); margin:2px 0 20px; padding-left:13px; font-size:15px}
-  h3{font-size:17px; margin:26px 0 8px}
-
-  .card{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px 20px; margin:14px 0}
-  .grid{display:grid; gap:14px}
-  .grid.c2{grid-template-columns:1fr 1fr}
-  .grid.c3{grid-template-columns:1fr 1fr 1fr}
-  @media(max-width:720px){.grid.c2,.grid.c3{grid-template-columns:1fr}}
-
-  .tile{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px 18px}
-  .tile h4{margin:0 0 6px; font-size:15.5px; display:flex; align-items:center; gap:8px}
-  .tile p{margin:0; font-size:14.5px; color:#48515b}
-  .pill{display:inline-block; font-size:12px; font-weight:700; padding:2px 9px; border-radius:999px;
-    background:var(--teal-soft); color:var(--teal); border:1px solid #bfe3dd}
-  .pill.amber{background:var(--amber-soft); color:var(--amber); border-color:#f0d9b0}
-
-  pre{background:var(--code); color:var(--code-ink); border-radius:9px; padding:15px 17px; overflow:auto;
-    font-size:13.5px; line-height:1.6; margin:12px 0}
-  pre .c{color:#7e8aa0}      /* comment */
-  pre .k{color:#8fd0c6}      /* command/keyword */
-  pre .s{color:#e6b673}      /* string/arg */
-  p code, li code, td code{background:#eef1f4; color:#1d2530; padding:1px 6px; border-radius:5px; font-size:13.5px}
-
-  table{width:100%; border-collapse:collapse; margin:12px 0; font-size:14px; background:var(--panel)}
-  th,td{border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top}
-  th{background:#eef2f3; font-weight:700}
+  body{margin:0;padding:32px 20px 80px;color:var(--text);line-height:1.6;
+       font-family:"Pretendard","Noto Sans KR","Malgun Gothic","Apple SD Gothic Neo","Segoe UI",sans-serif;
+       background:radial-gradient(1100px 480px at 18% -10%,#16294d 0%,transparent 60%),
+                  radial-gradient(900px 400px at 92% 0%,#23163f 0%,transparent 55%),var(--bg)}
+  main{max-width:980px;margin:0 auto}
+  h1{font-size:25px;margin:0 0 6px}.repo{color:var(--acc)}
+  .sub{color:var(--muted);font-size:13.5px;margin-bottom:30px}
+  h2{font-size:17px;margin:40px 0 14px;display:flex;align-items:center;gap:10px}
+  h2 .n{display:inline-flex;align-items:center;justify-content:center;width:25px;height:25px;
+        border-radius:8px;font-size:13px;font-weight:700;color:#0b1120;
+        background:linear-gradient(135deg,#38bdf8,#a78bfa)}
+  code,pre{font-family:"JetBrains Mono",ui-monospace,Consolas,monospace}
+  code{font-size:.9em;color:#c9d6f2;background:var(--panel2);border-radius:5px;padding:1px 6px}
+  pre{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+      padding:14px 16px;font-size:12.5px;overflow-x:auto;line-height:1.55}
+  pre code{background:none;padding:0}
+  pre .c{color:#5b6f96} pre b{color:#e8f2ff}
+  table{border-collapse:collapse;font-size:13px;margin:10px 0}
+  th,td{border:1px solid var(--line);padding:6px 12px;text-align:left}
+  th{background:var(--panel2);color:#e8f2ff}
   td code{white-space:nowrap}
-
-  .steps{counter-reset:step; padding:0; margin:16px 0; list-style:none}
-  .steps > li{position:relative; padding:0 0 4px 46px; margin:0 0 22px}
-  .steps > li::before{counter-increment:step; content:counter(step); position:absolute; left:0; top:-2px;
-    width:32px; height:32px; border-radius:50%; background:var(--teal); color:#fff; font-weight:800;
-    display:flex; align-items:center; justify-content:center; font-size:15px}
-  .steps h3{margin:2px 0 6px}
-
-  .note{background:var(--amber-soft); border:1px solid #f0d9b0; border-radius:9px; padding:13px 16px; font-size:14.5px}
-  .note b{color:var(--amber)}
-  .ok{color:var(--teal); font-weight:700}
-  .svgwrap{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; margin:16px 0; overflow:auto}
-  footer{color:var(--muted); font-size:13px; text-align:center; padding:34px 0 46px}
-  .kbd{font-size:12.5px; background:#eef1f4; border:1px solid #d7dde3; border-bottom-width:2px; border-radius:5px; padding:1px 7px}
+  .card{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--c,var(--acc));
+        border-radius:12px;padding:12px 16px;margin:10px 0;font-size:13.5px}
+  .card b{color:#e8f2ff}
+  .warn{--c:#f87171}
+  a{color:var(--acc)}
+  .muted{color:var(--muted);font-size:12.5px}
+  footer{margin-top:56px;color:#5b6f96;font-size:12px;text-align:center}
 </style>
 </head>
 <body>
+<main>
 
-<header class="hero">
-  <div class="wrap">
-    <p class="eyebrow">PLR Prompt Lab · 구조 &amp; 사용법</p>
-    <h1>plr-prompt-lab</h1>
-    <p class="lede">PLR(객체 속성 추출)과 텍스트 검색의 <b>프롬프트·파이프라인을 측정하며 개선</b>하는 독립 실험 도구.
-       데이터·모델·프롬프트·파이프라인을 <b>파라미터로 조합</b>해 실험하고, 자동 평가 결과를 추이로 추적하며,
-       한 장의 <b>HTML 리포트</b>로 시각화한다.</p>
-    <div class="hero-goal">
-      🎯 <b>핵심 원칙</b> — “측정 없이 프롬프트를 바꾸지 않는다.” 개선안은 골든셋으로 <b>검증(eval)</b>한 뒤에만
-      운영 코드(<span class="mono">core/ir</span>)로 <b>의도적으로 이식(port)</b>한다.
-    </div>
-  </div>
-</header>
+<h1><span class="repo">plr-prompt-lab</span> — 사용 가이드</h1>
+<div class="sub">
+  <b>PLR(객체 속성 추출) 프롬프트를 측정하며 개선</b>하는 독립 실험 도구 — PLR 전용.
+  GPU·DB·Redis 없이 mock 경로가 전부 동작하고, 실측만 GPU가 필요합니다.
+  구조 시각화는 <a href="STRUCTURE.html">STRUCTURE.html</a> 참고.
+  <span class="muted">(2026-07-02 · plr_v1.5_cot 강제커밋 · 검색 파이프라인 제거됨)</span>
+</div>
 
-<nav class="toc"><div class="wrap">
-  <a href="#what">무엇인가</a>
-  <a href="#loop">전체 흐름</a>
-  <a href="#arch">구조</a>
-  <a href="#files">파일 지도</a>
-  <a href="#params">4개 파라미터</a>
-  <a href="#prompts">프롬프트 구조</a>
-  <a href="#data">데이터 형식</a>
-  <a href="#usage">사용법</a>
-  <a href="#ledger">ledger &amp; 리포트</a>
-  <a href="#handoff">전달·이식</a>
-</div></nav>
+<h2><span class="n">1</span> 30초 시작 — GPU 없이 전체 루프 체험</h2>
+<pre><code>python3 lab.py demo          <span class="c"># mock 모델로 run→eval→Δ 전체 사이클</span>
+python3 -m pytest tests/ -q  <span class="c"># 83 passed 확인</span></code></pre>
 
-<main class="wrap">
+<h2><span class="n">2</span> 실험 사이클</h2>
+<pre><code>데이터셋 준비 ──► lab run ──► lab eval ──► lab report / lab gallery
+ (템플릿+라벨)    (GPU 1회/크롭)  (지표+ledger)   (비교표·confusion / 크롭 시각화)
+                                                      │
+              lab port ◄── prompts/&lt;신버전&gt;.yaml ◄── /improve-prompt 스킬
+              (core/ir 반납)                          (근거 있는 개선안)</code></pre>
 
-<!-- WHAT -->
-<section id="what">
-  <h2><span class="num">01</span>무엇인가</h2>
-  <p class="sub">운영 서비스와 완전히 분리된, 프롬프트 개선 전용 샌드박스.</p>
-  <div class="grid c3">
-    <div class="tile"><h4>🔬 측정 우선</h4><p>고정된 골든셋(정답 라벨)에 프롬프트를 돌려 정확도·편향·recall을 <b>숫자로</b> 잰다. 성별 프롬프트가 v0.5↔v0.7 사이에서 편향이 진동한 이력 — 재기 전엔 방향을 모른다.</p></div>
-    <div class="tile"><h4>🧩 조합 실험</h4><p>데이터 × 모델 × 프롬프트 × 파이프라인의 <b>교차곱</b>을 한 번에 실행. 어떤 조합이 나은지 매트릭스로 비교.</p></div>
-    <div class="tile"><h4>📦 전달 가능</h4><p>운영 코드에서 <b>개발 표면만 lean 추출</b>한 별도 저장소. DB·Redis·서비스 없이, 받는 사람이 GPU만 있으면 독립 실행.</p></div>
-  </div>
-  <div class="card" style="margin-top:14px">
-    <b>두 개의 개발 대상(파이프라인)</b>
-    <table style="margin-bottom:0">
-      <tr><th style="width:130px">파이프라인</th><th>하는 일</th><th>측정 지표</th></tr>
-      <tr><td><span class="pill">plr</span></td><td>크롭 이미지 → 프롬프트 → 모델 → 파싱 → 속성 판별(성별/차종/군용)</td><td>accuracy · 혼동행렬 · bias</td></tr>
-      <tr><td><span class="pill">search</span></td><td>텍스트 쿼리 → 파싱 → 하드필터/스코어 → 랭킹</td><td>recall@k · precision@k</td></tr>
-    </table>
-  </div>
-</section>
+<h2><span class="n">3</span> 명령어</h2>
+<table>
+<tr><th>명령</th><th>역할</th></tr>
+<tr><td><code>lab demo</code></td><td>GPU-free 온보딩 (mock 전체 사이클)</td></tr>
+<tr><td><code>lab build-golden --video V --attribute A</code></td><td>운영 비디오에서 골든셋 크롭 생성 (운영자 단계)</td></tr>
+<tr><td><code>lab label --dataset D --female-in-male M3,M7 --unknown M9</code></td><td>사람 라벨 (판별 불가는 unknown → 채점 제외·별도 집계)</td></tr>
+<tr><td><code>lab validate-dataset --dataset D</code></td><td>데이터셋 형식 검증 (fail-loud)</td></tr>
+<tr><td><code>lab run --attribute A --version V --dataset D [--model gemma|mock]</code></td><td>재채점 — 크롭당 모델 1회, margin·quality 기록</td></tr>
+<tr><td><code>lab eval --attribute A --dataset D</code></td><td>acc·recall·precision·F1·confusion·bias·pred_unknown + margin/quality 캘리브레이션 + ledger Δ</td></tr>
+<tr><td><code>lab experiment run exp.yaml</code></td><td>교차곱 매트릭스 (datasets×models×prompts×attributes×formats×reasons)</td></tr>
+<tr><td><code>lab report [--compare LEDGER_B]</code></td><td>자체완결 HTML — 전체 실험 비교표·추이·히트맵·confusion (+실험군 간 비교)</td></tr>
+<tr><td><code>lab gallery --dataset D</code></td><td>크롭-라벨 시각화 HTML — 오답 우선, CORRECT/WRONG 배지, margin/quality</td></tr>
+<tr><td><code>lab port [--apply]</code></td><td>lab ↔ core/ir 프롬프트 표면 diff / 반납</td></tr>
+</table>
 
-<!-- LOOP -->
-<section id="loop">
-  <h2><span class="num">02</span>전체 흐름 (한 사이클)</h2>
-  <p class="sub">파라미터를 고르고 → 실행하면 → 자동 평가되어 → ledger에 쌓이고 → 리포트로 시각화된다.</p>
-  <div class="svgwrap">
-  <svg viewBox="0 0 960 340" width="100%" role="img" aria-label="실험 사이클 다이어그램" font-family="inherit">
-    <defs>
-      <marker id="arw" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-        <path d="M0,0 L8,3 L0,6 Z" fill="#0d7d76"/>
-      </marker>
-      <marker id="arwA" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-        <path d="M0,0 L8,3 L0,6 Z" fill="#b26a00"/>
-      </marker>
-    </defs>
-    <!-- params -->
-    <text x="20" y="26" font-size="13" font-weight="700" fill="#6b7480">파라미터 (조합 가능)</text>
-    <g font-size="13" font-weight="700">
-      <rect x="20" y="38" width="150" height="40" rx="8" fill="#e3f2f0" stroke="#0d7d76"/><text x="95" y="63" text-anchor="middle" fill="#12343b">데이터셋 --dataset</text>
-      <rect x="20" y="86" width="150" height="40" rx="8" fill="#e3f2f0" stroke="#0d7d76"/><text x="95" y="111" text-anchor="middle" fill="#12343b">모델 --model</text>
-      <rect x="20" y="134" width="150" height="40" rx="8" fill="#e3f2f0" stroke="#0d7d76"/><text x="95" y="159" text-anchor="middle" fill="#12343b">프롬프트 --version</text>
-      <rect x="20" y="182" width="150" height="40" rx="8" fill="#e3f2f0" stroke="#0d7d76"/><text x="95" y="207" text-anchor="middle" fill="#12343b">파이프라인 --pipeline</text>
-    </g>
-    <!-- run -->
-    <path d="M170,130 H250" stroke="#0d7d76" stroke-width="2" fill="none" marker-end="url(#arw)"/>
-    <text x="210" y="122" text-anchor="middle" font-size="12" fill="#0d7d76" font-weight="700">run</text>
-    <rect x="252" y="104" width="140" height="52" rx="9" fill="#fff" stroke="#2f5d7c" stroke-width="1.5"/>
-    <text x="322" y="128" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1f2933">예측 생성</text>
-    <text x="322" y="146" text-anchor="middle" font-size="11.5" fill="#6b7480">predictions.jsonl</text>
-    <!-- eval -->
-    <path d="M392,130 H472" stroke="#0d7d76" stroke-width="2" fill="none" marker-end="url(#arw)"/>
-    <text x="432" y="122" text-anchor="middle" font-size="12" fill="#0d7d76" font-weight="700">eval</text>
-    <rect x="474" y="104" width="140" height="52" rx="9" fill="#fff" stroke="#2f5d7c" stroke-width="1.5"/>
-    <text x="544" y="128" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1f2933">자동 채점</text>
-    <text x="544" y="146" text-anchor="middle" font-size="11.5" fill="#6b7480">accuracy · recall · bias</text>
-    <!-- ledger -->
-    <path d="M614,130 H694" stroke="#0d7d76" stroke-width="2" fill="none" marker-end="url(#arw)"/>
-    <rect x="696" y="104" width="150" height="52" rx="9" fill="#eef2f3" stroke="#2f5d7c" stroke-width="1.5"/>
-    <text x="771" y="126" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1f2933">ledger.jsonl</text>
-    <text x="771" y="144" text-anchor="middle" font-size="11.5" fill="#6b7480">추이 저장소 (append)</text>
-    <!-- report -->
-    <path d="M771,156 V214" stroke="#0d7d76" stroke-width="2" fill="none" marker-end="url(#arw)"/>
-    <text x="812" y="190" font-size="12" fill="#0d7d76" font-weight="700">report</text>
-    <rect x="666" y="216" width="210" height="54" rx="9" fill="#e3f2f0" stroke="#0d7d76" stroke-width="1.5"/>
-    <text x="771" y="240" text-anchor="middle" font-size="13.5" font-weight="800" fill="#12343b">📊 자체완결 HTML 리포트</text>
-    <text x="771" y="258" text-anchor="middle" font-size="11.5" fill="#12343b">추이 · 히트맵 · 프롬프트변화→Δ</text>
-    <!-- port back -->
-    <path d="M252,220 H180 V232 H40" stroke="#b26a00" stroke-width="2" fill="none" marker-end="url(#arwA)" stroke-dasharray="5 4"/>
-    <rect x="196" y="200" width="150" height="40" rx="8" fill="#fbf0dd" stroke="#b26a00"/>
-    <text x="271" y="225" text-anchor="middle" font-size="12.5" font-weight="700" fill="#b26a00">이긴 프롬프트</text>
-    <text x="40" y="290" font-size="12.5" fill="#b26a00" font-weight="700">port ↺</text>
-    <rect x="20" y="296" width="240" height="34" rx="7" fill="#fbf0dd" stroke="#b26a00"/>
-    <text x="140" y="318" text-anchor="middle" font-size="12.5" fill="#7a4a00">검증 후 → core/ir 로 의도적 이식</text>
-  </svg>
-  </div>
-  <p style="font-size:14.5px;color:#48515b">
-    <span class="pill">plr</span> 셀은 모델을 호출해 예측을 만들고, <span class="pill">search</span> 셀은 그 속성으로 랭킹을 낸다.
-    두 경로 모두 <b>운영 코드와 같은 공유 코어</b>(<span class="mono">run_plr</span> / <span class="mono">run_search</span>)를 쓰므로,
-    여기서 이긴 프롬프트는 <span class="mono">lab port</span> diff로 그대로 운영에 옮길 수 있다.
-  </p>
-</section>
+<h2><span class="n">4</span> 프롬프트 — 두 소스, 한 가지 규칙</h2>
+<div class="card" style="--c:var(--orange)">
+  <b>기본(--version 없음)</b> = <code>plr_prompts.py</code> 상수 (현재 <b>plr_v1.5_cot 강제커밋</b> —
+  unknown 없음, 저신뢰는 margins로).
+  <b>버전 지정</b> = <code>lab run --version V</code>가 <code>prompts/V.yaml</code>을 로드 — 실험은 항상 이 경로로.
+  새 버전은 <b>yaml만 추가</b>하고, 채택 시 상수+yaml parity로 승격(테스트가 강제) 후 <code>lab port</code>.
+</div>
 
-<!-- ARCH -->
-<section id="arch">
-  <h2><span class="num">03</span>구조 (레이어)</h2>
-  <p class="sub">모델은 얇은 인터페이스로 분리 — 프롬프트·파이프라인이 특정 모델에 얽히지 않는다.</p>
-  <div class="grid c2">
-    <div class="tile"><h4><span class="pill">모델</span> Model 인터페이스</h4><p><code>Model.generate(messages, image)</code> 하나로 추상화. 구현: <b>gemma</b>(실제 GGUF·GPU), <b>mock</b>(결정론·GPU-free, 데모/테스트). 갈아끼우기 쉽게.</p></div>
-    <div class="tile"><h4><span class="pill">파이프라인</span> 공유 코어</h4><p><code>run_plr()</code>(크롭→속성) · <code>run_search()</code>(쿼리→랭킹). core/ir에서 lean 추출한 <b>바로 그 함수</b> — parity 보장.</p></div>
-    <div class="tile"><h4><span class="pill">데이터</span> Dataset</h4><p>디렉터리 하나 = 한 데이터셋(<code>crops/</code>+<code>labels.jsonl</code>+<code>queries.jsonl</code>+<code>manifest.yaml</code>). <code>--dataset</code>로 선택.</p></div>
-    <div class="tile"><h4><span class="pill">평가</span> eval 루프</h4><p><code>run_eval</code>(accuracy/bias) · <code>run_search_eval</code>(recall@k). 직전 버전 대비 <b>Δ</b>를 계산해 <code>ledger.jsonl</code>에 append.</p></div>
-    <div class="tile"><h4><span class="pill">조합</span> registry + experiment</h4><p><code>registry.py</code>가 모델/파이프라인을 이름으로 관리. <code>experiment.py</code>가 <code>experiment.yaml</code>의 교차곱을 실행.</p></div>
-    <div class="tile"><h4><span class="pill">시각화</span> report</h4><p><code>report.py</code>가 ledger를 읽어 <b>자체완결 HTML</b>(inline SVG) 생성 — 서버·CDN 불필요.</p></div>
-  </div>
-  <div class="note" style="margin-top:16px">
-    <b>운영(core/ir)과의 관계</b> — 이 랩은 운영 코드의 <b>복제가 아니라 개발 표면만 lean 추출</b>한 것이다.
-    DB·Redis·인덱싱 서비스는 가져오지 않는다(랩은 DB에 절대 접근하지 않음). 개선은
-    <span class="mono">lab port</span>가 보여주는 diff를 사람이 확인하고 <b>eval 통과 후</b> 운영에 적용한다.
-  </div>
-</section>
+<h2><span class="n">5</span> 데이터셋 — 구조는 고정, 라벨은 자유</h2>
+<pre><code>my_dataset/
+    manifest.yaml    <span class="c"># attribute·labels·pred_path 선언 (examples/dataset_template/ 복사)</span>
+    labels.jsonl     <span class="c"># {"obj_id", "label"} — 판별 불가는 "unknown"</span>
+    crops/&lt;obj_id&gt;.jpg</code></pre>
+<div class="card" style="--c:var(--green)">
+  커스텀 속성은 manifest에 <code>labels: [helmet, no_helmet]</code> +
+  <code>pred_path: attributes.equipment[0].type</code>처럼 선언하면 validate/run/eval이 그대로 동작.
+  <b>gender / vehicle_type / military는 내장 프리셋</b>(선언 불필요)이자 참고 예시.
+  상세: <code>docs/DATASET_SPEC.md</code>
+</div>
 
-<!-- FILES -->
-<section id="files">
-  <h2><span class="num">04</span>파일 지도</h2>
-  <p class="sub">무엇을 열어보면 되는가.</p>
-  <table>
-    <tr><th style="width:210px">파일 / 폴더</th><th>역할</th></tr>
-    <tr><td><code>lab.py</code></td><td>단일 CLI 진입점 — 모든 서브명령</td></tr>
-    <tr><td><code>prompts/*.yaml</code></td><td class="ok">← 프롬프트 엔지니어가 편집하는 곳 (버전별)</td></tr>
-    <tr><td><code>plr_prompts.py</code> · <code>plr_core.py</code></td><td>프롬프트 구성 + 응답 파싱(판별 코어)</td></tr>
-    <tr><td><code>registry.py</code></td><td>모델(gemma/mock) · 파이프라인(plr/search) 레지스트리</td></tr>
-    <tr><td><code>re_score.py</code> · <code>run_search_eval.py</code></td><td>plr 실행 · search 평가</td></tr>
-    <tr><td><code>experiment.py</code></td><td>experiment.yaml 교차곱 러너</td></tr>
-    <tr><td><code>report.py</code></td><td>ledger → HTML 리포트</td></tr>
-    <tr><td><code>dataset.py</code> · <code>validate.py</code></td><td>데이터셋 추상화 · 형식 검증</td></tr>
-    <tr><td><code>eval/ledger.jsonl</code></td><td>실험 기록(추이 저장소, append-only)</td></tr>
-    <tr><td><code>skills/prepare-dataset/</code></td><td>데이터셋 만드는 Claude 스킬(가이드)</td></tr>
-    <tr><td><code>README · INSTALL · HANDOFF · DATASET_SPEC · EXPERIMENT_SPEC</code></td><td>설치 · 전달 · 데이터/실험 명세 문서</td></tr>
-  </table>
-</section>
+<h2><span class="n">6</span> 개선 루프 — /improve-prompt 스킬</h2>
+<div class="card" style="--c:var(--pink)">
+  <b>분석자 → 제안자 → 비판자 ⇄ 수정자 → 판단자</b> (최대 3라운드).
+  분석자는 오답 크롭을 <b>이미지로 직접 열람</b>하고 패턴별 obj_id를 명명;
+  모든 제안은 <b>본 샘플 + 수치 근거</b> 필수; 판단자 합격 기준(측정 가능한 예상효과 등)을
+  통과해야 <code>prompts/&lt;신버전&gt;.yaml</code> 초안이 나옵니다.
+  상세: <code>skills/improve-prompt/SKILL.md</code>
+</div>
 
-<!-- PARAMS -->
-<section id="params">
-  <h2><span class="num">05</span>4개 파라미터</h2>
-  <p class="sub">이 네 축을 조합해 실험한다.</p>
-  <table>
-    <tr><th style="width:150px">축</th><th>플래그</th><th>값 예시</th></tr>
-    <tr><td><b>데이터셋</b></td><td><code>--dataset &lt;경로&gt;</code></td><td>받는 사람이 만든 골든셋 디렉터리</td></tr>
-    <tr><td><b>모델</b></td><td><code>--model</code></td><td><code>gemma</code> (실측·GPU) · <code>mock</code> (연습·GPU-free)</td></tr>
-    <tr><td><b>프롬프트</b></td><td><code>--version</code></td><td><code>plr_v1.3_cot</code> · <code>plr_v1.4_cot</code> …</td></tr>
-    <tr><td><b>파이프라인</b></td><td><code>--pipeline</code></td><td><code>plr</code> (속성) · <code>search</code> (검색)</td></tr>
-  </table>
-</section>
+<h2><span class="n">7</span> 실측(GPU) 전제조건</h2>
+<div class="card warn">
+  운영 <code>ir</code> 컨테이너가 GPU/VRAM을 점유 중 — <b>중지 후 실행하거나 오프피크에</b>:
+  <code>docker-compose stop imageretrieval</code> → <code>lab run --model gemma …</code> → <code>start</code>.
+  모델 준비는 <code>docs/INSTALL.md</code>.
+</div>
 
-<!-- PROMPTS -->
-<section id="prompts">
-  <h2><span class="num">06</span>프롬프트 &amp; 파이프라인 구조 (실제)</h2>
-  <p class="sub">“프롬프트”는 한 파일이 아니다 — 버전별 파일, plr/search 두 계열, system/템플릿 종류로 나뉜다.
-     런타임 소스는 <b>두 갈래</b>: 기본은 <code>plr_prompts.py</code> 상수(=현재 버전), <code>--version</code>을 주면 그 버전 <code>prompts/&lt;V&gt;.yaml</code>을 로드한다.
-     이 랩은 운영 <code>core/ir</code>에서 lean 추출 — 구조·내용 동일(<code>plr_prompts.py</code> 바이트 일치).</p>
+<h2><span class="n">8</span> 문서 지도</h2>
+<table>
+<tr><td><code>README.ko.md</code> / <code>README.md</code></td><td>전체 개요 (한/영)</td></tr>
+<tr><td><code>docs/STRUCTURE.html</code></td><td>아키텍처 시각화</td></tr>
+<tr><td><code>docs/DATASET_SPEC.md</code></td><td>데이터셋 스키마 + 생성 절차 + generic 라벨 선언</td></tr>
+<tr><td><code>docs/EXPERIMENT_SPEC.md</code></td><td>experiment.yaml 스펙 (축·ledger·종료코드)</td></tr>
+<tr><td><code>docs/HANDOFF.md</code></td><td>외부 프롬프트 엔지니어 워크플로</td></tr>
+<tr><td><code>docs/INSTALL.md</code></td><td>GPU/Gemma 셋업</td></tr>
+<tr><td><code>SESSION_HANDOFF.md</code></td><td>세션 인수인계 (진행 상태·결정 기록)</td></tr>
+</table>
 
-  <h3>① 기본 경로 = <code>plr_prompts.py</code> 상수 8개 (= 현재 버전 v1.4)</h3>
-  <p style="font-size:14.5px;color:#48515b;margin:2px 0 8px"><code>--version</code> 없이 돌리면 <code>build_plr_messages</code>가 이 상수들로 메시지를 조립한다.
-    <code>IR_PLR_FORMAT</code>(yaml/json) × <code>IR_PLR_REASON</code>(on/off) <b>env</b>가 어느 상수를 쓸지 고른다. 이 기본 경로는
-    <b>core/ir과 바이트 동일</b>(parity·<code>lab port</code>가 이식하는 대상).</p>
-  <table>
-    <tr><th style="width:120px">파이프라인</th><th style="width:120px">종류</th><th>상수 (plr_prompts.py)</th></tr>
-    <tr><td rowspan="3"><span class="pill">plr</span> 속성</td><td>system</td><td><code>_PLR_SYSTEM_PROMPT</code></td></tr>
-    <tr><td>템플릿·사람</td><td><code>_PLR_YAML_PERSON_TEMPLATE</code> · <code>_PLR_YAML_COT_PERSON_TEMPLATE</code>(CoT) · <code>_PLR_PERSON_USER_TEMPLATE</code></td></tr>
-    <tr><td>템플릿·차량</td><td><code>_PLR_YAML_VEHICLE_TEMPLATE</code> · <code>_PLR_VEHICLE_USER_TEMPLATE</code></td></tr>
-    <tr><td rowspan="2"><span class="pill amber">search</span> 검색</td><td>system</td><td><code>_QUERY_PARSER_SYSTEM_PROMPT</code></td></tr>
-    <tr><td>템플릿</td><td><code>_QUERY_PARSER_USER_TEMPLATE</code> &nbsp;<span style="color:#6b7480">+ <code>parser/qp_v0.4.yaml</code> 시노님 사전(색·성별·차종)</span></td></tr>
-  </table>
-
-  <h3>② 버전 프롬프트 소스 = <code>prompts/&lt;버전&gt;.yaml</code> (3개)</h3>
-  <div class="svgwrap"><pre style="background:#fff;color:#1f2933;margin:0">
-prompts/                                parser/
-├── plr_v0.4.yaml                       └── qp_v0.4.yaml   <span class="c"># search 시노님 사전(결정론)</span>
-├── plr_v1.3_cot.yaml
-└── plr_v1.4_cot.yaml   <span class="c"># 각 파일 = 한 버전. 내부에 두 블록:</span>
-      ├── <b style="color:#0d7d76">plr:</b>          { system, person_user, person_user_no_reason, vehicle_user }
-      └── <b style="color:#b26a00">query_parser:</b> { system, user }
-  </pre></div>
-  <p style="font-size:14.5px;color:#48515b;margin:2px 0 0"><code>lab run --version plr_v1.3_cot</code>은 <code>FilePromptProvider</code>로 그 파일을 로드해 <b>그 버전의 프롬프트</b>를 모델에 보낸다 —
-    그래서 experiment의 <code>prompts:[v1.3, v1.4]</code>가 <b>진짜 다른 프롬프트로 비교</b>된다(실증: v1.3=<code>34008…</code> ≠ v1.4=<code>85bf4…</code>). 없는 버전·mock은 상수로 폴백.
-    각 파일 = 한 버전 { <code>plr</code>:{system, person_user, …}, <code>query_parser</code>:{system, user} }. (기본/현재 v1.4는 상수와 parity 유지 — <code>prompt_hash</code>·<code>lab port</code>가 확인.)</p>
-
-  <div class="note" style="margin-top:16px">
-    <b>⚠️ 편집 대상</b> — 특정 <b>버전</b>의 프롬프트를 고치려면 그 <code>prompts/&lt;V&gt;.yaml</code>을 편집한다(<code>lab run --version V</code>가 실제로 로드).
-    <b>기본/현재(v1.4)</b> 및 <b>core/ir로 이식되는 것</b>은 <code>plr_prompts.py</code> 상수 — v1.4를 바꾸면 상수 + <code>prompts/plr_v1.4_cot.yaml</code>을 <b>함께</b>(parity). <code>prompt_hash</code>·<code>lab port</code>가 어긋남을 잡는다.
-  </div>
-
-  <h3>바꿀 수 있는 축</h3>
-  <div class="grid c3">
-    <div class="tile"><h4>① 프롬프트 변경</h4><p><code>--version</code>이 그 버전 <code>prompts/&lt;V&gt;.yaml</code>을 실제 로드 → 버전 스위치가 <b>진짜 프롬프트를 바꾼다</b>. 새 변형은 yaml 하나 추가로 비교. (기본/현재는 상수+yaml parity.)</p></div>
-    <div class="tile"><h4>② 파이프라인 변경</h4><p><code>--pipeline plr|search</code> — 어느 판별/검색 경로를 쓸지. 코어는 <code>run_plr</code> / <code>run_search</code>.</p></div>
-    <div class="tile"><h4>③ 추론 토글</h4><p><code>IR_PLR_REASON=on</code> → CoT(<code>_..._COT_PERSON_TEMPLATE</code>) / off → 비CoT. 정확도 ↔ 토큰 트레이드오프.</p></div>
-  </div>
-</section>
-
-<!-- DATA -->
-<section id="data">
-  <h2><span class="num">07</span>데이터 형식 (받는 사람이 만드는 것)</h2>
-  <p class="sub">데이터셋 = 디렉터리 하나. 자세한 스키마는 <code>DATASET_SPEC.md</code>.</p>
-  <div class="grid c2">
-    <div>
-      <pre><span class="c"># 데이터셋 디렉터리 구조</span>
-my_dataset/
-├── crops/
-│   ├── 1001.jpg      <span class="c"># 파일명 = obj_id</span>
-│   ├── 1002.jpg
-│   └── ...
-├── labels.jsonl      <span class="c"># 사람 정답</span>
-├── queries.jsonl     <span class="c"># (검색용, 선택)</span>
-└── manifest.yaml     <span class="c"># attribute·n·생성정보</span></pre>
-    </div>
-    <div>
-      <pre><span class="c"># labels.jsonl (한 줄 = 한 객체)</span>
-{<span class="s">"obj_id"</span>:<span class="s">"1001"</span>,<span class="s">"label"</span>:<span class="s">"female"</span>}
-{<span class="s">"obj_id"</span>:<span class="s">"1002"</span>,<span class="s">"label"</span>:<span class="s">"male"</span>}
-
-<span class="c"># queries.jsonl (검색 정답)</span>
-{<span class="s">"query"</span>:<span class="s">"검은색 차"</span>,<span class="s">"relevant"</span>:[<span class="s">"1002"</span>]}
-
-<span class="c"># manifest.yaml</span>
-attribute: gender
-n: 63</pre>
-    </div>
-  </div>
-  <div class="note">
-    <b>검증은 필수</b> — <code>python3 lab.py validate-dataset --dataset my_dataset</code> 가
-    <span class="ok">PASS</span> 할 때까지 형식을 맞춘다(크롭↔라벨 정합, 필수 필드 등을 fail-loud로 알려줌).
-    데이터셋 구성이 처음이면 <b>prepare-dataset 스킬</b>을 Claude Code에 올려 대화형으로 진행.
-  </div>
-</section>
-
-<!-- USAGE -->
-<section id="usage">
-  <h2><span class="num">08</span>사용법 (단계별)</h2>
-  <p class="sub">실제 명령 그대로. 실측(모델 호출)은 GPU가 필요하고, 연습은 <code>mock</code>으로 GPU 없이.</p>
-  <ol class="steps">
-    <li>
-      <h3>설치</h3>
-      <p>파이썬 가상환경 + 의존성. 실측하려면 Gemma GGUF 모델 다운로드가 필요(자세히는 <code>INSTALL.md</code>).</p>
-      <pre><span class="k">python3</span> -m venv .venv && <span class="k">source</span> .venv/bin/activate
-<span class="k">pip</span> install -r requirements.txt      <span class="c"># llama-cpp-python은 GPU 빌드</span></pre>
-    </li>
-    <li>
-      <h3>루프 체득 — 데모 (GPU 불필요)</h3>
-      <p>합성 데이터 + mock 모델로 build→run→eval 한 사이클을 즉시 재현. 도구가 어떻게 도는지 먼저 눈으로 확인.</p>
-      <pre><span class="k">python3</span> lab.py demo</pre>
-    </li>
-    <li>
-      <h3>데이터셋 준비 &amp; 검증</h3>
-      <p>영상 인덱스에서 크롭을 뽑고(<code>build-golden</code>) 오분류만 지정해 라벨링(<code>label</code>), 혹은 직접 구성 후 검증.</p>
-      <pre><span class="k">python3</span> lab.py build-golden --video <span class="s">&lt;video_id&gt;</span> --attribute <span class="s">gender</span> --dataset <span class="s">my_dataset</span>
-<span class="k">python3</span> lab.py label --dataset <span class="s">my_dataset</span> --female-in-male <span class="s">M3,M7</span> --male-in-female <span class="s">F2</span>
-<span class="k">python3</span> lab.py validate-dataset --dataset <span class="s">my_dataset</span>   <span class="c"># → PASS 까지</span></pre>
-    </li>
-    <li>
-      <h3>단일 실험 — 실행 &amp; 평가</h3>
-      <p>바꾼 프롬프트를 골든 크롭에만 재실행(재색인 없음)하고 직전 버전 대비 Δ를 본다.</p>
-      <pre><span class="k">python3</span> lab.py run  --model <span class="s">gemma</span> --pipeline <span class="s">plr</span> --version <span class="s">plr_v1.4_cot</span> --attribute <span class="s">gender</span> --dataset <span class="s">my_dataset</span>
-<span class="k">python3</span> lab.py eval --attribute <span class="s">gender</span> --dataset <span class="s">my_dataset</span>
-<span class="c"># → accuracy 0.90  Δ vs plr_v1.3_cot: +0.11   bias female→male: 0.12</span></pre>
-    </li>
-    <li>
-      <h3>조합 실험 — 매트릭스</h3>
-      <p><code>experiment.yaml</code>에 축을 나열하면 교차곱 전 셀을 <b>run→자동 eval→ledger</b>로 실행. 한 셀이 실패해도 나머지는 계속(fail-loud-but-continue). 스키마는 <code>EXPERIMENT_SPEC.md</code>.</p>
-      <pre><span class="c"># experiment.yaml</span>
-datasets:  [<span class="s">./my_dataset</span>]
-models:    [<span class="s">gemma</span>]
-prompts:   [<span class="s">plr_v1.3_cot</span>, <span class="s">plr_v1.4_cot</span>]   <span class="c"># 2개 → 2셀 비교</span>
-pipelines: [<span class="s">plr</span>]
-attributes:[<span class="s">gender</span>]
-
-<span class="k">python3</span> lab.py experiment run experiment.yaml</pre>
-    </li>
-    <li>
-      <h3>시각화 — 리포트</h3>
-      <p>ledger를 한 장의 자체완결 HTML로. 브라우저로 더블클릭하면 오프라인에서 열린다.</p>
-      <pre><span class="k">python3</span> lab.py report --out report.html
-<span class="c"># 추이 차트 · 모델×프롬프트 히트맵 · "어떤 프롬프트 변경 → 어떤 지표 Δ"</span></pre>
-    </li>
-    <li>
-      <h3>이식 — 개선을 운영으로</h3>
-      <p>이긴 프롬프트를 운영 코드와 diff. 기본은 <b>읽기 전용</b>(운영 미변경). 실제 적용은 사람이 <code>--apply</code>로 확정하고 parity 테스트를 돌린다.</p>
-      <pre><span class="k">python3</span> lab.py port                 <span class="c"># lab ↔ core/ir 프롬프트 표면 diff (읽기전용)</span>
-<span class="k">python3</span> lab.py port --apply         <span class="c"># 확정 적용 (검증 후)</span></pre>
-    </li>
-  </ol>
-</section>
-
-<!-- LEDGER -->
-<section id="ledger">
-  <h2><span class="num">09</span>ledger &amp; 리포트</h2>
-  <p class="sub">모든 실험은 append-only 기록으로 남아 추이를 만든다.</p>
-  <div class="grid c2">
-    <div>
-      <h3>ledger 레코드 한 줄</h3>
-      <pre>{
-  <span class="s">"attribute"</span>:<span class="s">"gender"</span>, <span class="s">"version"</span>:<span class="s">"plr_v1.4_cot"</span>,
-  <span class="s">"accuracy"</span>:0.90, <span class="s">"bias"</span>:{<span class="s">"pair"</span>:<span class="s">"female-&gt;male"</span>,<span class="s">"rate"</span>:0.12},
-  <span class="c">// 조합 키 (무엇이 이 결과를 냈나)</span>
-  <span class="s">"dataset"</span>:<span class="s">"my_dataset"</span>, <span class="s">"model"</span>:<span class="s">"gemma"</span>,
-  <span class="s">"pipeline"</span>:<span class="s">"plr"</span>, <span class="s">"prompt_hash"</span>:<span class="s">"744125fa"</span>
-}</pre>
-    </div>
-    <div>
-      <h3>리포트 3개 섹션</h3>
-      <div class="tile" style="margin-bottom:10px"><h4>📈 추이</h4><p>버전 진행에 따른 accuracy·bias·recall 라인.</p></div>
-      <div class="tile" style="margin-bottom:10px"><h4>🔥 히트맵</h4><p>모델 × 프롬프트 지표 그리드 — 조합 비교.</p></div>
-      <div class="tile"><h4>🔀 프롬프트 변화 → Δ</h4><p>연속 버전의 <code>prompt_hash</code> 전이와 그 지표 변화를 연결.</p></div>
-    </div>
-  </div>
-  <p style="font-size:14px;color:#6b7480"><code>prompt_hash</code>는 실제 프롬프트 표면(<code>prompts/*.yaml</code> + <code>plr_prompts.py</code> + <code>plr_core.py</code>)의 내용 해시 — <code>lab port</code>가 이식하는 바로 그 파일들과 동일한 단일 출처.</p>
-</section>
-
-<!-- HANDOFF -->
-<section id="handoff">
-  <h2><span class="num">10</span>전달 · 이식 (외부 엔지니어용)</h2>
-  <p class="sub">프롬프트를 개선해 되돌리는 사람을 위한 요약. 자세히는 <code>HANDOFF.md</code>.</p>
-  <div class="grid c3">
-    <div class="tile"><h4>✏️ 편집</h4><p><b><code>plr_prompts.py</code> 상수 + 동일 <code>prompts/*.yaml</code></b>(parity)를 함께 고친다. 저장·인덱싱 등 운영 인프라는 건드리지 않는다. (자세한 구조 → §06)</p></div>
-    <div class="tile"><h4>📏 측정</h4><p>고치면 <b>반드시</b> <code>run</code>→<code>eval</code>로 Δ를 확인. 악화면 롤백.</p></div>
-    <div class="tile"><h4>↩️ 되돌리기</h4><p>이긴 프롬프트는 <code>lab port</code>로 diff를 떠서 ZioVision 팀에 전달. 팀이 eval 게이트 후 운영 적용.</p></div>
-  </div>
-  <div class="note" style="margin-top:16px">
-    <b>실측 전제</b> — <code>run</code>이 Gemma를 로드하므로 <b>GPU + 모델</b>이 필요하다(운영 <span class="mono">ir</span>과 GPU 경합을 피해 전용/오프피크 사용). 라벨링은 사람 정답이 필요하다.
-    GPU가 없으면 <code>--model mock</code>·<code>lab demo</code>로 워크플로만 익힌다.
-  </div>
-</section>
-
+<footer>plr-prompt-lab · GUIDE.html (자체완결 · 오프라인) — 갱신 2026-07-02</footer>
 </main>
-
-<footer>
-  plr-prompt-lab · 구조 &amp; 사용법 가이드 · 자체완결 HTML(오프라인)<br>
-  더 읽기: README.md · INSTALL.md · HANDOFF.md · DATASET_SPEC.md · EXPERIMENT_SPEC.md
-</footer>
-
 </body>
 </html>

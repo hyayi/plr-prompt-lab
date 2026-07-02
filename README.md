@@ -16,9 +16,12 @@ a database, Redis, or a GPU** for the mock/synthetic path. The real Gemma
 inference step (re-scoring crops) requires a dedicated GPU and human-labeled
 crops — see [Real-run preconditions](#real-run-preconditions) below.
 
-New in v2: selectable `--dataset` parameter, `validate-dataset` subcommand,
-`lab demo` GPU-free onboarding, [DATASET_SPEC.md](docs/DATASET_SPEC.md) format
-spec, and [HANDOFF.md](docs/HANDOFF.md) external prompt-engineer guide.
+New in v2: `--dataset` parameter, `validate-dataset`, `lab demo`,
+[DATASET_SPEC.md](docs/DATASET_SPEC.md), [HANDOFF.md](docs/HANDOFF.md);
+Phase 2 added the model/pipeline registry, `lab experiment run`, and
+`lab report`. Latest (2026-07): plr_v1.5_cot forced-commit sync,
+precision/F1 + margin/quality calibration metrics, `lab gallery` visual
+eval, generic manifest-declared labels, and the improve-prompt agent skill.
 
 ---
 

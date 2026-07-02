@@ -4,7 +4,7 @@
 #   python3 lab.py experiment run examples/experiment.example.yaml
 #
 # The runner enumerates the CROSS-PRODUCT of all axes and for each cell:
-#   (a) run  — invoke the pipeline runner (re_score for plr, run_search_over_golden for search)
+#   (a) run  — re_score (PLR re-scoring) with the cell's model/prompt/format/reason
 #   (b) eval — score predictions vs labels and append a record to the ledger
 #
 # A cell that errors is logged and skipped; all other cells continue running.
@@ -21,12 +21,11 @@ models:
   # - gemma                   # real LabGemmaModel (requires GPU + model weights)
 
 prompts:
-  - plr_v1.4_cot              # prompt version tag — passed as --version to run_eval
-  - plr_v1.5_exp              # add more versions to compare
+  - plr_v1.4_cot              # pre-forced-commit baseline
+  - plr_v1.5_cot              # forced-commit (no unknown) — the standing A/B
 
 pipelines:
   - plr                       # attribute extraction pipeline (re_score → run_eval)
-  # - search                  # text retrieval pipeline (run_search_over_golden → run_search_eval)
 
 attributes:
   - gender                    # PLR attribute: gender | vehicle_type | military
