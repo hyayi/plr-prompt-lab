@@ -1,7 +1,8 @@
 """provenance — stable content hashes of the active prompt surface.
 
 The "prompt surface" is the same true-surface set that ``lab port`` diffs
-against core/ir: the prompt YAML files under ``prompts/`` plus ``plr_prompts.py``.
+against core/ir: the prompt YAML files under ``prompts/`` plus ``plr_prompts.py``
+and ``plr_core.py`` (defined once in ``surface_relpaths`` and reused by both).
 ``prompt_hash()`` returns a short, stable sha256 prefix of that content so every
 ledger writer (``eval/run_eval.py``, ``run_search_eval.py``) and any reporter
 stamps the SAME hash for a given prompt state — letting a ledger record be tied
@@ -18,29 +19,37 @@ from pathlib import Path
 _LAB_ROOT = Path(__file__).resolve().parent
 
 # Files that make up the active prompt surface, relative to the lab root.
-# Mirrors lab.py's _PORT_FILES prompt entries (the true-surface diff set):
-# every prompts/*.yaml plus plr_prompts.py.  plr_core.py is deliberately
-# excluded — it is parsing/scoring glue, not prompt content.
+# This is the SINGLE SOURCE OF TRUTH shared by prompt_hash() and lab port
+# (lab.py builds its diff set from surface_relpaths()): every prompts/*.yaml
+# plus the code that shapes the model output — plr_prompts.py (prompt
+# construction) and plr_core.py (target marker + response parsing). A change to
+# any of these can change predictions, so all are tracked in the ledger hash and
+# surfaced by lab port. Keep this list and lab port in sync via this function.
 _PROMPTS_DIR = "prompts"
-_PROMPT_PY = "plr_prompts.py"
+_SURFACE_PY = ("plr_prompts.py", "plr_core.py")
+
+
+def surface_relpaths(lab_root: str | os.PathLike[str] | None = None) -> list[str]:
+    """Relative paths of the existing prompt-surface files, deterministic order.
+
+    Single source of truth for both prompt_hash() and lab port. Sorted by
+    relative path so callers are independent of directory-listing order.
+    """
+    root = Path(lab_root) if lab_root else _LAB_ROOT
+    rels: list[str] = []
+    prompts_dir = root / _PROMPTS_DIR
+    if prompts_dir.is_dir():
+        rels.extend(sorted(str(p.relative_to(root)) for p in prompts_dir.glob("*.yaml")))
+    for py in _SURFACE_PY:
+        if (root / py).exists():
+            rels.append(py)
+    return rels
 
 
 def _surface_paths(lab_root: str | os.PathLike[str] | None = None) -> list[Path]:
-    """Return the sorted list of existing prompt-surface files.
-
-    Sorted by relative path so the hash is deterministic regardless of the
-    filesystem's directory-listing order.
-    """
+    """Absolute paths of the prompt-surface files (see surface_relpaths)."""
     root = Path(lab_root) if lab_root else _LAB_ROOT
-    paths: list[Path] = []
-    prompts_dir = root / _PROMPTS_DIR
-    if prompts_dir.is_dir():
-        paths.extend(sorted(prompts_dir.glob("*.yaml")))
-    py_path = root / _PROMPT_PY
-    if py_path.exists():
-        paths.append(py_path)
-    # Sort by path relative to root for a stable, location-independent order.
-    return sorted(paths, key=lambda p: str(p.relative_to(root)))
+    return [root / rel for rel in surface_relpaths(root)]
 
 
 def prompt_hash(
@@ -49,9 +58,10 @@ def prompt_hash(
 ) -> str:
     """Return a short stable sha256 hash of the active prompt surface content.
 
-    Hashes ``prompts/*.yaml`` + ``plr_prompts.py`` (the same true-surface files
-    ``lab port`` diffs).  Each file contributes its relative path plus its raw
-    bytes, so both a content edit and a rename change the hash.
+    Hashes ``prompts/*.yaml`` + ``plr_prompts.py`` + ``plr_core.py`` (the same
+    true-surface files ``lab port`` diffs, via ``surface_relpaths``).  Each file
+    contributes its relative path plus its raw bytes, so both a content edit and
+    a rename change the hash.
 
     Args:
       lab_root: repo root to hash (default: this module's directory).

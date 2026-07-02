@@ -370,15 +370,13 @@ def _cmd_eval(args: argparse.Namespace) -> int:
 # Subcommand: port
 # =====================================================================
 
-# True prompt surface: files to compare between lab and core/ir.
-_PORT_FILES = [
-    # (lab relative path,  core/ir relative path)
-    ("prompts/plr_v0.4.yaml",    "prompts/plr_v0.4.yaml"),
-    ("prompts/plr_v1.3_cot.yaml","prompts/plr_v1.3_cot.yaml"),
-    ("prompts/plr_v1.4_cot.yaml","prompts/plr_v1.4_cot.yaml"),
-    ("plr_prompts.py",           "plr_prompts.py"),
-    ("plr_core.py",              "plr_core.py"),
-]
+# True prompt surface: files to compare between lab and core/ir. Built from the
+# single source of truth (provenance.surface_relpaths) so `lab port` and the
+# ledger prompt_hash always cover the SAME files. Same relative path both sides;
+# globs prompts/*.yaml so new prompt versions are picked up automatically.
+def _port_files() -> list[tuple[str, str]]:
+    import provenance
+    return [(rel, rel) for rel in provenance.surface_relpaths(_LAB_ROOT)]
 
 
 def _cmd_port(args: argparse.Namespace) -> int:
@@ -404,7 +402,7 @@ def _cmd_port(args: argparse.Namespace) -> int:
 
     all_diffs: list[str] = []
 
-    for lab_rel, ir_rel in _PORT_FILES:
+    for lab_rel, ir_rel in _port_files():
         lab_path = os.path.join(_LAB_ROOT, lab_rel)
         ir_path = os.path.join(core_ir, ir_rel)
 
@@ -434,7 +432,7 @@ def _cmd_port(args: argparse.Namespace) -> int:
 
     # --apply: copy lab files into core/ir
     print("\n[port] --apply: copying lab files into core/ir …")
-    for lab_rel, ir_rel in _PORT_FILES:
+    for lab_rel, ir_rel in _port_files():
         lab_path = os.path.join(_LAB_ROOT, lab_rel)
         ir_path = os.path.join(core_ir, ir_rel)
         if os.path.exists(lab_path):
