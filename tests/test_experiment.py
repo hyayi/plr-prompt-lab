@@ -415,19 +415,3 @@ def test_enumerate_cells_cross_product(tmp_path: Path) -> None:
     for c in cells_plr:
         assert c.pipeline == "plr"
         assert c.attribute in {"gender", "military"}
-
-    # search: 2 datasets × 1 model × 2 prompts × 1 pipeline (no attributes) = 4
-    cfg_search: dict[str, Any] = {
-        "datasets": ["ds1", "ds2"],
-        "models": ["mock"],
-        "prompts": ["v1", "v2"],
-        "pipelines": ["search"],
-        "attributes": ["gender"],   # ignored for search
-    }
-    cells_search = enumerate_cells(cfg_search)
-    assert len(cells_search) == 2 * 1 * 2, (
-        f"Expected 4 search cells, got {len(cells_search)}"
-    )
-    for c in cells_search:
-        assert c.pipeline == "search"
-        assert c.attribute == ""  # search cells have no attribute

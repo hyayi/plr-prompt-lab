@@ -52,6 +52,58 @@ def _surface_paths(lab_root: str | os.PathLike[str] | None = None) -> list[Path]
     return [root / rel for rel in surface_relpaths(root)]
 
 
+def read_seed_hash(lab_root: str | os.PathLike[str] | None = None) -> str | None:
+    """Read the core/ir HEAD recorded in SEED.md (None if absent).
+
+    Moved here from run_search_eval.py when the search pipeline was removed —
+    seed provenance is used by `lab port` (stale-seed warning) and run_eval.
+    """
+    root = Path(lab_root) if lab_root else _LAB_ROOT
+    seed_md = root / "SEED.md"
+    if not seed_md.exists():
+        return None
+    with open(seed_md, encoding="utf-8") as f:
+        for line in f:
+            # Matches: `- Source `core/ir HEAD`: `<hash>``
+            if "core/ir HEAD" in line and "`" in line:
+                parts = line.split("`")
+                if len(parts) >= 3:
+                    candidate = parts[-2].strip()
+                    if len(candidate) >= 7:
+                        return candidate
+    return None
+
+
+def warn_stale_seed(
+    lab_root: str | os.PathLike[str] | None,
+    seed_hash: str | None,
+    core_ir_path: str | None,
+) -> None:
+    """Print a stderr warning if the live core/ir HEAD != SEED.md hash."""
+    import subprocess
+    import sys
+
+    if seed_hash is None:
+        return
+    ir_path = core_ir_path or os.environ.get("CORE_IR_PATH")
+    if not ir_path or not os.path.isdir(os.path.join(ir_path, ".git")):
+        return
+    try:
+        result = subprocess.run(
+            ["git", "-C", ir_path, "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        live_head = result.stdout.strip()
+        if live_head and live_head != seed_hash:
+            print(
+                f"WARNING: core/ir HEAD ({live_head[:12]}) != SEED.md hash "
+                f"({seed_hash[:12]}) — Δ may not be comparable (stale seed).",
+                file=sys.stderr,
+            )
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def prompt_hash(
     lab_root: str | os.PathLike[str] | None = None,
     length: int = 12,

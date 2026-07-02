@@ -8,7 +8,8 @@ without storage / redis / scheduler / indexing.
 ## Source
 
 - Source repo: `ziomilitary/core/ir`
-- Source `core/ir HEAD`: `1690f257b2a4a463322c7fe441e3f15a7501459b`
+- Source `core/ir HEAD`: `92d2665559fa1847aa561a7154a1fa99641d66a2`
+  (re-synced 2026-07-02: plr_v1.5_cot forced-commit surface copied both ways; original seed was `c2fc1cf`, then `1690f25`)
   (the S0/S1 shared-core refactor `refactor(ir): extract shared pure cores`; the lab
   was seeded from this working tree — originally `c2fc1cf` + the run_plr/run_search/
   Model extraction, now committed as this hash so a re-seed reproduces the surface.)

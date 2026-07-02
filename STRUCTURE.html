@@ -156,8 +156,9 @@
 
 <h1><span class="repo">plr-prompt-lab</span> — 프로젝트 구조 시각화</h1>
 <div class="sub">
-  PLR(객체 속성 추출) + 텍스트검색의 프롬프트·파이프라인을 <b>측정하며 개선</b>하는 독립 실험 도구
-  &nbsp;·&nbsp; 2026-07-02 기준 (HEAD <code>21fcacc</code>, 79 tests green)
+  <b>PLR(객체 속성 추출) 프롬프트를 측정하며 개선</b>하는 독립 실험 도구 — PLR 전용
+  (텍스트검색 파이프라인은 2026-07 제거; 검색 평가는 core/ir·cctv-eval 담당)
+  &nbsp;·&nbsp; 2026-07-02 기준 (plr_v1.5_cot 강제커밋, 72 tests green)
 </div>
 
 <!-- ================= ① 저장소 생태계 ================= -->
@@ -230,15 +231,13 @@
       <div class="t"><span class="dot"></span>러너 (run 단계)</div>
       <div class="chips">
         <span class="chip hl" style="--c: var(--run)"><b>re_score.py</b></span>
-        <span class="chip">re_score() → <b>plr</b></span>
-        <span class="chip">run_search_over_golden() → <b>search</b></span>
+        <span class="chip">re_score() → <b>plr</b> (크롭당 Gemma 1회, 게이트 없음)</span>
       </div>
     </div>
     <div class="card band" style="--c: var(--eval)">
       <div class="t"><span class="dot"></span>평가 (eval 단계) → 추이 → 리포트</div>
       <div class="chips">
-        <span class="chip">eval/run_eval.py <b>(accuracy·bias)</b></span>
-        <span class="chip">run_search_eval.py <b>(recall@k)</b></span>
+        <span class="chip">eval/run_eval.py <b>(accuracy·bias·pred_unknown)</b></span>
         <span class="chip hl" style="--c: var(--eval)"><b>eval/ledger.jsonl</b> (append-only)</span>
         <span class="chip">report.py → <b>report.html</b></span>
       </div>
@@ -250,13 +249,9 @@
   <div class="card band" style="--c: var(--core)">
     <div class="t"><span class="dot"></span>순수 코어 <span class="plain" style="font-weight:400; color:var(--muted); font-size:12px">— core/ir과 공유 심볼 · DB/redis 무접근</span></div>
     <div class="chips">
-      <span class="chip hl" style="--c: var(--core)"><b>plr_core.py</b> run_plr (build_messages 주입구)</span>
-      <span class="chip hl" style="--c: var(--core)"><b>search_core.py</b> run_search (하드필터+랭킹)</span>
-      <span class="chip"><b>query_parser.py</b> 질의→슬롯 (사전/gemma, build_messages 주입구)</span>
-      <span class="chip">scoring.py</span>
-      <span class="chip">query_normalizer.py</span>
-      <span class="chip">plr_schema.py</span>
-      <span class="chip">quality_gate.py</span>
+      <span class="chip hl" style="--c: var(--core)"><b>plr_core.py</b> run_plr (build_messages 주입구 · 1회 호출)</span>
+      <span class="chip">plr_schema.py (enum 단일출처)</span>
+      <span class="chip">quality_gate.py (게이팅 제거 — run_plr 시그니처 호환용만)</span>
     </div>
   </div>
 
@@ -266,10 +261,9 @@
     <div class="card band" style="--c: var(--prompt)">
       <div class="t"><span class="dot"></span>프롬프트 소스 (④ 참고)</div>
       <div class="chips">
-        <span class="chip hl" style="--c: var(--prompt)"><b>plr_prompts.py</b> 상수 (기본 = v1.4)</span>
+        <span class="chip hl" style="--c: var(--prompt)"><b>plr_prompts.py</b> 상수 (기본 = v1.5 강제커밋)</span>
         <span class="chip hl" style="--c: var(--prompt)"><b>prompts/*.yaml</b> 버전별 (--version)</span>
-        <span class="chip">providers/file_prompt_provider.py</span>
-        <span class="chip">parser/qp_v0.4.yaml 시노님 사전</span>
+        <span class="chip">providers/file_prompt_provider.py (commit_enums 플래그)</span>
       </div>
     </div>
     <div class="card band" style="--c: var(--infra)">
@@ -319,26 +313,27 @@
     <div class="node" style="--c: var(--eval)"><b>eval/run_eval.py</b> <span class="d">accuracy · recall(class) · bias · confusion</span></div>
   </div>
 
-  <!-- search -->
+  <!-- search: removed -->
   <div class="flow">
-    <div class="card" style="text-align:center; border-color: rgba(56,189,248,.5)">
-      <div class="t" style="justify-content:center; color: var(--cli)">SEARCH 파이프라인 — 텍스트 검색 (recall@k)</div>
+    <div class="card" style="text-align:center; border-color: rgba(148,163,184,.4); opacity:.75">
+      <div class="t" style="justify-content:center; color: var(--infra)">SEARCH 파이프라인 — 제거됨 (2026-07)</div>
     </div>
     <div class="down">▼</div>
-    <div class="node data" style="--c: var(--infra)"><b>queries.jsonl</b> <span class="d">{query, relevant:[obj_id…]}</span></div>
+    <div class="node data" style="--c: var(--infra); opacity:.8">
+      lab은 PLR 전용 — 검색 recall은 lab이 담을 수 없는 표면(임베딩·VQA)이 지배
+      <span class="d">end-to-end 검색 평가: core/ir 재평가(풀스택) + cctv-eval 오라클.
+      PLR 라벨이 검색의 입력이므로 PLR accuracy/bias/pred_unknown이 lab의 신호.</span>
+    </div>
     <div class="down">▼</div>
-    <div class="node" style="--c: var(--core)"><b>query_parser</b> <span class="d">① dictionary 경로 (model=None · GPU-free) ② gemma 경로 (--version yaml 프롬프트)</span></div>
-    <div class="down">▼</div>
-    <div class="node" style="--c: var(--core)"><b>search_core.run_search</b> <span class="d">후보 = plr의 attributes.jsonl · 하드필터 + 속성매칭 랭킹</span></div>
-    <div class="down">▼</div>
-    <div class="node data" style="--c: var(--infra)"><b>search_results.jsonl</b></div>
-    <div class="down">▼</div>
-    <div class="node" style="--c: var(--eval)"><b>run_search_eval.py</b> <span class="d">recall@k · precision@k</span></div>
+    <div class="node data" style="--c: var(--infra); opacity:.8">
+      parity 미러는 유지 <span class="d">prompts/*.yaml의 query_parser 블록·plr_prompts.py 상수는
+      core/ir 바이트-동일 미러라서 남아 있음 (실행 경로만 제거)</span>
+    </div>
   </div>
 
 </div>
 
-<div class="down lbl"><span>▼</span><span class="txt">두 파이프라인 공통 꼬리</span></div>
+<div class="down lbl"><span>▼</span><span class="txt">PLR 파이프라인 꼬리</span></div>
 
 <div class="merge">
   <b>eval/ledger.jsonl</b> <span style="color:var(--muted)">(조합키: dataset · model · pipeline · prompt_hash · version)</span>
@@ -372,7 +367,7 @@
   <div class="qbox branch-r">
     <b style="color: var(--cli)">② 버전 경로 — prompts/&lt;V&gt;.yaml</b>
     <div class="d"><code>lab run --version V</code> → <b>FilePromptProvider</b>가 로드<br>
-    plr 블록(v1.3 ≠ v1.4 실제 해시 다름) + query_parser 블록(search, 2026-07-02 배선)</div>
+    plr 블록 — v1.5는 <b>commit_enums: true</b>로 unknown 없는 enum 주입 (구버전 yaml은 역사 보존)</div>
     <div style="margin-top:7px">
       <span class="pill-env">yaml의 format: 키가 wire format 고정</span>
       <span class="pill-env">IR_PLR_REASON은 양쪽 공통</span>
@@ -384,8 +379,7 @@
 
 <div class="qbox" style="border-color: rgba(244,114,182,.5)">
   <b style="color: var(--core)">주입구 (build_messages=None — 하위호환 seam)</b>
-  <div class="d"><code>plr_core.run_plr(build_messages=…)</code> — PLR 프롬프트 &nbsp;·&nbsp;
-  <code>query_parser.parse_query(build_messages=…)</code> — 검색 프롬프트<br>
+  <div class="d"><code>plr_core.run_plr(build_messages=…)</code> — PLR 프롬프트<br>
   None이면 상수 경로와 <b>바이트 동일</b> (운영 동작 보존)</div>
 </div>
 

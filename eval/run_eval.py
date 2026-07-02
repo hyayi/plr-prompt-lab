@@ -134,25 +134,48 @@ def main() -> None:
     if not ids:
         raise SystemExit("No overlap between predictions.jsonl and labels.jsonl")
 
-    classes = sorted({*(labels[i] for i in ids), *(preds[i] for i in ids)})
+    # Forced-commit compliance (plr_v1.5_cot): how often the model still
+    # answered unknown despite the commit instruction. Measured over ALL
+    # matched ids, before any label filtering.
+    n_pred_unknown = sum(1 for i in ids if preds[i] == "unknown")
+    pred_unknown = {
+        "rate": round(n_pred_unknown / len(ids), 4),
+        "count": f"{n_pred_unknown}/{len(ids)}",
+    }
+
+    # Human-unlabelable crops (label == "unknown", set via `lab label
+    # --unknown ...`) are EXCLUDED from accuracy/recall/bias/confusion: if a
+    # human cannot decide the attribute from the crop, there is no ground
+    # truth to be right or wrong against — under the forced-commit prompt the
+    # model must still answer, and counting those answers as errors would
+    # systematically punish committed guesses on undecidable crops.
+    eval_ids = [i for i in ids if labels[i] != "unknown"]
+    n_label_unknown = len(ids) - len(eval_ids)
+    if not eval_ids:
+        raise SystemExit(
+            "All labels are 'unknown' — nothing to score against. "
+            "Label at least one crop with a decided class."
+        )
+
+    classes = sorted({*(labels[i] for i in eval_ids), *(preds[i] for i in eval_ids)})
     confusion: dict[str, Counter] = defaultdict(Counter)
     correct = 0
-    for i in ids:
+    for i in eval_ids:
         confusion[labels[i]][preds[i]] += 1
         correct += labels[i] == preds[i]
-    n = len(ids)
+    n = len(eval_ids)
     acc = correct / n
 
     recall = {}
     for c in classes:
-        cid = [i for i in ids if labels[i] == c]
+        cid = [i for i in eval_ids if labels[i] == c]
         if cid:
             recall[c] = round(sum(preds[i] == c for i in cid) / len(cid), 4)
 
     bias = None
     if args.attribute in BIAS_PAIR:
         t_cls, as_cls = BIAS_PAIR[args.attribute]
-        tid = [i for i in ids if labels[i] == t_cls]
+        tid = [i for i in eval_ids if labels[i] == t_cls]
         if tid:
             bias = {"pair": f"{t_cls}->{as_cls}",
                     "rate": round(sum(preds[i] == as_cls for i in tid) / len(tid), 4),
@@ -161,6 +184,9 @@ def main() -> None:
     prev = _last_ledger(args.ledger, args.attribute, args.version)
 
     print(f"=== {args.attribute} eval: {args.version} (n={n}) ===")
+    if n_label_unknown:
+        print(f"excluded {n_label_unknown} human-unlabelable crop(s) (label=unknown)")
+    print(f"pred unknown rate: {pred_unknown['rate']:.3f} ({pred_unknown['count']})")
     print(f"accuracy: {acc:.3f} ({correct}/{n})", end="")
     if prev:
         d = acc - prev["accuracy"]
@@ -185,6 +211,10 @@ def main() -> None:
         "date": args.date or datetime.now().isoformat(timespec="seconds"),
         "n": n, "accuracy": round(acc, 4), "recall": recall, "bias": bias,
         "confusion": {t: dict(confusion[t]) for t in classes},
+        # plr_v1.5_cot forced-commit metrics: model unknown rate (over all
+        # matched ids) and how many crops were human-unlabelable (excluded).
+        "pred_unknown": pred_unknown,
+        "n_label_unknown": n_label_unknown,
         "seed_hash": seed_hash or "",
         "gemma_repo": gemma_repo,
         # ---- Experiment-combination keys (P2-1) ----

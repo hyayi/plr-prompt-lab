@@ -236,30 +236,3 @@ def _make_search_golden_dir(tmp_path: Path) -> Path:
     return sdir
 
 
-def test_run_search_black_vehicle_ranks_red_excluded(tmp_path: Path) -> None:
-    """'검은색 차' query: black car passes hard filter, red car is excluded."""
-    sys.path.insert(0, str(Path(__file__).parent.parent))
-
-    sdir = _make_search_golden_dir(tmp_path)
-    out_path = sdir / "search_results.jsonl"
-
-    import re_score as rs
-
-    rs.run_search_over_golden(
-        queries_path=str(sdir / "queries.jsonl"),
-        attributes_path=str(sdir / "attributes.jsonl"),
-        model=None,  # dictionary path — no GPU
-    )
-
-    assert out_path.exists(), "search_results.jsonl was not written"
-
-    with open(out_path) as f:
-        results = [json.loads(l) for l in f if l.strip()]
-
-    assert len(results) == 1
-    result = results[0]
-    assert result["query"] == "검은색 차"
-
-    ranked = result["ranked"]
-    assert "black_car" in ranked, f"black_car missing from ranked: {ranked}"
-    assert "red_car" not in ranked, f"red_car should be excluded by hard filter: {ranked}"

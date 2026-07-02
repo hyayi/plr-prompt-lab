@@ -4,8 +4,11 @@
 > 한 장(자체완결 HTML·오프라인)으로 그림과 함께 설명합니다.
 > **한글판 README**: [`README.ko.md`](README.ko.md)
 
-Standalone prompt/pipeline eval-cycle for PLR (Person-Level Recognition) **attribute
-scoring (A)** and **text-search (B)**, lean-extracted from `core/ir` at HEAD
+Standalone prompt eval-cycle for PLR (Person-Level Recognition) **attribute
+scoring** — the lab optimizes the PLR prompt. (The text-search pipeline was
+removed 2026-07: search recall is dominated by surfaces the lab cannot hold —
+embedding + VQA — so search evaluation lives in core/ir / cctv-eval.)
+Lean-extracted from `core/ir` originally at HEAD
 `c2fc1cf20a6fbd3ad4272aec8439d438a4febf34` (see [SEED.md](SEED.md)).
 
 The lab can iterate on prompts, scoring logic, and the eval harness **without
@@ -26,8 +29,7 @@ The lab holds a **lean snapshot** of the PLR dev surface from `core/ir`:
 - `plr_core.py`, `plr_prompts.py`, `plr_schema.py` — pure PLR inference core
 - `gemma_model.py` — `Model` Protocol + `LabGemmaModel` (direct, no scheduler)
 - `gemma_backend.py` — GPU GGUF loader (guarded; not imported unless `lab run`)
-- `search_core.py`, `scoring.py`, `query_parser.py` — pure search/scoring
-- `prompts/` — PLR prompt YAMLs (`plr_v0.4`, `plr_v1.3_cot`, `plr_v1.4_cot`)
+- `prompts/` — PLR prompt YAMLs (`plr_v0.4` … `plr_v1.5_cot`)
 - `eval/` — golden sets, runner scripts, ledger
 - `demo.py` — self-contained MockModel + synthetic dataset for `lab demo`
 
@@ -37,8 +39,8 @@ The lab holds a **lean snapshot** of the PLR dev surface from `core/ir`:
 ### Import purity contract
 
 ```bash
-python3 -c "import plr_core, search_core, gemma_model, query_parser, scoring, \
-    quality_gate, plr_prompts, plr_schema; print('lab imports OK')"
+python3 -c "import plr_core, gemma_model, quality_gate, plr_prompts, \
+    plr_schema; print('lab imports OK')"
 ```
 
 None of `storage`, `psycopg2`, `redis` may appear in `sys.modules` after those
@@ -55,7 +57,7 @@ The lab's four selectable dimensions for an experiment:
 | **Dataset** | `--dataset /path/to/dir` (default: `eval/golden/<attribute>/`) | Built |
 | **Prompt** | Edit `prompts/*.yaml` and pass `--version <name>` to `lab run` + `lab eval` | Built |
 | **Model** | `--model gemma\|mock` (registry, `registry.py`) | Built (P2-1) |
-| **Pipeline** | `--pipeline plr\|search` (registry) | Built (P2-1) |
+| **Pipeline** | `plr` only (registry) — search removed 2026-07 | Built |
 | **format/reason** | `formats:` / `reasons:` axes in experiment.yaml (`IR_PLR_FORMAT`/`IR_PLR_REASON`) | Built |
 
 To run the cross-product of several axes at once, use
@@ -105,26 +107,12 @@ build-golden  ──►  label  ──►  run  ──►  eval  ──►  port
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### B — Text-search eval (recall@k)
+### B — Text-search eval — REMOVED (2026-07)
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  1. (build-golden / label as above — same crops)                    │
-│                                                                     │
-│  2. run  (also writes attributes.jsonl)                             │
-│     lab run --attribute gender --version plr_v1.4_cot               │
-│              --dataset <dataset>                                    │
-│     → <dataset>/queries.jsonl  (hand-authored)                      │
-│     → <dataset>/attributes.jsonl  (from run)                        │
-│     → <dataset>/search_results.jsonl  (from run)                    │
-│                                                                     │
-│  3. eval --mode search                                              │
-│     lab eval --attribute search --mode search --version plr_v1.4_cot│
-│              --dataset <dataset>                                    │
-│     → prints recall@k / precision@k + Δ vs prior version            │
-│     → appends record to eval/ledger.jsonl                           │
-└─────────────────────────────────────────────────────────────────────┘
-```
+The lab no longer runs a search pipeline. PLR labels feed the production
+search, so PLR accuracy/bias (+ the `pred_unknown` rate) is the lab's
+signal; end-to-end search quality is measured in core/ir (full stack:
+embedding + VQA) and via the cctv-eval oracle skill.
 
 ---
 
@@ -145,9 +133,6 @@ python3 lab.py run --attribute gender --version plr_v1.4_cot [--dataset <dir>]
 
 # Evaluate PLR attribute
 python3 lab.py eval --attribute gender --version plr_v1.4_cot [--dataset <dir>]
-
-# Evaluate text-search (recall@k)
-python3 lab.py eval --attribute search --mode search --version plr_v1.4_cot [--dataset <dir>]
 
 # Run an experiment matrix (cross-product — see EXPERIMENT_SPEC.md)
 python3 lab.py experiment run examples/experiment.example.yaml [--strict]
@@ -208,7 +193,7 @@ the loop to a new team member before provisioning GPU + labels.
 ## `HANDOFF.md` — external prompt-engineer guide
 
 [HANDOFF.md](HANDOFF.md) is the guide for a prompt engineer who is improving
-PLR/text-search prompts without touching the production service. It covers:
+PLR prompts without touching the production service. It covers:
 
 - What to edit (`prompts/*.yaml`, and when also `plr_prompts.py`).
 - What not to touch (inference core, storage — neither is present in the lab).
@@ -284,16 +269,19 @@ download).
 | `recall` | Per-class recall dict |
 | `bias` | Per-attribute bias metric (e.g. `female→male` misclassification rate) |
 | `confusion` | Full confusion matrix (rows=true, cols=pred) |
+| `pred_unknown` | Model unknown-rate `{rate, count}` over all matched ids (forced-commit compliance) |
+| `n_label_unknown` | Human-unlabelable crops (label=unknown) excluded from accuracy/bias |
 | `seed_hash` | `core/ir HEAD` at seed time (from `SEED.md`) |
 | `gemma_repo` | `IR_GEMMA_REPO` env at run time |
+
+Crops a human labeled `unknown` are EXCLUDED from accuracy/recall/bias —
+under the forced-commit prompt (plr_v1.5_cot) the model must still answer,
+and there is no ground truth to score that answer against.
 
 `run_eval.py` diffs the current run against the **most recent prior version**
 in the ledger and prints `Δ accuracy / Δ bias`.
 
-### B — Text-search metrics (`eval/ledger.jsonl` record fields)
-
-| Field | Description |
-|---|---|
+---|---|
 | `attribute` | `"search"` |
 | `version` | PLR prompt version string |
 | `k` | Rank cutoff |
@@ -305,9 +293,6 @@ in the ledger and prints `Δ accuracy / Δ bias`.
 
 `run_search_eval.py` diffs against the most recent prior version in the ledger
 and prints `Δ recall@k / Δ precision@k`.
-
-Both A and B records land in the **same** `eval/ledger.jsonl` file, keyed by
-`(attribute, version)`.
 
 ---
 

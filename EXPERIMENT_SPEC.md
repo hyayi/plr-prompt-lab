@@ -14,7 +14,7 @@ and for each cell runs:
 datasets:   [./datasets/gender_v1]        # one or more dataset directory paths
 models:     [mock]                         # registry model names (mock | gemma)
 prompts:    [plr_v1.4_cot, plr_v1.5_exp]  # version tags passed as --version to run_eval
-pipelines:  [plr]                          # plr | search
+pipelines:  [plr]                          # plr (PLR-only lab; search removed 2026-07)
 attributes: [gender]                       # PLR attributes (plr pipeline only)
 
 # Optional
@@ -27,14 +27,14 @@ reasons:    ["on", "off"]                  # IR_PLR_REASON axis (on | off), plr 
 
 | Field        | Type           | Required | Description |
 |-------------|----------------|----------|-------------|
-| `datasets`  | list[str]      | yes      | Paths to dataset directories. Each must contain `crops/`, `labels.jsonl`, and `predictions.jsonl` for plr; `queries.jsonl` and `attributes.jsonl` for search. |
+| `datasets`  | list[str]      | yes      | Paths to dataset directories. Each must contain `crops/`, `labels.jsonl`, and `predictions.jsonl`. |
 | `models`    | list[str]      | yes      | Registry model names. `mock` is GPU-free; `gemma` requires weights. Unknown names raise an error before any cell runs. |
 | `prompts`   | list[str]      | yes      | Prompt version tags. Passed as `--version` to `run_eval`. If the tag is `yaml` or `json` it also sets `IR_PLR_FORMAT`. |
-| `pipelines` | list[str]      | yes      | `plr` (attribute extraction) or `search` (text retrieval). Unknown names raise an error before any cell runs. |
-| `attributes`| list[str]      | no       | PLR attribute names (e.g. `gender`, `vehicle_type`, `military`). Required for the `plr` pipeline. Ignored for `search`. Default: `[""]`. |
+| `pipelines` | list[str]      | yes      | `plr` (attribute extraction). The search pipeline was removed (2026-07). Unknown names raise an error before any cell runs. |
+| `attributes`| list[str]      | no       | PLR attribute names (e.g. `gender`, `vehicle_type`, `military`). Default: `[""]`. |
 | `ledger`    | str            | no       | Path to the ledger JSONL file. Relative paths are resolved relative to the experiment YAML file. Default: `eval/ledger.jsonl` inside the lab root. |
-| `formats`   | list[str]      | no       | `IR_PLR_FORMAT` env axis; allowed values `yaml`, `json` (quote-free). Applies to **plr cells only**. Set per cell and restored after each cell. Default: env untouched. |
-| `reasons`   | list[str]      | no       | `IR_PLR_REASON` env axis; allowed values `on`, `off` (**quote them** — bare YAML `on`/`off` parse as booleans). Applies to **plr cells only**. Default: env untouched. |
+| `formats`   | list[str]      | no       | `IR_PLR_FORMAT` env axis; allowed values `yaml`, `json` (quote-free). Set per cell and restored after each cell. Default: env untouched. |
+| `reasons`   | list[str]      | no       | `IR_PLR_REASON` env axis; allowed values `on`, `off` (**quote them** — bare YAML `on`/`off` parse as booleans). Default: env untouched. |
 
 ### format/reason axis semantics
 
@@ -54,22 +54,15 @@ reasons:    ["on", "off"]                  # IR_PLR_REASON axis (on | off), plr 
 
 ## Cell enumeration
 
-The cross-product is: `pipelines × datasets × models × prompts`.
-
-For the `plr` pipeline, the `attributes` (and optional `formats` / `reasons`)
-axes are added:
-`pipelines × datasets × models × prompts × attributes × formats × reasons`.
-
-For the `search` pipeline, the `attributes`/`formats`/`reasons` axes are not
-used (search reads `queries.jsonl` from the dataset directory, and its
-dictionary parse sends no PLR prompt).
+The cross-product is:
+`pipelines × datasets × models × prompts × attributes × formats × reasons`
+(the last three axes are optional; omitted axes contribute a single cell).
 
 ## Dispatch via registry
 
 - **plr cell** → `registry.get_model(model)` + `re_score.re_score(attribute, model, golden_dir=dataset)` → `eval/run_eval.py main()`
-- **search cell** → `re_score.run_search_over_golden(queries_path, attributes_path)` → `run_search_eval.main()`
 
-Both paths append a ledger record carrying:
+Each cell appends a ledger record carrying:
 `dataset`, `model`, `pipeline`, `prompt_hash` (from `provenance.prompt_hash`).
 
 ## Validation
@@ -115,43 +108,25 @@ python3 lab.py experiment run tests/fixtures/mock_experiment.yaml
 
 ## Ledger record shape
 
-Each cell appends a record to the ledger.  For `plr` cells:
+Each cell appends a record to the ledger:
 
 ```json
 {
   "attribute": "gender",
-  "version": "plr_v1.4_cot",
+  "version": "plr_v1.5_cot",
   "date": "2026-07-02T12:00:00",
   "n": 5,
   "accuracy": 1.0,
   "recall": {"female": 1.0},
   "bias": null,
   "confusion": {"female": {"female": 5}},
+  "pred_unknown": {"rate": 0.0, "count": "0/5"},
+  "n_label_unknown": 0,
   "seed_hash": "",
   "gemma_repo": "",
   "dataset": "./datasets/gender_v1",
   "model": "mock",
   "pipeline": "plr",
-  "prompt_hash": "abc123"
-}
-```
-
-For `search` cells:
-
-```json
-{
-  "attribute": "search",
-  "version": "plr_v1.4_cot",
-  "date": "2026-07-02T12:00:00",
-  "k": 5,
-  "recall_at_k": 1.0,
-  "precision_at_k": 0.2,
-  "n_queries": 2,
-  "seed_hash": "",
-  "gemma_repo": "",
-  "dataset": "./datasets/search_v1",
-  "model": "mock",
-  "pipeline": "search",
   "prompt_hash": "abc123"
 }
 ```

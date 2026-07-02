@@ -343,32 +343,16 @@ def _plr_eval(*args: Any, **kwargs: Any) -> Any:
     return mod.main(*args, **kwargs)
 
 
-def _search_run(*args: Any, **kwargs: Any) -> Any:
-    from re_score import run_search_over_golden
-
-    return run_search_over_golden(*args, **kwargs)
-
-
-def _search_eval(*args: Any, **kwargs: Any) -> Any:
-    from run_search_eval import main as _main
-
-    return _main(*args, **kwargs)
-
-
+# The lab is PLR-only (2026-07): the text-search pipeline was removed — the
+# lab optimizes the PLR prompt; search evaluation lives in core/ir (and the
+# cctv-eval oracle skill), where the full stack (embedding + VQA) exists.
 PIPELINES: dict[str, Pipeline] = {
     "plr": Pipeline(
         name="plr",
-        description="attribute extraction: re_score → run_eval (eval --mode attr)",
+        description="attribute extraction: re_score → run_eval",
         eval_mode="attr",
         run_fn=_plr_run,
         eval_fn=_plr_eval,
-    ),
-    "search": Pipeline(
-        name="search",
-        description="text retrieval: run_search_over_golden → run_search_eval (eval --mode search)",
-        eval_mode="search",
-        run_fn=_search_run,
-        eval_fn=_search_eval,
     ),
 }
 

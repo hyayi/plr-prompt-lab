@@ -42,9 +42,6 @@ _MANIFEST_REQUIRED = ("attribute", "n", "created", "source_note")
 # Required fields per labels.jsonl line
 _LABELS_REQUIRED = ("obj_id", "label")
 
-# Required fields per queries.jsonl line
-_QUERIES_REQUIRED = ("query", "relevant")
-
 
 # ---------------------------------------------------------------------------
 # Result accumulator
@@ -206,65 +203,6 @@ def _check_crops(
     return crop_ids
 
 
-def _check_queries(
-    ds_path: Path,
-    all_obj_ids: set[str],
-    report: _Report,
-) -> None:
-    """Check queries.jsonl (optional): each line valid, relevant obj_ids exist."""
-    qpath = ds_path / "queries.jsonl"
-    if not qpath.exists():
-        # Optional file — not an error.
-        return
-
-    line_errors = 0
-    dangling: list[str] = []
-    n_queries = 0
-
-    with open(qpath, encoding="utf-8") as f:
-        for lineno, raw in enumerate(f, start=1):
-            raw = raw.strip()
-            if not raw:
-                continue
-            try:
-                rec = json.loads(raw)
-            except json.JSONDecodeError as exc:
-                report.error(f"queries.jsonl line {lineno}: JSON parse error: {exc}")
-                line_errors += 1
-                continue
-
-            missing = [k for k in _QUERIES_REQUIRED if k not in rec]
-            if missing:
-                report.error(
-                    f"queries.jsonl line {lineno}: missing required fields {missing}"
-                )
-                line_errors += 1
-                continue
-
-            n_queries += 1
-            relevant: list[str] = rec.get("relevant") or []
-            for oid in relevant:
-                if all_obj_ids and oid not in all_obj_ids:
-                    dangling.append(
-                        f"line {lineno} query={rec['query']!r} references obj_id={oid!r} "
-                        f"not in dataset"
-                    )
-
-    if dangling:
-        for d in dangling:
-            report.error(f"queries.jsonl: dangling relevant obj_id — {d}")
-    if line_errors == 0 and not dangling:
-        report.ok(f"queries.jsonl: {n_queries} queries, all valid")
-    elif line_errors == 0 and dangling:
-        # Already printed errors above; do not double-count.
-        pass
-
-
-# ---------------------------------------------------------------------------
-# Public entry point
-# ---------------------------------------------------------------------------
-
-
 def validate_dataset(path: str | Path, *, verbose: bool = True) -> bool:
     """Validate a dataset directory against the PLR dataset spec.
 
@@ -291,9 +229,7 @@ def validate_dataset(path: str | Path, *, verbose: bool = True) -> bool:
     # 3. crops/
     crop_ids = _check_crops(ds_path, labeled_ids, report)
 
-    # 4. queries.jsonl (optional)
     all_dataset_ids = labeled_ids | crop_ids
-    _check_queries(ds_path, all_dataset_ids, report)
 
     # Summary
     if verbose:

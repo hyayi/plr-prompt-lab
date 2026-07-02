@@ -1,7 +1,8 @@
 # PLR Prompt Lab — External Prompt-Engineer Handoff Guide
 
-This guide is for a **prompt engineer improving PLR or text-search prompts**
-without touching the ZioVision inference service directly.
+This guide is for a **prompt engineer improving PLR prompts** without
+touching the ZioVision inference service directly. (The lab is PLR-only:
+its text-search pipeline was removed 2026-07.)
 
 ---
 
@@ -9,7 +10,7 @@ without touching the ZioVision inference service directly.
 
 You are a prompt engineer who has received the `plr-prompt-lab` package. Your
 job is to iterate on the prompts that drive PLR (Person-Level Recognition)
-attribute scoring and/or text-search query parsing, measure the effect of your
+attribute scoring, measure the effect of your
 changes on a labeled golden dataset, and hand back a diff + winning YAML to the
 ZioVision team. You do **not** have access to the production database, Redis, or
 the live GPU service — and you do not need them.
@@ -44,9 +45,10 @@ _PLR_YAML_PERSON_TEMPLATE          # yaml, non-CoT person
 _PLR_YAML_COT_PERSON_TEMPLATE      # yaml, CoT person   (IR_PLR_REASON=on)
 _PLR_YAML_VEHICLE_TEMPLATE         # yaml vehicle
 _PLR_PERSON_USER_TEMPLATE / _PLR_VEHICLE_USER_TEMPLATE   # legacy JSON path
-# search pipeline
+# search prompt constants — PARITY MIRROR ONLY (the lab no longer runs a
+# search pipeline; these stay byte-identical to core/ir for lab port)
 _QUERY_PARSER_SYSTEM_PROMPT
-_QUERY_PARSER_USER_TEMPLATE        # (+ parser/qp_v0.4.yaml synonym dictionary)
+_QUERY_PARSER_USER_TEMPLATE
 ```
 
 ### Keep `prompts/*.yaml` in parity (declarative mirror — not read at runtime)
@@ -55,7 +57,8 @@ _QUERY_PARSER_USER_TEMPLATE        # (+ parser/qp_v0.4.yaml synonym dictionary)
 prompts/
     plr_v0.4.yaml         # early baseline (reference only)
     plr_v1.3_cot.yaml     # v1.3 chain-of-thought
-    plr_v1.4_cot.yaml     # current
+    plr_v1.4_cot.yaml     # pre-forced-commit (A/B baseline)
+    plr_v1.5_cot.yaml     # current — forced-commit (no unknown)
 ```
 
 These per-version yaml files are a human-readable MIRROR of the constants above,
@@ -70,7 +73,7 @@ Keep them identical to the constants: core/ir enforces this with
   real prompt variants in one checkout).
 - To change the **default / current** prompt (what runs without `--version`, and
   what `lab port` ships to core/ir): edit the `plr_prompts.py` constants **and**
-  keep `prompts/plr_v1.4_cot.yaml` in parity with them.
+  keep `prompts/plr_v1.5_cot.yaml` in parity with them.
 
 Also update `parse_plr_response()` in `plr_prompts.py` if you change the output
 schema (add/rename a field).
@@ -82,7 +85,6 @@ schema (add/rename a field).
 | `re_score.py` | Core re-scoring runner — edit prompts, not the runner. |
 | `plr_core.py` | PLR inference core — edit prompts, not the inference logic. |
 | `plr_schema.py` | PLR output schema — only change if the schema itself changes. |
-| `search_core.py`, `scoring.py` | Search/ranking logic — edit query prompts, not the ranker. |
 | `gemma_model.py`, `gemma_backend.py` | GPU model loader — out of scope for prompt work. |
 | `eval/` runner scripts | Eval harness — edit to fix bugs only, not to inflate scores. |
 | `core/ir/` | Production service — never edit directly. Hand diffs back to ZioVision. |
@@ -137,9 +139,6 @@ cycle with no GPU, no DB, and no real data so you can see the loop immediately.
 ```bash
 # Attribute accuracy (gender / vehicle_type / military)
 python3 lab.py eval --attribute gender --version plr_v1.5_cot --dataset /path/to/my_dataset/
-
-# Text-search recall@k
-python3 lab.py eval --attribute search --mode search --version plr_v1.5_cot --dataset /path/to/my_dataset/
 ```
 
 ### 4. Read accuracy, bias, recall, and ledger Δ
@@ -243,8 +242,6 @@ python3 lab.py run  --attribute gender --version plr_v1.5_cot --dataset /path/to
 # Evaluate attribute accuracy
 python3 lab.py eval --attribute gender --version plr_v1.5_cot --dataset /path/to/dataset/
 
-# Evaluate text-search recall@k
-python3 lab.py eval --attribute search --mode search --version plr_v1.5_cot --dataset /path/to/dataset/
 
 # Show diff to hand back
 python3 lab.py port

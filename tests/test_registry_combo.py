@@ -68,17 +68,17 @@ def test_registry_get_model_mock_and_listings() -> None:
     assert "gender:" in out and "target: person" in out
 
     assert registry.list_models() == ["gemma", "mock"]
-    assert registry.list_pipelines() == ["plr", "search"]
+    assert registry.list_pipelines() == ["plr"]  # PLR-only lab (search removed 2026-07)
 
     plr = registry.get_pipeline("plr")
-    search = registry.get_pipeline("search")
-    assert plr.eval_mode == "attr"      # --pipeline plr reconciles to --mode attr
-    assert search.eval_mode == "search"
+    assert plr.eval_mode == "attr"
 
     with pytest.raises(ValueError):
         registry.get_model("nope")
     with pytest.raises(ValueError):
         registry.get_pipeline("nope")
+    with pytest.raises(ValueError):
+        registry.get_pipeline("search")  # removed with the PLR-only refit
 
 
 def test_get_model_mock_is_gpu_free() -> None:
@@ -159,31 +159,6 @@ def test_mock_run_eval_ledger_has_combination_keys(tmp_path: Path) -> None:
     assert rec["accuracy"] == pytest.approx(1.0, abs=1e-4)
 
 
-def test_search_eval_ledger_has_combination_keys(tmp_path: Path) -> None:
-    import run_search_eval as rse
-    from provenance import prompt_hash
-
-    # Minimal search inputs
-    q = tmp_path / "queries.jsonl"
-    r = tmp_path / "search_results.jsonl"
-    _write_jsonl(q, [{"query": "black car", "relevant": ["a"]}])
-    _write_jsonl(r, [{"query": "black car", "ranked": ["a"]}])
-    ledger = tmp_path / "ledger.jsonl"
-
-    rec = rse.main(
-        results_path=str(r), queries_path=str(q), ledger_path=str(ledger),
-        version="mock_search_v1", k=5, date="2026-07-02T00:00:00",
-        seed_hash=None, gemma_repo=None, core_ir_path=None,
-        dataset=str(tmp_path), model="mock", pipeline="search",
-    )
-    assert rec["dataset"] == str(tmp_path)
-    assert rec["model"] == "mock"
-    assert rec["pipeline"] == "search"
-    assert rec["prompt_hash"] == prompt_hash()
-    # Preserved historical fields
-    for key in ("recall_at_k", "precision_at_k", "k", "n_queries",
-                "seed_hash", "gemma_repo", "version", "attribute"):
-        assert key in rec
 
 
 # =====================================================================
@@ -239,7 +214,7 @@ def test_lab_run_mock_plr_smoke(tmp_path: Path) -> None:
     ds = _make_gender_dataset(tmp_path, ["m1", "m2"])
     result = subprocess.run(
         [sys.executable, str(_LAB_ROOT / "lab.py"), "run",
-         "--model", "mock", "--pipeline", "plr",
+         "--model", "mock",
          "--attribute", "gender", "--version", "mock_v1",
          "--dataset", str(ds)],
         capture_output=True, text=True,

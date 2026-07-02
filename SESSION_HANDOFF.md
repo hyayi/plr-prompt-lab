@@ -8,8 +8,8 @@
 
 ## 0. TL;DR — 지금 상태
 
-- **무엇**: PLR(객체 속성 추출) + 텍스트검색의 **프롬프트·파이프라인을 측정하며 개선**하는 독립 실험 도구. 데이터·모델·프롬프트·파이프라인을 파라미터로 조합 → 자동 eval → ledger 추이 → HTML 리포트.
-- **어디(lab)**: `/home/ziovision/plr-prompt-lab` — 별도 git repo, `master`, HEAD **`2553b13`**, 71 tracked files, **67 tests green** (GPU-free).
+- **무엇**: **PLR(객체 속성 추출) 프롬프트를 측정하며 개선**하는 독립 실험 도구 (2026-07: 텍스트검색 파이프라인 제거 — PLR 전용). 데이터·모델·프롬프트·format/reason을 파라미터로 조합 → 자동 eval → ledger 추이 → HTML 리포트.
+- **어디(lab)**: `/home/ziovision/plr-prompt-lab` — 별도 git repo, `master`, **72 tests green + 6 xfail** (GPU-free). PLR 전용(검색 실행 표면 제거).
 - **운영 원본(ir)**: `/home/ziovision/ziomilitary/core/ir` — branch **`feat/plr-single-call-commit`**, HEAD **`92d2665`** (미배포). ⚠️ 운영 컨테이너 `ziosummary-ir`이 이 트리를 바인드마운트 — **재시작 시 v1.5 강제커밋 + PROMPT_VERSION bump가 배포되고 lazy per-video reindex가 발동**함(사용자 결정 사항). 롤백 = `git checkout fix/ir-classmap`.
 - **진행 완료**: v1(사이클 코어) → v2 Phase 1(패키징+데이터준비) → v2 Phase 2(매트릭스+리포트) → GUIDE.html(구조/사용법 원페이지) → `--version` 실-프롬프트-로드 픽스 → **(2026-07-02) search `--version` 배선 + format/reason 매트릭스 축 + lab-side parity 테스트** (§8 갭 2·3·4 해소).
 - **미완/다음**: 실측 baseline 미실행(GPU + gender 라벨 필요) — 남은 유일한 실행 갭.
@@ -21,17 +21,16 @@
 | 역할 | 경로 |
 |---|---|
 | **lab** (주제, 개발 대상) | `/home/ziovision/plr-prompt-lab` (별도 repo) |
-| **core/ir** (운영, lab의 lean-추출 원본) | `/home/ziovision/ziomilitary/core/ir` (submodule, branch `fix/ir-classmap`) |
+| **core/ir** (운영, lab의 lean-추출 원본) | `/home/ziovision/ziomilitary/core/ir` (submodule, branch `feat/plr-single-call-commit`) |
 | **deploy repo** (plan/spec/progress) | `/home/ziovision/ziomilitary` → `.omc/plans/`, `.omc/specs/` |
 | **GUIDE 배포 사본** | `/home/ziovision/plr-prompt-lab/_serve/index.html` (gitignore) |
 
 ### lab ↔ core/ir **parity 표면** (이 파일들이 서로 같아야 함 — 개선을 이식할 때 비교 대상)
 `lab port` 명령이 자동으로 비교하는 "진짜 프롬프트 표면":
-- `prompts/*.yaml` (3개: `plr_v0.4`, `plr_v1.3_cot`, `plr_v1.4_cot`) — lab == core/ir (확인됨, 동일)
+- `prompts/*.yaml` (4개: `plr_v0.4`, `plr_v1.3_cot`, `plr_v1.4_cot`, `plr_v1.5_cot`) — lab == core/ir (확인됨, 동일). **query_parser 블록 포함** — lab이 search를 안 돌려도 미러 무결성 때문에 유지.
 - `plr_prompts.py` — 프롬프트 **상수** (lab == core/ir, 바이트 동일)
 - `plr_core.py` — ⚠️ **의도적 divergence 1곳**: lab에는 `run_plr(..., build_messages=None)` 파라미터가 추가됨(`--version` 픽스, 하위호환). core/ir엔 없음. 그 외는 동일.
-- (시노님) `parser/qp_v0.4.yaml` — search 쪽, 동일
-- (표면 밖) `query_parser.py` — ⚠️ lab-only divergence: `parse_query`/`parse_with_gemma`에 `build_messages=None` 주입구 추가(search `--version` 배선, 하위호환 — plr_core와 같은 패턴). port 표면(provenance)에는 포함되지 않으므로 `lab port`에는 안 나타남; core/ir 이식 시 참고.
+- ~~(시노님) parser/qp_v0.4.yaml / query_parser.py~~ — **2026-07-02 lab에서 삭제됨**(PLR 전용 슬림화). core/ir에는 그대로 존재.
 
 **비교 방법**:
 ```bash
@@ -53,7 +52,7 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 ## 3. ⭐ 핵심 구조: 프롬프트 (여러 번 헷갈렸던 부분 — 정확히 이해할 것)
 
 **런타임 프롬프트 소스는 두 갈래:**
-1. **기본** (`--version` 없음) = `plr_prompts.py`의 **하드코딩 상수** (= 현재 버전 v1.4). `IR_PLR_FORMAT`(yaml/json) × `IR_PLR_REASON`(on/off) **env**가 어느 상수를 쓸지 선택. → core/ir과 바이트 동일(이식 대상).
+1. **기본** (`--version` 없음) = `plr_prompts.py`의 **하드코딩 상수** (= 현재 버전 **v1.5 강제커밋**). `IR_PLR_FORMAT`(yaml/json) × `IR_PLR_REASON`(on/off) **env**가 어느 상수를 쓸지 선택. → core/ir과 바이트 동일(이식 대상).
 2. **`lab run --version <V>`** = `prompts/<V>.yaml`을 `FilePromptProvider`로 **로드** (커밋 `51022f6`에서 배선). 없는 버전/mock은 상수로 폴백.
 
 **증거**: `prompts/*.yaml` 편집만으론 기본 프롬프트 안 바뀜(상수가 authoritative). 하지만 `--version plr_v1.3_cot` vs `plr_v1.4_cot`는 실제로 다른 프롬프트를 보냄(해시 `34008…` ≠ `85bf4…`).
@@ -61,13 +60,13 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 **프롬프트 "종류"** (한 버전 yaml 안 = `plr_prompts.py` 상수):
 - `system` (고정 역할지시)
 - 템플릿: `person_user`(CoT) / `person_user_no_reason` / `vehicle_user` — plr용
-- `query_parser`: `system` + `user` — search용 (+ `parser/qp_v0.4.yaml` 시노님 사전)
+- `query_parser`: `system` + `user` — **parity 미러로만 존재** (lab은 search 미실행; core/ir 쪽 실사용)
 
-**파이프라인 2개**: `plr`(속성: accuracy/bias) / `search`(검색: recall@k)
+**파이프라인**: `plr`(속성: accuracy/bias/pred_unknown) 단일 — search는 2026-07 제거
 
 **편집 대상**:
 - 특정 **버전** 개선 → `prompts/<V>.yaml` 편집 (`lab run --version V`가 로드)
-- **기본/현재(v1.4)** 및 **core/ir 이식** → `plr_prompts.py` 상수 편집 + `prompts/plr_v1.4_cot.yaml` parity 유지
+- **기본/현재(v1.5)** 및 **core/ir 이식** → `plr_prompts.py` 상수 편집 + `prompts/plr_v1.5_cot.yaml` parity 유지 (`tests/test_prompt_surface_parity.py`가 강제)
 
 **주의**: HANDOFF.md 초기 버전이 "yaml만 고치면 됨"이라 **틀렸었고**, 실증 후 정정함(커밋 `7634a0a`, `2553b13`).
 
@@ -99,6 +98,13 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 - `GUIDE.html` (구조+사용법 원페이지, 배포용): `654ca3a` · `d7285e3` · `7634a0a`
 - **`--version` 실-프롬프트-로드 픽스**: `51022f6`(feat) · `2553b13`(docs) — experiment의 프롬프트 축이 이제 진짜로 다른 프롬프트를 비교
 
+### PLR 전용 슬림화 (2026-07-02, PLR 집중 재설계 2단계)
+- **search 실행 표면 제거**(사용자 결정): `search_core.py`·`query_parser.py`·`query_normalizer.py`·`run_search_eval.py`·`scoring.py`·`parser/`·`providers/bootstrap.py` 삭제, CLI(run/eval)의 search 분기·`--mode`/`--pipeline search`/`--k` 제거, registry PIPELINES=plr만, experiment search 셀 제거. seed 헬퍼는 `provenance.read_seed_hash`/`warn_stale_seed`로 이동.
+- ⚠️ **parity 미러는 유지**: `plr_prompts.py`의 query_parser 상수와 `prompts/*.yaml`의 query_parser 블록은 core/ir 바이트-동일 미러라서 남김(§1 참조). provider의 build_query_parser_messages도 미러로 유지.
+- **라벨 정책 확정**: `label=unknown`(사람도 판별 불가)은 accuracy/recall/bias에서 **제외**(`n_label_unknown`으로 별도 보고) — 강제 커밋 모델을 채점 불가 크롭으로 벌점 주지 않기 위함. **`pred_unknown`**(모델 unknown율 = 강제 커밋 준수도) ledger 메트릭 신설.
+- DATASET_SPEC(queries 삭제·라벨 정책), EXPERIMENT_SPEC, README(en/ko), HANDOFF 갱신. SEED.md를 core/ir `92d2665`로 재동기화(stale 경고 해소). 테스트 **72 passed, 6 xfailed**.
+- 검색 평가의 거처: core/ir 재평가(임베딩+VQA 풀스택) + `/cctv-eval` 오라클.
+
 ### plr_v1.5_cot — 강제커밋 + single-view (2026-07-02, PLR 집중 재설계 1단계)
 - **설계 확정(사용자)**: ① quality_gate 제거(모든 크롭이 모델로) ② 크롭당 모델 호출 정확히 1회(SR 이중뷰 제거; transient/schema retry는 오류 처리라 유지) ③ **unknown 제거** — 프롬프트가 항상 커밋 강제, 저신뢰는 margins로.
 - **core/ir 먼저 수정 → lab 동기화** (사용자 지시로 개선 흐름 역방향; 표면은 바이트 동일 유지).
@@ -119,15 +125,16 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 
 ```
 lab.py build-golden --video V --attribute A [--dataset D]   # 골든셋 크롭 생성
-lab.py label --dataset D --female-in-male M3,M7 ...          # 사람 라벨(오분류만)
+lab.py label --dataset D --female-in-male M3,M7 --unknown M9 # 사람 라벨(오분류/판별불가)
 lab.py validate-dataset --dataset D                         # 형식 검증(fail-loud)
-lab.py run --model gemma|mock --pipeline plr|search --version V --attribute A --dataset D
-lab.py eval --attribute A --mode attr|search --dataset D    # 채점 + ledger Δ
+lab.py run --model gemma|mock --version V --attribute A --dataset D   # PLR 재채점
+lab.py eval --attribute A --dataset D                       # 채점 + ledger Δ (+unknown율)
 lab.py experiment run experiment.yaml                       # 교차곱 매트릭스
 lab.py report --out report.html                             # ledger → HTML
 lab.py port [--apply] [--core-ir PATH]                      # lab↔core/ir diff
 lab.py demo                                                 # GPU-free 온보딩
 ```
+(2026-07: PLR 전용 — search 관련 옵션 `--pipeline search`/`--mode`/`--k`는 제거됨)
 
 ---
 
@@ -148,13 +155,12 @@ python3 lab.py demo                  # GPU 없이 전체 사이클 시연
 |---|---|
 | `lab.py` | 단일 CLI 진입점 |
 | `prompts/*.yaml` | 버전별 프롬프트(`--version`이 로드) — plr + query_parser 블록 |
-| `plr_prompts.py` | 프롬프트 **상수**(기본/런타임 실사용) + `parse_plr_response` |
+| `plr_prompts.py` | 프롬프트 **상수**(기본/런타임 실사용) + `parse_plr_response` (query_parser 상수는 parity 미러로만 존재) |
+| `re_score.py` | plr 실행 러너 (재채점 → predictions/attributes.jsonl) |
+| `eval/run_eval.py` | 채점(accuracy/bias/pred_unknown) + ledger |
 | `plr_core.py` | `run_plr`(속성 추론 코어) — `build_messages` 주입구 |
-| `search_core.py` | `run_search`(하드필터+랭킹) |
 | `registry.py` | 모델/파이프라인 레지스트리 + `MockModel` |
-| `provenance.py` | `prompt_hash` + `surface_relpaths`(port/hash 단일출처) |
-| `re_score.py` | plr 실행(A) + `run_search_over_golden`(B) |
-| `eval/run_eval.py` · `run_search_eval.py` | 채점(accuracy/bias · recall@k) + ledger |
+| `provenance.py` | `prompt_hash` + `surface_relpaths` + seed 헬퍼(read_seed_hash/warn_stale_seed) |
 | `experiment.py` | 매트릭스 러너 |
 | `report.py` | HTML 리포트 |
 | `dataset.py` · `validate.py` | 데이터셋 추상화 · 검증 |
@@ -174,7 +180,7 @@ python3 lab.py demo                  # GPU 없이 전체 사이클 시연
 4. ~~lab parity 테스트 없음~~ — ✅ **완료 (2026-07-02)**: `tests/test_prompt_surface_parity.py`.
 5. **core/ir `1690f25` 미배포** — ir 재시작 시 반영됨. 배포 여부는 사용자 결정(architect가 "재시작 안전" 확인).
 6. **골든 크롭 gitignore** — 실측 데이터는 repo에 없음(`~/gender_eval` 등). 프라이버시상 배포 금지 → 받는 사람은 자기 데이터로.
-7. **(신규, 옵션) search의 gemma 백엔드 스위치** — `lab run --pipeline search`가 `--model`을 무시하고 항상 dictionary 경로. 검색 프롬프트를 실제로 A/B 하려면 query-parser용 backend(.generate(pil,msgs,…)→.raw 프로토콜, lab Model 프로토콜과 다름) 어댑터가 필요.
+7. ~~search의 gemma 백엔드 스위치~~ — **무효 (2026-07-02)**: search 파이프라인 자체가 제거됨. (구)  — `lab run --pipeline search`가 `--model`을 무시하고 항상 dictionary 경로. 검색 프롬프트를 실제로 A/B 하려면 query-parser용 backend(.generate(pil,msgs,…)→.raw 프로토콜, lab Model 프로토콜과 다름) 어댑터가 필요.
 
 ---
 

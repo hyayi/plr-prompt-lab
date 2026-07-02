@@ -4,11 +4,11 @@ Enumerates the cross-product of datasets × models × prompts × pipelines ×
 attributes (× formats × reasons, both optional) from an experiment.yaml, then
 for each cell:
 
-  (a) run  — invoke the pipeline's runner via the registry
-              (plr  → re_score.re_score with get_model(model))
-              (search → re_score.run_search_over_golden)
-  (b) eval — run_eval (plr) or run_search_eval (search), writing a ledger
-              record with dataset / model / pipeline / prompt_hash.
+  (a) run  — re_score.re_score with get_model(model)
+  (b) eval — run_eval, writing a ledger record with
+              dataset / model / pipeline / prompt_hash.
+
+The lab is PLR-only (2026-07): the text-search pipeline was removed.
 
 Fail-loud-but-continue: a cell that errors is caught, logged, recorded as
 failed, and the runner moves to the next cell.  At the end a matrix summary is
@@ -196,15 +196,9 @@ class CellResult:
 def enumerate_cells(cfg: dict[str, Any]) -> list[Cell]:
     """Build the cross-product of axes into a flat list of Cells.
 
-    For the plr pipeline each (dataset, model, prompt, attribute[, format,
-    reason]) tuple is a cell.  For the search pipeline the attribute axis is
-    not used (search uses queries.jsonl); we emit one cell per (dataset,
-    model, prompt) with attribute="".
-
-    The optional 'formats' / 'reasons' axes (IR_PLR_FORMAT / IR_PLR_REASON)
-    apply to plr cells only — the search pipeline's dictionary parse sends no
-    PLR prompt, so crossing it with env axes would just duplicate identical
-    cells.
+    Each (dataset, model, prompt, attribute[, format, reason]) tuple is a
+    cell. The optional 'formats' / 'reasons' axes cross IR_PLR_FORMAT /
+    IR_PLR_REASON per cell.
     """
     datasets: list[str] = cfg["datasets"]
     models: list[str] = cfg["models"]
@@ -216,26 +210,17 @@ def enumerate_cells(cfg: dict[str, Any]) -> list[Cell]:
 
     cells: list[Cell] = []
     for pipeline, dataset, model, prompt in product(pipelines, datasets, models, prompts):
-        if pipeline == "search":
+        # one cell per attribute × format × reason
+        for attribute, fmt, reason in product(attributes, formats, reasons):
             cells.append(Cell(
                 dataset=dataset,
                 model=model,
                 prompt=prompt,
                 pipeline=pipeline,
-                attribute="",
+                attribute=attribute,
+                fmt=fmt,
+                reason=reason,
             ))
-        else:
-            # plr: one cell per attribute × format × reason
-            for attribute, fmt, reason in product(attributes, formats, reasons):
-                cells.append(Cell(
-                    dataset=dataset,
-                    model=model,
-                    prompt=prompt,
-                    pipeline=pipeline,
-                    attribute=attribute,
-                    fmt=fmt,
-                    reason=reason,
-                ))
     return cells
 
 
@@ -342,55 +327,6 @@ def _run_plr_cell(cell: Cell, ledger_path: str) -> None:
     log.debug("run_eval output: %s", buf.getvalue())
 
 
-def _run_search_cell(cell: Cell, ledger_path: str) -> None:
-    """Run one search cell: run_search_over_golden then run_search_eval."""
-    import re_score as rs
-    import run_search_eval as rse
-
-    ds_path = Path(cell.dataset)
-    if not ds_path.exists():
-        raise FileNotFoundError(
-            f"Dataset directory not found: {cell.dataset}"
-        )
-
-    queries_path = ds_path / "queries.jsonl"
-    attributes_path = ds_path / "attributes.jsonl"
-    results_path = ds_path / "search_results.jsonl"
-
-    if not queries_path.exists():
-        raise FileNotFoundError(
-            f"queries.jsonl not found in dataset: {queries_path}"
-        )
-    if not attributes_path.exists():
-        raise FileNotFoundError(
-            f"attributes.jsonl not found in dataset: {attributes_path}"
-        )
-
-    # (a) run — run_search_over_golden (dictionary path, no GPU)
-    rs.run_search_over_golden(
-        queries_path=str(queries_path),
-        attributes_path=str(attributes_path),
-        results_path=str(results_path),
-        model=None,
-        prompt_version=cell.prompt,  # query-parser prompt (gemma path only)
-    )
-
-    # (b) eval — run_search_eval.main
-    buf = io.StringIO()
-    with redirect_stdout(buf):
-        rse.main(
-            results_path=str(results_path),
-            queries_path=str(queries_path),
-            ledger_path=ledger_path,
-            version=cell.prompt,
-            k=5,
-            model=cell.model,
-            pipeline=cell.pipeline,
-            dataset=str(ds_path),
-        )
-    log.debug("run_search_eval output: %s", buf.getvalue())
-
-
 def run_cell(cell: Cell, ledger_path: str) -> CellResult:
     """Run one cell (run + eval).  Returns CellResult; never raises.
 
@@ -402,10 +338,7 @@ def run_cell(cell: Cell, ledger_path: str) -> CellResult:
     print(f"[experiment] CELL {label}", flush=True)
     saved_env = {k: os.environ.get(k) for k in ("IR_PLR_FORMAT", "IR_PLR_REASON")}
     try:
-        if cell.pipeline == "search":
-            _run_search_cell(cell, ledger_path)
-        else:
-            _run_plr_cell(cell, ledger_path)
+        _run_plr_cell(cell, ledger_path)
         print(f"[experiment]   OK  {label}", flush=True)
         return CellResult(cell=cell, status="ok")
     except Exception as exc:  # noqa: BLE001

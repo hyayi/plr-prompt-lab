@@ -215,33 +215,6 @@ def test_manifest_missing_attribute_fails(tmp_path: Path, capsys) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_queries_dangling_relevant_fails(tmp_path: Path, capsys) -> None:
-    from validate import validate_dataset
-
-    ds = tmp_path / "dangling_query"
-    (ds / "crops").mkdir(parents=True)
-    _tiny_jpg(ds / "crops" / "obj_a.jpg")
-    _write_jsonl(ds / "labels.jsonl", [
-        {"obj_id": "obj_a", "label": "female"},
-    ])
-    _write_manifest(
-        ds / "manifest.yaml",
-        attribute="gender", n=1,
-        created="2026-07-01", source_note="test",
-    )
-    # relevant references obj_ghost which doesn't exist in the dataset
-    _write_jsonl(ds / "queries.jsonl", [
-        {"query": "test query", "relevant": ["obj_ghost"]},
-    ])
-
-    result = validate_dataset(ds)
-    captured = capsys.readouterr()
-
-    assert result is False, "Dangling relevant obj_id in queries.jsonl should fail"
-    assert "obj_ghost" in captured.out, (
-        f"Expected 'obj_ghost' in error output:\n{captured.out}"
-    )
-    assert "dangling" in captured.out.lower() or "FAIL" in captured.out
 
 
 # ---------------------------------------------------------------------------

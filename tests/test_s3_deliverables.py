@@ -42,141 +42,10 @@ def _read_jsonl(path: Path) -> list[dict]:
         return [json.loads(line) for line in f if line.strip()]
 
 
-def test_search_eval_metrics_and_ledger(tmp_path: Path) -> None:
-    """Synthetic 2-query eval:
-      query A: relevant=[obj1], ranked=[obj1, obj2, obj3] → hit in top-5
-      query B: relevant=[obj3], ranked=[obj1, obj2]       → miss (obj3 not in ranked)
-
-    At k=5:
-      query A: recall@5 = 1/1 = 1.0,  precision@5 = 1/5 = 0.2
-      query B: recall@5 = 0/1 = 0.0,  precision@5 = 0/5 = 0.0
-      mean recall@5 = 0.5,  mean precision@5 = 0.1
-    """
-    import run_search_eval as rse
-
-    queries = [
-        {"query": "query_A", "relevant": ["obj1"]},
-        {"query": "query_B", "relevant": ["obj3"]},
-    ]
-    results = [
-        {"query": "query_A", "ranked": ["obj1", "obj2", "obj3", "obj4", "obj5"]},
-        {"query": "query_B", "ranked": ["obj1", "obj2"]},
-    ]
-
-    q_path = tmp_path / "queries.jsonl"
-    r_path = tmp_path / "search_results.jsonl"
-    ledger_path = tmp_path / "ledger.jsonl"
-
-    _write_jsonl(q_path, queries)
-    _write_jsonl(r_path, results)
-
-    record = rse.main(
-        results_path=str(r_path),
-        queries_path=str(q_path),
-        ledger_path=str(ledger_path),
-        version="test_v0.1",
-        k=5,
-        date="2026-07-01T00:00:00",
-        seed_hash="abc123",
-        gemma_repo="test/repo",
-        core_ir_path=None,  # skip stale-seed subprocess
-    )
-
-    # --- metric correctness ---
-    assert record["recall_at_k"] == pytest.approx(0.5, abs=1e-4), (
-        f"Expected recall@5=0.5, got {record['recall_at_k']}"
-    )
-    assert record["precision_at_k"] == pytest.approx(0.1, abs=1e-4), (
-        f"Expected precision@5=0.1, got {record['precision_at_k']}"
-    )
-    assert record["n_queries"] == 2
-    assert record["k"] == 5
-    assert record["attribute"] == "search"
-    assert record["version"] == "test_v0.1"
-
-    # --- ledger record appended ---
-    assert ledger_path.exists(), "ledger.jsonl was not created"
-    ledger_records = _read_jsonl(ledger_path)
-    assert len(ledger_records) == 1
-    lr = ledger_records[0]
-    assert lr["attribute"] == "search"
-    assert lr["version"] == "test_v0.1"
-    assert lr["seed_hash"] == "abc123"
-    assert lr["gemma_repo"] == "test/repo"
-    assert lr["recall_at_k"] == pytest.approx(0.5, abs=1e-4)
-    assert lr["precision_at_k"] == pytest.approx(0.1, abs=1e-4)
 
 
-def test_search_eval_perfect_recall(tmp_path: Path) -> None:
-    """Single query: all relevant items in top-k → recall=1.0, precision=relevant/k."""
-    import run_search_eval as rse
-
-    queries = [{"query": "q1", "relevant": ["a", "b"]}]
-    results = [{"query": "q1", "ranked": ["a", "b", "c"]}]
-
-    q_path = tmp_path / "queries.jsonl"
-    r_path = tmp_path / "results.jsonl"
-    ledger_path = tmp_path / "ledger.jsonl"
-    _write_jsonl(q_path, queries)
-    _write_jsonl(r_path, results)
-
-    record = rse.main(
-        results_path=str(r_path),
-        queries_path=str(q_path),
-        ledger_path=str(ledger_path),
-        version="v_test",
-        k=3,
-        date="2026-07-01T00:00:00",
-        seed_hash=None,
-        gemma_repo=None,
-        core_ir_path=None,
-    )
-    assert record["recall_at_k"] == pytest.approx(1.0, abs=1e-4)
-    # 2 hits in top-3 → 2/3
-    assert record["precision_at_k"] == pytest.approx(2 / 3, abs=1e-4)
 
 
-def test_search_eval_ledger_diff(tmp_path: Path) -> None:
-    """Two runs: second run shows a Δ against the first in stdout."""
-    import run_search_eval as rse
-    import io
-    from contextlib import redirect_stdout
-
-    q_path = tmp_path / "queries.jsonl"
-    r_path = tmp_path / "results.jsonl"
-    ledger_path = tmp_path / "ledger.jsonl"
-
-    queries = [{"query": "q1", "relevant": ["obj1"]}]
-    _write_jsonl(q_path, queries)
-
-    # First run: ranked list misses
-    _write_jsonl(r_path, [{"query": "q1", "ranked": []}])
-    rse.main(
-        results_path=str(r_path), queries_path=str(q_path),
-        ledger_path=str(ledger_path), version="v0",
-        k=5, date="2026-07-01T00:00:00", seed_hash=None, gemma_repo=None,
-        core_ir_path=None,
-    )
-
-    # Second run: ranked list hits
-    _write_jsonl(r_path, [{"query": "q1", "ranked": ["obj1"]}])
-    buf = io.StringIO()
-    with redirect_stdout(buf):
-        rse.main(
-            results_path=str(r_path), queries_path=str(q_path),
-            ledger_path=str(ledger_path), version="v1",
-            k=5, date="2026-07-01T00:00:01", seed_hash=None, gemma_repo=None,
-            core_ir_path=None,
-        )
-    output = buf.getvalue()
-    # Should show Δ in the output
-    assert "Δ vs v0" in output, f"Expected diff line in output:\n{output}"
-
-    # Two records in ledger
-    records = _read_jsonl(ledger_path)
-    assert len(records) == 2
-    assert records[0]["version"] == "v0"
-    assert records[1]["version"] == "v1"
 
 
 # =====================================================================
@@ -309,14 +178,15 @@ def test_lab_eval_subhelp() -> None:
     assert result.returncode == 0, (
         f"lab.py eval --help exited {result.returncode}\n{result.stderr}"
     )
-    assert "--mode" in result.stdout, (
-        f"Expected '--mode' in eval --help:\n{result.stdout}"
+    assert "--attribute" in result.stdout, (
+        f"Expected '--attribute' in eval --help:\n{result.stdout}"
     )
-    assert "attr" in result.stdout, (
-        f"Expected 'attr' in eval --help:\n{result.stdout}"
+    assert "--version" in result.stdout, (
+        f"Expected '--version' in eval --help:\n{result.stdout}"
     )
-    assert "search" in result.stdout, (
-        f"Expected 'search' in eval --help:\n{result.stdout}"
+    # PLR-only lab (2026-07): the search mode options must be GONE.
+    assert "--mode " not in result.stdout, (
+        f"'--mode ' should be removed from eval --help:\n{result.stdout}"
     )
 
 
@@ -338,22 +208,8 @@ def test_lab_m_invocation() -> None:
 # =====================================================================
 
 
-def test_recall_at_k_basic() -> None:
-    import run_search_eval as rse
-
-    assert rse._recall_at_k(["a", "b", "c"], {"a", "b"}, k=2) == pytest.approx(1.0)
-    assert rse._recall_at_k(["a", "b", "c"], {"a", "b"}, k=1) == pytest.approx(0.5)
-    assert rse._recall_at_k(["x", "y"], {"a", "b"}, k=5) == pytest.approx(0.0)
-    assert rse._recall_at_k([], set(), k=5) == pytest.approx(0.0)
 
 
-def test_precision_at_k_basic() -> None:
-    import run_search_eval as rse
-
-    assert rse._precision_at_k(["a", "b", "c"], {"a", "b"}, k=3) == pytest.approx(2 / 3)
-    assert rse._precision_at_k(["a", "b", "c"], {"a", "b"}, k=2) == pytest.approx(1.0)
-    assert rse._precision_at_k(["x", "y"], {"a"}, k=2) == pytest.approx(0.0)
-    assert rse._precision_at_k([], {"a"}, k=0) == pytest.approx(0.0)
 
 
 # =====================================================================

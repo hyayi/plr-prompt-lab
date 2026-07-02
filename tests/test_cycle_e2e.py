@@ -260,182 +260,10 @@ _MOCK_RED_VEHICLE_YAML = textwrap.dedent("""\
 """)
 
 
-def _make_search_golden_dir(tmp_path: Path) -> Path:
-    """Synthetic search golden dir: 2 queries with known relevant candidates."""
-    sdir = tmp_path / "golden" / "search"
-    sdir.mkdir(parents=True)
-
-    # queries.jsonl — 2 queries
-    #   query_1: black vehicle — relevant: ["black_car"]
-    #   query_2: red vehicle   — relevant: ["red_car"]
-    _write_jsonl(
-        sdir / "queries.jsonl",
-        [
-            {"query": "검은색 차", "relevant": ["black_car"]},
-            {"query": "red sedan", "relevant": ["red_car"]},
-        ],
-    )
-
-    # Build full PLR JSONs via parse_plr_response so candidates carry
-    # the attribute structure that search_core/scoring expect
-    from plr_prompts import parse_plr_response
-    from plr_core import _attach_military_flags
-
-    black_plr = parse_plr_response(_MOCK_BLACK_VEHICLE_YAML, hint="vehicle")
-    _attach_military_flags(black_plr)
-
-    red_plr = parse_plr_response(_MOCK_RED_VEHICLE_YAML, hint="vehicle")
-    _attach_military_flags(red_plr)
-
-    # attributes.jsonl — both candidates
-    _write_jsonl(
-        sdir / "attributes.jsonl",
-        [
-            {"obj_id": "black_car", "plr_json": black_plr},
-            {"obj_id": "red_car", "plr_json": red_plr},
-        ],
-    )
-
-    return sdir
 
 
-def test_b_cycle_search_recall_at_k(tmp_path: Path) -> None:
-    """Full B-cycle: run_search_over_golden → run_search_eval → ledger record.
-
-    Synthetic setup:
-      - query_1 "검은색 차" (black car): relevant=["black_car"]
-      - query_2 "red sedan": relevant=["red_car"]
-
-    run_search_over_golden runs the dictionary path (model=None, no GPU).
-    Each relevant candidate should appear in its query's ranked results.
-
-    Expected recall@5:
-      query_1: black_car in ranked → recall = 1.0
-      query_2: red_car in ranked   → recall = 1.0
-      mean recall@5 = 1.0
-
-    A ledger record with recall_at_k is appended.
-    """
-    import re_score as rs
-    import run_search_eval as rse
-
-    sdir = _make_search_golden_dir(tmp_path)
-    results_path = sdir / "search_results.jsonl"
-    ledger_path = tmp_path / "search_ledger.jsonl"
-
-    # --- Step 1: run_search_over_golden (no GPU, dictionary path) ---
-    rs.run_search_over_golden(
-        queries_path=str(sdir / "queries.jsonl"),
-        attributes_path=str(sdir / "attributes.jsonl"),
-        results_path=str(results_path),
-        model=None,
-    )
-
-    assert results_path.exists(), "search_results.jsonl was not written"
-    results = _read_jsonl(results_path)
-    assert len(results) == 2
-
-    # Verify at least one query hit (black car must rank for its query)
-    result_map = {r["query"]: r["ranked"] for r in results}
-    assert "검은색 차" in result_map, "검은색 차 query missing from results"
-    assert "black_car" in result_map["검은색 차"], (
-        f"black_car not in ranked for 검은색 차: {result_map['검은색 차']}"
-    )
-    # red_car should NOT appear in 검은색 차 results (hard filter)
-    assert "red_car" not in result_map["검은색 차"], (
-        f"red_car should be filtered from 검은색 차: {result_map['검은색 차']}"
-    )
-
-    # --- Step 2: run_search_eval → ledger record ---
-    record = rse.main(
-        results_path=str(results_path),
-        queries_path=str(sdir / "queries.jsonl"),
-        ledger_path=str(ledger_path),
-        version="mock_search_v1",
-        k=5,
-        date="2026-07-01T00:00:00",
-        seed_hash="abc123",
-        gemma_repo="mock/model",
-        core_ir_path=None,  # skip stale-seed subprocess
-    )
-
-    # recall@5 must be > 0 (at minimum black_car query hits)
-    assert record["recall_at_k"] > 0.0, (
-        f"Expected recall_at_k > 0, got {record['recall_at_k']}"
-    )
-    assert record["n_queries"] == 2
-    assert record["k"] == 5
-    assert record["attribute"] == "search"
-    assert record["version"] == "mock_search_v1"
-
-    # Ledger record appended
-    assert ledger_path.exists()
-    ledger_records = _read_jsonl(ledger_path)
-    assert len(ledger_records) == 1
-    lr = ledger_records[0]
-    assert lr["attribute"] == "search"
-    assert lr["recall_at_k"] > 0.0, (
-        f"Ledger record recall_at_k must be > 0, got {lr['recall_at_k']}"
-    )
-    assert "recall_at_k" in lr
-    assert "precision_at_k" in lr
-    assert lr["seed_hash"] == "abc123"
 
 
-def test_b_cycle_search_ledger_delta(tmp_path: Path) -> None:
-    """B-cycle: second search eval version shows Δ vs prior version in output."""
-    import re_score as rs
-    import run_search_eval as rse
-
-    sdir = _make_search_golden_dir(tmp_path)
-    results_path = sdir / "search_results.jsonl"
-    ledger_path = tmp_path / "search_ledger.jsonl"
-
-    # Run search to produce results
-    rs.run_search_over_golden(
-        queries_path=str(sdir / "queries.jsonl"),
-        attributes_path=str(sdir / "attributes.jsonl"),
-        results_path=str(results_path),
-        model=None,
-    )
-
-    # First version
-    rse.main(
-        results_path=str(results_path),
-        queries_path=str(sdir / "queries.jsonl"),
-        ledger_path=str(ledger_path),
-        version="search_v1",
-        k=5,
-        date="2026-07-01T00:00:00",
-        seed_hash=None,
-        gemma_repo=None,
-        core_ir_path=None,
-    )
-
-    # Second version → expect Δ vs search_v1 in stdout
-    buf = io.StringIO()
-    with redirect_stdout(buf):
-        rse.main(
-            results_path=str(results_path),
-            queries_path=str(sdir / "queries.jsonl"),
-            ledger_path=str(ledger_path),
-            version="search_v2",
-            k=5,
-            date="2026-07-01T00:00:01",
-            seed_hash=None,
-            gemma_repo=None,
-            core_ir_path=None,
-        )
-    out = buf.getvalue()
-
-    assert "Δ vs search_v1" in out, (
-        f"Expected 'Δ vs search_v1' in second-run output:\n{out}"
-    )
-
-    records = _read_jsonl(ledger_path)
-    assert len(records) == 2, f"Expected 2 ledger records, got {len(records)}"
-    assert records[0]["version"] == "search_v1"
-    assert records[1]["version"] == "search_v2"
 
 
 # =====================================================================
@@ -444,22 +272,12 @@ def test_b_cycle_search_ledger_delta(tmp_path: Path) -> None:
 
 
 def test_no_db_modules_after_cycles(tmp_path: Path) -> None:
-    """After running both A and B cycles, forbidden modules must not be in sys.modules."""
+    """After running the PLR cycle, forbidden modules must not be in sys.modules."""
     import re_score as rs
 
-    # A-cycle
     obj_ids = ["nodb_a", "nodb_b"]
     gdir = _make_plr_golden_dir(tmp_path, obj_ids)
     rs.re_score("gender", MockModel(), golden_dir=str(gdir))
-
-    # B-cycle
-    sdir = _make_search_golden_dir(tmp_path)
-    rs.run_search_over_golden(
-        queries_path=str(sdir / "queries.jsonl"),
-        attributes_path=str(sdir / "attributes.jsonl"),
-        results_path=str(sdir / "search_results.jsonl"),
-        model=None,
-    )
 
     forbidden = {"storage", "psycopg2", "redis"}
     imported = {m.split(".")[0] for m in sys.modules}

@@ -1,13 +1,9 @@
-"""Lab runner A: re-score a golden attribute set with a mock or real model.
+"""Lab runner: re-score a golden attribute set with a mock or real model.
 
-Decision (candidates / attributes):
-  Option (a) — re_score ALSO writes `eval/golden/<attr>/attributes.jsonl`
-  (one line per obj_id: {"obj_id": ..., "plr_json": {...}}).
-  run_search_over_golden reads that file to build the full-attribute
-  candidate rows that search_core.run_search needs. This keeps every
-  runner self-contained: no side-channel file is needed, and the search
-  runner always gets the PLR attributes that correspond to the latest
-  re_score pass.
+Besides predictions.jsonl, re_score also writes `attributes.jsonl` (one line
+per obj_id: {"obj_id": ..., "plr_json": {...}}) — the full PLR output per
+crop. It is the raw material for per-slot analysis (e.g. unknown-rate,
+margin distributions) beyond the single evaluated attribute.
 
 No DB / redis / gemma_backend is imported at module level. The only heavy
 dependency at import time is PIL. The model is injected by the caller
@@ -26,7 +22,6 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -115,8 +110,7 @@ def re_score(
     Side-effects (writes inside golden_dir):
       predictions.jsonl  — one line per obj_id: {obj_id, pred, reason}
       attributes.jsonl   — one line per obj_id: {obj_id, plr_json}
-                           (used by run_search_over_golden as full-attribute
-                           candidates; see module docstring decision (a)).
+                           (full PLR output, for per-slot analysis).
 
     Raises:
       FileNotFoundError if a crop image is missing (fail-loud — no silent skip).
@@ -234,129 +228,3 @@ def re_score(
         "version": version,
         "gemma_repo": gemma_repo,
     }
-
-
-# =====================================================================
-# Candidate row shim — satisfies search_core.run_search's row protocol
-# =====================================================================
-
-
-@dataclass
-class _Row:
-    """Minimal candidate row for search_core.run_search.
-
-    run_search accesses row.plr_json (dict) and row.object_type (str).
-    """
-
-    obj_id: str
-    plr_json: dict[str, Any]
-    object_type: str
-
-
-# =====================================================================
-# Search runner (Deliverable 2)
-# =====================================================================
-
-
-def run_search_over_golden(
-    queries_path: str | None = None,
-    predictions_path: str | None = None,
-    attributes_path: str | None = None,
-    results_path: str | None = None,
-    model: Any = None,
-    prompt_version: str | None = None,
-) -> None:
-    """Run search_core.run_search over the golden search set.
-
-    Reads:
-      queries.jsonl     — lines {query: str, relevant: [obj_id, ...]}
-      attributes.jsonl  — lines {obj_id: str, plr_json: dict}
-                          (written by re_score; carries full PLR attributes)
-
-    Writes:
-      search_results.jsonl — lines {query: str, ranked: [obj_id, ...]}
-                             Written alongside queries.jsonl (same directory)
-                             unless results_path is given.
-
-    Candidates carry full attribute dicts (decision (a) — see module docstring).
-    parse_query runs on the regex/dictionary path when backend=None; it is
-    deterministic and requires no GPU.
-
-    Args:
-      queries_path:     path to queries.jsonl (default: eval/golden/search/queries.jsonl)
-      predictions_path: unused (reserved for future per-object score overlay)
-      attributes_path:  path to attributes.jsonl (default: eval/golden/search/attributes.jsonl)
-      results_path:     path to write search_results.jsonl
-                        (default: same directory as queries_path)
-      model:            passed to parse_query as backend; None = dictionary path (no GPU needed)
-      prompt_version:   optional prompt version tag (e.g. "plr_v1.4_cot"). When
-                        given AND prompts/<prompt_version>.yaml exists, the
-                        QUERY-PARSER prompt is built from that version's YAML via
-                        FilePromptProvider (same rule as re_score's PLR prompt).
-                        Only effective on the Gemma parse path (model != None) —
-                        the dictionary path sends no prompt at all. None, or a
-                        version with no YAML, keeps the module-level constants.
-    """
-    import search_core
-    from query_parser import parse_query
-
-    here = Path(__file__).parent
-    search_dir = here / "eval" / "golden" / "search"
-
-    # Version-specific query-parser prompt wiring — mirrors re_score's PLR
-    # wiring exactly (yaml-backed version → FilePromptProvider, else constants).
-    build_messages = None
-    if prompt_version and (here / "prompts" / f"{prompt_version}.yaml").exists():
-        from providers.file_prompt_provider import FilePromptProvider
-
-        build_messages = (
-            lambda q: FilePromptProvider(version_override=prompt_version)
-            .build_query_parser_messages(q)
-        )
-
-    q_path = Path(queries_path) if queries_path else search_dir / "queries.jsonl"
-    a_path = Path(attributes_path) if attributes_path else search_dir / "attributes.jsonl"
-    # Output lives next to queries.jsonl by default so callers that pass a
-    # temp queries_path get their output in the same temp directory.
-    if results_path:
-        out_path = Path(results_path)
-    else:
-        out_path = q_path.parent / "search_results.jsonl"
-
-    # Load queries
-    with open(q_path) as f:
-        queries = [json.loads(line) for line in f if line.strip()]
-
-    # Load candidates from attributes.jsonl (full plr_json per obj_id)
-    with open(a_path) as f:
-        attr_rows = [json.loads(line) for line in f if line.strip()]
-
-    candidates: list[_Row] = [
-        _Row(
-            obj_id=row["obj_id"],
-            plr_json=row["plr_json"],
-            object_type=row["plr_json"].get("object_type", "person"),
-        )
-        for row in attr_rows
-    ]
-
-    results: list[dict[str, Any]] = []
-
-    for q_entry in queries:
-        query_text = q_entry["query"]
-
-        # Parse query — dictionary path when model=None (no GPU required)
-        query_json = parse_query(query_text, backend=model, build_messages=build_messages)
-
-        # Run search (hard-filter + attribute-match rank)
-        ranked_rows = search_core.run_search(query_json, candidates)
-
-        results.append({
-            "query": query_text,
-            "ranked": [row.obj_id for row in ranked_rows],
-        })
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as f:
-        for row in results:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")

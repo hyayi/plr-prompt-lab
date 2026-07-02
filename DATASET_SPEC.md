@@ -18,14 +18,13 @@ datasets — they were the reference layout from which this spec was derived.
     labels.jsonl              # human ground-truth labels (required for eval)
     predictions.jsonl         # model output (written by `lab run`; seed for obj_id set)
     attributes.jsonl          # full PLR JSON per obj_id (written by `lab run`)
-    queries.jsonl             # text-search queries with relevant obj_ids (optional)
     manifest.yaml             # dataset metadata (required)
 ```
 
 Only `crops/`, `labels.jsonl`, and `manifest.yaml` are required for
 `lab validate-dataset` to pass. `predictions.jsonl` and `attributes.jsonl`
-are written by `lab run` and read by `lab eval`. `queries.jsonl` is optional
-and only needed for search-mode evaluation.
+are written by `lab run` and read by `lab eval`. (The `queries.jsonl`
+search-dataset kind was removed 2026-07 — the lab is PLR-only.)
 
 ---
 
@@ -80,6 +79,15 @@ One JSON object per line (UTF-8, no trailing comma). Blank lines are ignored.
 
 **Optional fields per line**: `notes` (free text), any additional attributes.
 
+**`label: unknown` policy (forced-commit, plr_v1.5_cot)**: label a crop
+`unknown` ONLY when a human cannot decide the attribute from the crop
+(occlusion / extreme quality). Such crops are **excluded from
+accuracy/recall/bias/confusion** by `lab eval` — under the forced-commit
+prompt the model must still answer, and there is no ground truth to score
+that answer against. They are reported separately as `n_label_unknown`,
+and the model's own refusal rate is tracked as `pred_unknown` in the
+ledger. Set them via `lab label --unknown <tile ids>`.
+
 ---
 
 ## 5. Label Vocabularies
@@ -119,51 +127,31 @@ construction_vehicle, vehicle_unknown
 
 ---
 
-## 6. `queries.jsonl` Schema (optional)
-
-Present only for search-mode datasets. One JSON object per line.
-
-```json
-{"query": "검은색 차", "relevant": ["1003", "1013"]}
-{"query": "빨간 오토바이", "relevant": ["2045"]}
-```
-
-**Required fields per line**:
-
-| Field      | Type            | Description                                         |
-|------------|-----------------|-----------------------------------------------------|
-| `query`    | string          | Korean (or English) natural-language search query   |
-| `relevant` | array of string | obj_ids that are ground-truth relevant for this query |
-
-Every `obj_id` in `relevant` must exist as either a labeled obj_id or a crop
-in the dataset. Dangling references cause a **validation error**.
-
----
-
-## 7. `predictions.jsonl` Schema (written by `lab run`)
+## 6. `predictions.jsonl` Schema (written by `lab run`)
 
 ```json
 {"obj_id": "1003", "pred": "male", "reason": "broad shoulders"}
 ```
 
 This file is the seed for the obj_id set that `re_score` processes. It is
-overwritten by `lab run` and read by `lab eval --mode attr`.
+overwritten by `lab run` and read by `lab eval`.
 
 ---
 
-## 8. `attributes.jsonl` Schema (written by `lab run`)
+## 7. `attributes.jsonl` Schema (written by `lab run`)
 
 ```json
 {"obj_id": "1003", "plr_json": { ...full PLR JSON... }}
 ```
 
-Used by `lab run` search mode and `lab eval --mode search` to build
-full-attribute candidate rows for `search_core.run_search`. The `plr_json`
-value must conform to `plr_schema.PERSON_SCHEMA` or `plr_schema.VEHICLE_SCHEMA`.
+The full PLR output per crop — raw material for per-slot analysis
+(unknown-rate, margin distributions) beyond the single evaluated attribute.
+The `plr_json` value must conform to `plr_schema.PERSON_SCHEMA` or
+`plr_schema.VEHICLE_SCHEMA`.
 
 ---
 
-## 9. Minimal Complete Example
+## 8. Minimal Complete Example
 
 ```
 my_gender_dataset/
@@ -214,8 +202,6 @@ Each produces a `PASS`, `WARN`, or `FAIL` line.
 | 6 | `crops/` directory present | **error** |
 | 7 | Every labeled `obj_id` has a matching `<obj_id>.jpg` in `crops/` | **error** |
 | 8 | Crop files without a matching label entry | **warning** |
-| 9 | `queries.jsonl` (if present): every line is valid JSON with `query` and `relevant` | **error** |
-| 10 | `queries.jsonl` (if present): every `relevant` obj_id exists in the dataset | **error** |
 
 **Exit code contract**:
 - Exit **0**: no errors (warnings are allowed).
