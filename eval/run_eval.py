@@ -15,7 +15,7 @@ Usage:
         --golden golden/gender --version plr_v1.4_cot
 
 predictions.jsonl: {"obj_id": "1003", "pred": "male", "reason": "...", "margin": "0.9"}
-labels.jsonl:      {"obj_id": "1003", "true": "female"}
+labels.jsonl:      {"obj_id": "1003", "label": "female"}
 """
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ def main() -> None:
 
     gdir = args.golden or os.path.join(here, "golden", args.attribute)
     preds = {r["obj_id"]: (r.get("pred") or "unknown") for r in _jsonl(os.path.join(gdir, "predictions.jsonl"))}
-    labels = {r["obj_id"]: (r.get("true") or "unknown") for r in _jsonl(os.path.join(gdir, "labels.jsonl"))}
+    labels = {r["obj_id"]: (r.get("label") or r.get("true") or "unknown") for r in _jsonl(os.path.join(gdir, "labels.jsonl"))}
 
     ids = [i for i in preds if i in labels]
     if not ids:

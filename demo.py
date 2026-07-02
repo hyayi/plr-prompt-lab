@@ -115,7 +115,7 @@ def build_synthetic_dataset(demo_dir: Path) -> Path:
     # 3. labels.jsonl — ground truth (all female)
     _write_jsonl(
         demo_dir / "labels.jsonl",
-        [{"obj_id": oid, "true": label} for oid, label in _TRUE_LABELS.items()],
+        [{"obj_id": oid, "label": label} for oid, label in _TRUE_LABELS.items()],
     )
 
     # 4. manifest.yaml

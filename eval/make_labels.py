@@ -63,7 +63,7 @@ def main() -> None:
             true = "male"
         else:
             true = pred.get(obj_id, "unknown")  # keep the model's call
-        lines.append({"obj_id": obj_id, "true": true, "tile": tile})
+        lines.append({"obj_id": obj_id, "label": true, "tile": tile})
 
     with open(args.out, "w") as f:
         for r in lines:

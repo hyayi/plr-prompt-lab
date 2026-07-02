@@ -167,7 +167,7 @@ def test_lab_demo_keep_dir_leaves_files(tmp_path: Path) -> None:
         for line in (demo_dir / "labels.jsonl").read_text().splitlines()
         if line.strip()
     ]
-    assert all(r["true"] == "female" for r in labels), (
+    assert all(r["label"] == "female" for r in labels), (
         f"Expected all labels to be 'female': {labels}"
     )
     assert len(labels) == len(demo_mod._OBJ_IDS)
