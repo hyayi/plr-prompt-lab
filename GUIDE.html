@@ -250,47 +250,45 @@
 <!-- PROMPTS -->
 <section id="prompts">
   <h2><span class="num">06</span>프롬프트 &amp; 파이프라인 구조 (실제)</h2>
-  <p class="sub">“프롬프트”는 한 덩어리가 아니다 — 파이프라인(plr/search)별로, 종류(system/템플릿)별로, 버전별로 나뉜다.</p>
+  <p class="sub">“프롬프트”는 한 파일이 아니다 — <b>런타임 상수 ↔ yaml 미러</b>의 이중 표현이고, 버전별 파일·plr/search 두 계열로 나뉜다.
+     이 랩은 운영 <code>core/ir</code>을 그대로 lean 추출한 것 — <b>구조·내용 동일</b>(<code>plr_prompts.py</code> 바이트 일치).</p>
 
-  <h3>버전 한 장(<code>prompts/plr_vX.yaml</code>) 안의 두 계열</h3>
-  <div class="svgwrap"><pre style="background:#fff;color:#1f2933;margin:0">
-prompts/plr_v1.4_cot.yaml            <span class="c"># 버전 = 스위처블 단위(--version)</span>
-├── <b style="color:#0d7d76">plr:</b>                             <span class="c"># ▸ PLR 속성추출 파이프라인의 프롬프트</span>
-│   ├── system                    <span class="c"># [system] 고정 역할지시 — "YAML만 출력"</span>
-│   ├── person_user               <span class="c"># [템플릿] 사람 크롭·CoT 추론    ← 편집대상</span>
-│   ├── person_user_no_reason     <span class="c"># [템플릿] 사람 크롭·비추론(토큰↓)</span>
-│   └── vehicle_user              <span class="c"># [템플릿] 차량 크롭             ← 편집대상</span>
-│
-└── <b style="color:#b26a00">query_parser:</b>                    <span class="c"># ▸ 텍스트 검색 파이프라인의 프롬프트</span>
-    ├── system                    <span class="c"># [system] 쿼리→구조화 역할지시</span>
-    └── user                      <span class="c"># [템플릿] 쿼리 파싱             ← 편집대상</span>
-                                  <span class="c">  + parser/qp_v0.4.yaml (색·성별·차종 시노님 사전)</span>
-  </pre></div>
-
-  <h3>프롬프트 “종류” × 2 파이프라인</h3>
+  <h3>① 런타임이 실제 쓰는 것 = <code>plr_prompts.py</code> 상수 8개</h3>
+  <p style="font-size:14.5px;color:#48515b;margin:2px 0 8px"><code>run_plr → build_plr_messages</code>가 이 상수들로 메시지를 조립한다. 어느 상수를 쓸지는
+    <code>IR_PLR_FORMAT</code>(yaml/json) × <code>IR_PLR_REASON</code>(on/off) <b>env</b>가 고른다. <b>yaml은 안 읽는다</b> —
+    핫패스에서 <code>get_provider("prompt")</code> 미호출(실증: yaml 편집해도 조립된 프롬프트 불변).</p>
   <table>
-    <tr><th style="width:110px">종류</th><th>plr (속성)</th><th>search (검색)</th><th>성격</th></tr>
-    <tr><td><b>system</b></td><td><code>plr.system</code></td><td><code>query_parser.system</code></td><td>고정 역할 지시(대개 유지)</td></tr>
-    <tr><td><b>템플릿 (user)</b></td><td><code>person_user</code> · <code>vehicle_user</code> (+<code>_no_reason</code>)</td><td><code>query_parser.user</code></td><td class="ok">← 주 편집 대상</td></tr>
-    <tr><td><b>사전 / 코어</b></td><td><code>run_plr</code> 판별 로직</td><td><code>parser/qp_*.yaml</code> 시노님 + <code>run_search</code></td><td>파이프라인 로직</td></tr>
+    <tr><th style="width:120px">파이프라인</th><th style="width:120px">종류</th><th>상수 (plr_prompts.py)</th></tr>
+    <tr><td rowspan="3"><span class="pill">plr</span> 속성</td><td>system</td><td><code>_PLR_SYSTEM_PROMPT</code></td></tr>
+    <tr><td>템플릿·사람</td><td><code>_PLR_YAML_PERSON_TEMPLATE</code> · <code>_PLR_YAML_COT_PERSON_TEMPLATE</code>(CoT) · <code>_PLR_PERSON_USER_TEMPLATE</code></td></tr>
+    <tr><td>템플릿·차량</td><td><code>_PLR_YAML_VEHICLE_TEMPLATE</code> · <code>_PLR_VEHICLE_USER_TEMPLATE</code></td></tr>
+    <tr><td rowspan="2"><span class="pill amber">search</span> 검색</td><td>system</td><td><code>_QUERY_PARSER_SYSTEM_PROMPT</code></td></tr>
+    <tr><td>템플릿</td><td><code>_QUERY_PARSER_USER_TEMPLATE</code> &nbsp;<span style="color:#6b7480">+ <code>parser/qp_v0.4.yaml</code> 시노님 사전(색·성별·차종)</span></td></tr>
   </table>
 
-  <div class="note">
-    <b>두 소스가 parity로 동기</b> — 런타임 레퍼런스 <code>plr_prompts.py</code>(파이썬 상수)와 스위처블
-    <code>prompts/&lt;version&gt;.yaml</code>(<code>FilePromptProvider</code>가 로드)는 <b>동일한 메시지</b>를 내도록 유지된다.
-    한쪽만 고치면 어긋나므로 <code>lab port</code> + <code>prompt_hash</code>가 둘 다(+<code>plr_core.py</code>)를 추적해 잡는다.
+  <h3>② 선언적 미러 = <code>prompts/*.yaml</code> (버전별 3개)</h3>
+  <div class="svgwrap"><pre style="background:#fff;color:#1f2933;margin:0">
+prompts/                                parser/
+├── plr_v0.4.yaml                       └── qp_v0.4.yaml   <span class="c"># search 시노님 사전(결정론)</span>
+├── plr_v1.3_cot.yaml
+└── plr_v1.4_cot.yaml   <span class="c"># 각 파일 = 한 버전. 내부에 두 블록:</span>
+      ├── <b style="color:#0d7d76">plr:</b>          { system, person_user, person_user_no_reason, vehicle_user }
+      └── <b style="color:#b26a00">query_parser:</b> { system, user }
+  </pre></div>
+  <p style="font-size:14.5px;color:#48515b;margin:2px 0 0">버전별로 나뉜 이 yaml들은 <b>상수와 동일하게 유지되는 미러</b>다. core/ir은 parity 테스트(<code>test_prompt_source_parity.py</code>)로 강제하고, 랩은 <code>lab port</code> diff로 확인한다(lab yaml == core/ir yaml, 확인됨). <code>prompt_hash</code>도 <code>prompts/*.yaml</code> + <code>plr_prompts.py</code> + <code>plr_core.py</code>를 함께 해싱한다.</p>
+
+  <div class="note" style="margin-top:16px">
+    <b>⚠️ 편집 대상 (중요)</b> — 모델 동작을 바꾸려면 <b><code>plr_prompts.py</code> 상수</b>를 고쳐야 한다(런타임 실사용).
+    <code>prompts/*.yaml</code>은 사람이 읽는 선언적 spec이자 <code>lab port</code>가 이식하는 대상이므로 <b>둘을 함께</b> 맞춘다 —
+    parity로 묶여 있어 어긋나면 잡힌다. <u>yaml만 고치면 핫패스는 바뀌지 않는다.</u>
   </div>
 
-  <h3>바꿀 수 있는 3개 축</h3>
+  <h3>바꿀 수 있는 축</h3>
   <div class="grid c3">
-    <div class="tile"><h4>① 프롬프트 변경</h4><p>버전 yaml의 <b>system·템플릿</b>을 편집(plr 또는 search 계열). <code>--version</code>으로 버전 스위치·비교.</p></div>
+    <div class="tile"><h4>① 프롬프트 변경</h4><p><code>plr_prompts.py</code> 상수 <b>+ 동일 <code>prompts/*.yaml</code></b>(parity)를 편집. system 또는 템플릿, plr 또는 search 계열. <code>--version</code>으로 버전 스위치·비교.</p></div>
     <div class="tile"><h4>② 파이프라인 변경</h4><p><code>--pipeline plr|search</code> — 어느 판별/검색 경로를 쓸지. 코어는 <code>run_plr</code> / <code>run_search</code>.</p></div>
-    <div class="tile"><h4>③ 추론 토글</h4><p><code>IR_PLR_REASON=on</code> → CoT(<code>person_user</code>) / off → <code>person_user_no_reason</code>. 정확도 ↔ 토큰 트레이드오프.</p></div>
+    <div class="tile"><h4>③ 추론 토글</h4><p><code>IR_PLR_REASON=on</code> → CoT(<code>_..._COT_PERSON_TEMPLATE</code>) / off → 비CoT. 정확도 ↔ 토큰 트레이드오프.</p></div>
   </div>
-  <p style="font-size:14px;color:#6b7480;margin-top:12px">
-    즉 실험에서 <b>“프롬프트”를 바꾼다</b>는 것은 = {plr | search} × {system | 템플릿} × {버전} 의 조합을 바꾸는 것이고,
-    <b>“파이프라인”을 바꾼다</b>는 것은 = 그 프롬프트를 소비하는 코어(run_plr/run_search)와 <code>--pipeline</code> 선택을 바꾸는 것이다.
-  </p>
 </section>
 
 <!-- DATA -->
@@ -416,7 +414,7 @@ attributes:[<span class="s">gender</span>]
   <h2><span class="num">10</span>전달 · 이식 (외부 엔지니어용)</h2>
   <p class="sub">프롬프트를 개선해 되돌리는 사람을 위한 요약. 자세히는 <code>HANDOFF.md</code>.</p>
   <div class="grid c3">
-    <div class="tile"><h4>✏️ 편집</h4><p><code>prompts/*.yaml</code>만 고친다. 운영 추론·저장 코드는 건드리지 않는다.</p></div>
+    <div class="tile"><h4>✏️ 편집</h4><p><b><code>plr_prompts.py</code> 상수 + 동일 <code>prompts/*.yaml</code></b>(parity)를 함께 고친다. 저장·인덱싱 등 운영 인프라는 건드리지 않는다. (자세한 구조 → §06)</p></div>
     <div class="tile"><h4>📏 측정</h4><p>고치면 <b>반드시</b> <code>run</code>→<code>eval</code>로 Δ를 확인. 악화면 롤백.</p></div>
     <div class="tile"><h4>↩️ 되돌리기</h4><p>이긴 프롬프트는 <code>lab port</code>로 diff를 떠서 ZioVision 팀에 전달. 팀이 eval 게이트 후 운영 적용.</p></div>
   </div>

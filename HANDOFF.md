@@ -18,37 +18,51 @@ the live GPU service — and you do not need them.
 
 ## What you edit
 
-### Primary: `prompts/*.yaml`
+### Primary (actual runtime source): `plr_prompts.py` constants
 
-The PLR prompt versions live here:
+The prompt the model **actually** receives is built from string constants in
+`plr_prompts.py`. `build_plr_messages()` assembles them and does **NOT** read
+`prompts/*.yaml` (verified: editing a yaml does not change the built prompt).
+Which constant is used is chosen by two env vars — this is how you switch
+prompt variants:
+
+```
+IR_PLR_FORMAT = yaml | json     # yaml is current; json is a legacy A/B path
+IR_PLR_REASON = on   | off      # on = chain-of-thought (longer, ~+35% tokens)
+```
+
+Constants to edit (to actually change behavior):
+
+```
+# PLR (attribute) pipeline
+_PLR_SYSTEM_PROMPT
+_PLR_YAML_PERSON_TEMPLATE          # yaml, non-CoT person
+_PLR_YAML_COT_PERSON_TEMPLATE      # yaml, CoT person   (IR_PLR_REASON=on)
+_PLR_YAML_VEHICLE_TEMPLATE         # yaml vehicle
+_PLR_PERSON_USER_TEMPLATE / _PLR_VEHICLE_USER_TEMPLATE   # legacy JSON path
+# search pipeline
+_QUERY_PARSER_SYSTEM_PROMPT
+_QUERY_PARSER_USER_TEMPLATE        # (+ parser/qp_v0.4.yaml synonym dictionary)
+```
+
+### Keep `prompts/*.yaml` in parity (declarative mirror — not read at runtime)
 
 ```
 prompts/
     plr_v0.4.yaml         # early baseline (reference only)
     plr_v1.3_cot.yaml     # v1.3 chain-of-thought
-    plr_v1.4_cot.yaml     # current production version
+    plr_v1.4_cot.yaml     # current
 ```
 
-Each file is a YAML document that defines the system message, few-shot examples,
-and output format instructions sent to Gemma for a given PLR version. To add a
-new version:
+These per-version yaml files are a human-readable MIRROR of the constants above,
+used for versioned diffing and `lab port` — **not loaded on the runtime path**.
+Keep them identical to the constants: core/ir enforces this with
+`tests/test_prompt_source_parity.py`; the lab checks it via `lab port` diff.
 
-1. Copy the closest existing file: `cp prompts/plr_v1.4_cot.yaml prompts/plr_v1.5_cot.yaml`
-2. Edit `prompts/plr_v1.5_cot.yaml` with your prompt changes.
-3. Register the new version in `plr_prompts.py` (see below).
-
-### Secondary: `plr_prompts.py` (when adding a new version)
-
-`plr_prompts.py` maps version strings to YAML files and defines
-`parse_plr_response()` which turns raw Gemma output into the structured PLR
-JSON. You need to touch it when:
-
-- You add a new prompt version that needs a new YAML entry in the version map.
-- You change the **output format** of the prompt (e.g. adding a new field) and
-  need `parse_plr_response()` to extract it.
-
-You do **not** need to touch `plr_prompts.py` when you only change wording /
-few-shot examples inside an existing version's YAML file.
+**So a prompt change = edit the `plr_prompts.py` constant AND its mirror in the
+matching `prompts/*.yaml`.** Editing the yaml alone changes nothing at runtime.
+Also update `parse_plr_response()` in `plr_prompts.py` if you change the output
+schema (add/rename a field).
 
 ### What NOT to touch
 
