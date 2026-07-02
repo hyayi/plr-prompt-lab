@@ -29,7 +29,7 @@ _LAB_ROOT = Path(__file__).resolve().parent.parent  # lab root (evalkit/ is one 
 # surfaced by lab port. Keep this list and lab port in sync via this function.
 _PROMPTS_DIR = "prompts"
 _SCHEMA_DIR = "schema"
-_SURFACE_PY = ("plr_prompts.py", "plr_core.py", "plr_schema.py", "preprocess.py")
+_SURFACE_PY = ("plr_prompts.py", "plr_parse.py", "plr_core.py", "plr_schema.py", "preprocess.py")
 
 
 def surface_relpaths(
@@ -50,7 +50,7 @@ def surface_relpaths(
     rels: list[str] = []
     prompts_dir = root / _PROMPTS_DIR
     if prompts_dir.is_dir():
-        rels.extend(sorted(str(p.relative_to(root)) for p in prompts_dir.glob("*.yaml")))
+        rels.extend(sorted(str(p.relative_to(root)) for p in prompts_dir.rglob("*.yaml")))
     schema_dir = root / _SCHEMA_DIR
     if schema_dir.is_dir():
         rels.extend(sorted(str(p.relative_to(root)) for p in schema_dir.glob("*.yaml")))

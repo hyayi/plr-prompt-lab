@@ -19,7 +19,6 @@ attributes: [gender]                       # PLR attributes (plr pipeline only)
 
 # Optional
 ledger:     ./eval/ledger.jsonl            # ledger path (default: eval/ledger.jsonl)
-formats:    [yaml]                         # IR_PLR_FORMAT axis (yaml | json), plr cells only
 reasons:    ["on", "off"]                  # IR_PLR_REASON axis (on | off), plr cells only
 ```
 
@@ -29,33 +28,24 @@ reasons:    ["on", "off"]                  # IR_PLR_REASON axis (on | off), plr 
 |-------------|----------------|----------|-------------|
 | `datasets`  | list[str]      | yes      | Paths to dataset directories. Each must contain `crops/`, `labels.jsonl`, and `predictions.jsonl`. |
 | `models`    | list[str]      | yes      | Registry model names. `mock` is GPU-free; `gemma` requires weights. Unknown names raise an error before any cell runs. |
-| `prompts`   | list[str]      | yes      | Prompt version tags. Passed as `--version` to `run_eval`. If the tag is `yaml` or `json` it also sets `IR_PLR_FORMAT`. |
+| `prompts`   | list[str]      | yes      | Prompt version tags. Passed as `--version` to `run_eval`. |
 | `pipelines` | list[str]      | yes      | `plr` (attribute extraction). The search pipeline was removed (2026-07). Unknown names raise an error before any cell runs. |
 | `attributes`| list[str]      | no       | PLR attribute names (e.g. `gender`, `vehicle_type`, `military`). Default: `[""]`. |
 | `ledger`    | str            | no       | Path to the ledger JSONL file. Relative paths are resolved relative to the experiment YAML file. Default: `eval/ledger.jsonl` inside the lab root. |
-| `formats`   | list[str]      | no       | `IR_PLR_FORMAT` env axis; allowed values `yaml`, `json` (quote-free). Set per cell and restored after each cell. Default: env untouched. |
 | `reasons`   | list[str]      | no       | `IR_PLR_REASON` env axis; allowed values `on`, `off` (**quote them** — bare YAML `on`/`off` parse as booleans). Default: env untouched. |
 
-### format/reason axis semantics
+### reason axis semantics
 
-- These are the *effective* runtime axes the constants prompt path switches on
-  (`plr_prompts.py`: format picks the yaml/json template family, reason picks
-  the CoT vs no-reason person template).
-- **Ledger disambiguation**: two cells that differ only in an env axis would
-  otherwise stamp the same `version` + `prompt_hash` (the hash covers files,
-  not env). The runner therefore appends the axis values to the ledger version
-  tag: `plr_v1.4_cot+json+reason-off`.
-- **Conflict guard**: a yaml-backed prompt version pins its own wire format in
-  the yaml's `format:` key, while the *response parser* follows
-  `IR_PLR_FORMAT`. A conflicting combination (e.g. `prompts: [plr_v1.4_cot]`
-  which pins yaml × `formats: [json]`) would make every parse fail, so the
-  cell fails loudly with a clear error instead of producing garbage metrics.
-  The `reasons` axis has no such conflict (the provider reads it from env).
+- `IR_PLR_REASON` picks the CoT (`user_cot`) vs plain (`user_plain`) person
+  template. (The `formats` axis was removed 2026-07 with the legacy JSON
+  prompt path — YAML is the only wire format.)
+- **Ledger disambiguation**: cells differing only in the reason axis stamp
+  distinct version tags (`plr_v1.5_cot+reason-off`).
 
 ## Cell enumeration
 
 The cross-product is:
-`pipelines × datasets × models × prompts × attributes × formats × reasons`
+`pipelines × datasets × models × prompts × attributes × reasons`
 (the last three axes are optional; omitted axes contribute a single cell).
 
 ## Dispatch via registry

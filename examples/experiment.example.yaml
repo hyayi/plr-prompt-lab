@@ -35,11 +35,8 @@ attributes:
 
 ledger: ./eval/ledger.jsonl   # ledger path (default: eval/ledger.jsonl relative to lab root)
 
-# Env axes (plr cells only). Cells stamp the axis into the ledger version tag
-# (e.g. plr_v1.4_cot+reason-off) so the report can tell them apart.
-# formats:                    # IR_PLR_FORMAT — yaml | json. NOTE: conflicts
-#   - yaml                    #   loudly with a yaml-backed prompt version that
-#   - json                    #   pins a different format (see EXPERIMENT_SPEC).
+# reason 축(옵션): CoT/plain 템플릿 선택. ledger version 태그에 +reason-off로 구분.
+# (formats 축은 레거시 JSON 경로와 함께 제거됨 — YAML 단일 포맷)
 # reasons:                    # IR_PLR_REASON — "on" | "off" (KEEP THE QUOTES:
 #   - "on"                    #   bare on/off parse as YAML booleans and are
 #   - "off"                   #   rejected by validation).

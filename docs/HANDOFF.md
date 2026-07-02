@@ -28,26 +28,25 @@ current version's yaml IS editing the runtime prompt. Two env vars still
 switch variants:
 
 ```
-IR_PLR_FORMAT = yaml | json     # yaml is current; json is a legacy A/B path
-IR_PLR_REASON = on   | off      # on = chain-of-thought (longer, ~+35% tokens)
+IR_PLR_REASON = on | off        # on = chain-of-thought (longer, ~+35% tokens)
 ```
 
-Both env vars are also available as experiment-matrix axes (`formats:` /
-`reasons:` in experiment.yaml — see EXPERIMENT_SPEC.md), so you can sweep them
-without touching your shell environment.
+Also available as an experiment-matrix axis (`reasons:` in experiment.yaml —
+see EXPERIMENT_SPEC.md). The legacy IR_PLR_FORMAT switch was removed 2026-07:
+YAML is the only wire format.
 
 What to edit (to actually change behavior): the yaml blocks of the current
 version file —
 
 ```
-prompts/plr_v1.5_cot.yaml
-  plr.system                 # role + output discipline
-  plr.person_user            # CoT person (IR_PLR_REASON=on, production)
-  plr.person_user_no_reason  # plain person
-  plr.vehicle_user           # vehicle
-  query_parser.*             # search prompt (core/ir side uses it; keep intact)
+prompts/plr_v1.5_cot/        # one DIRECTORY per version, one file per function
+  person.yaml                # system + user_cot (production) + user_plain
+  vehicle.yaml               # system + user
+  query_parser.yaml          # search prompt (core/ir side; keep intact)
+  vqa.yaml                   # search VQA system prompt
+  retry.yaml                 # schema-failure retry template
 ```
-(The only remaining constants in plr_prompts.py are the legacy JSON path.)
+plr_prompts.py holds ZERO prompt text — it only loads and composes.
 
 ### Keep `prompts/*.yaml` in parity (declarative mirror — not read at runtime)
 

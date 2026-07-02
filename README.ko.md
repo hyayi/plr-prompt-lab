@@ -63,7 +63,7 @@ python3 -c "import plr_core, gemma_model, quality_gate, plr_prompts, \
 | **프롬프트** | `prompts/*.yaml` 편집 후 `lab run`/`lab eval`에 `--version <이름>` | 구현됨 |
 | **모델** | `--model gemma\|mock` (레지스트리, `registry.py`) | 구현됨 (P2-1) |
 | **파이프라인** | `plr` 전용 (레지스트리) — 검색은 2026-07 제거 | 구현됨 |
-| **format/reason** | experiment.yaml의 `formats:`/`reasons:` 축 (`IR_PLR_FORMAT`/`IR_PLR_REASON`) | 구현됨 |
+| **reason(CoT)** | experiment.yaml의 `reasons:` 축 (`IR_PLR_REASON`) — formats 축은 JSON 경로와 함께 제거 | 구현됨 |
 
 여러 축의 **교차곱을 한 번에** 돌리려면 `lab experiment run <yaml>`을 쓰세요
 ([EXPERIMENT_SPEC.md](docs/EXPERIMENT_SPEC.md)). 결과 추이는 `lab report`가

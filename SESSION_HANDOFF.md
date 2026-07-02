@@ -96,6 +96,13 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 - `GUIDE.html` (구조+사용법 원페이지, 배포용): `654ca3a` · `d7285e3` · `7634a0a`
 - **`--version` 실-프롬프트-로드 픽스**: `51022f6`(feat) · `2553b13`(docs) — experiment의 프롬프트 축이 이제 진짜로 다른 프롬프트를 비교
 
+### 프롬프트 기능별 분리 + 파서 분리 + JSON 경로 제거 (2026-07-02, 사용자 구조안)
+- **prompts/<버전>/ 디렉터리 = 버전, 기능별 파일**: person/vehicle/query_parser/vqa/retry.yaml — **py에 프롬프트 텍스트 0줄** (VQA system·retry 템플릿도 yaml로 이동). `plr_prompts.py` 910→280줄, 조합(로드+enum주입+메시지 조립) 전용.
+- **`plr_parse.py` 분리**(~500줄): 응답 파서+정규화 = 아웃풋 parity 표면. plr_prompts가 re-export(호환).
+- **레거시 JSON 경로 삭제**: v0.4 프롬프트 상수/빌더, `IR_PLR_FORMAT` 스위치, indexing json 버전 분기, experiment `formats:` 축(명시적 거부 에러). `parse_plr_json`은 유지(검색 쿼리파서 응답용).
+- provider 듀얼모드(디렉터리 버전 + 레거시 단일파일 아카이브 v0.4/1.3/1.4), exp_config/re_score가 디렉터리 버전 해석. port/hash 표면: prompts rglob + plr_parse.py 추가.
+- **바이트 동등성 스냅샷 검증**(person CoT/plain·vehicle·retry×2·qp·VQA + provider 디렉터리모드). core/ir `17199df`(206), lab 89 passed, port 13 identical+plr_core divergence만.
+
 ### 구조 슬림화 (2026-07-02) — 죽은 기계장치 제거
 - **registry.py 372→170줄**: get_provider/검증/폴백 등 슬롯 해석 기계장치 제거(lab은 provider를 registry로 해석하지 않음 — FilePromptProvider 직접 생성). 동기 모듈들의 import-시 self-register용 `register()` shim + MODELS/PIPELINES만 유지.
 - **providers/__init__.py 352→223줄**: Parser/ScoringStrategy ABC 제거(PLR 전용 — 소비자 0). PromptProvider(+gemma_backend용 ModelProvider) 유지.

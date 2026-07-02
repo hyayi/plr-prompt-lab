@@ -72,31 +72,30 @@ def _make_gender_dataset(base: Path, obj_ids: list[str]) -> Path:
     return base
 
 
-def test_enumerate_cells_crosses_format_reason_axes() -> None:
-    """plr cells cross formats × reasons."""
+def test_enumerate_cells_crosses_reason_axis() -> None:
+    """plr cells cross the reasons axis (formats died with the JSON path)."""
     from runners import experiment as ex
 
     cfg = {
         "datasets": ["d"], "models": ["mock"], "prompts": ["p"],
         "pipelines": ["plr"], "attributes": ["gender"],
-        "formats": ["yaml", "json"], "reasons": ["on", "off"],
+        "reasons": ["on", "off"],
     }
     cells = ex.enumerate_cells(cfg)
-    assert len(cells) == 4, f"expected 2×2 cells, got {len(cells)}"
-    assert {(c.fmt, c.reason) for c in cells} == {
-        ("yaml", "on"), ("yaml", "off"), ("json", "on"), ("json", "off")}
+    assert len(cells) == 2, f"expected 2 cells, got {len(cells)}"
+    assert {c.reason for c in cells} == {"on", "off"}
+    assert {c.version_tag() for c in cells} == {"p+reason-on", "p+reason-off"}
 
 
 def test_validate_schema_rejects_bad_axis_values() -> None:
     from runners import experiment as ex
 
     base = {"datasets": ["d"], "models": ["m"], "prompts": ["p"], "pipelines": ["plr"]}
-    with pytest.raises(ValueError, match="formats"):
-        ex._validate_schema({**base, "formats": ["xml"]}, "x.yaml")
     with pytest.raises(ValueError, match="reasons"):
         ex._validate_schema({**base, "reasons": ["maybe"]}, "x.yaml")
-    with pytest.raises(ValueError, match="formats"):
-        ex._validate_schema({**base, "formats": []}, "x.yaml")
+    # the formats axis was removed with the legacy JSON prompt path
+    with pytest.raises(ValueError, match="removed"):
+        ex._validate_schema({**base, "formats": ["yaml"]}, "x.yaml")
 
 
 def test_experiment_reason_axis_sets_env_and_stamps_ledger(
@@ -149,40 +148,4 @@ def test_experiment_reason_axis_sets_env_and_stamps_ledger(
         versions = {json.loads(line)["version"] for line in f if line.strip()}
     assert versions == {"plr_v1.5_cot+reason-on", "plr_v1.5_cot+reason-off"}, (
         f"ledger version tags must distinguish the reason axis, got {versions}"
-    )
-
-
-def test_format_axis_conflict_with_yaml_pinned_version_fails_cell(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """formats: [json] against plr_v1.5_cot (yaml-pinned) must fail that cell
-    loudly — and NOT crash the whole matrix (exit 2 = all cells failed)."""
-    import registry
-    from runners import experiment
-
-    ds_dir = _make_gender_dataset(tmp_path / "ds", ["m1"])
-    monkeypatch.setitem(
-        registry.MODELS, "envrec", lambda: EnvRecordingModel([]))
-
-    yaml_path = tmp_path / "experiment.yaml"
-    yaml_path.write_text(textwrap.dedent(f"""\
-        datasets:
-          - {ds_dir}
-        models:
-          - envrec
-        prompts:
-          - plr_v1.5_cot
-        pipelines:
-          - plr
-        attributes:
-          - gender
-        formats:
-          - json
-        ledger: {tmp_path / 'ledger.jsonl'}
-        """), encoding="utf-8")
-
-    exit_code = experiment.run_experiment(str(yaml_path))
-    assert exit_code == 2, (
-        "the conflicting (yaml-pinned prompt × json format) cell must fail "
-        f"and, being the only cell, yield exit 2 — got {exit_code}"
     )

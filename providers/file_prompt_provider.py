@@ -28,7 +28,36 @@ _PROMPTS_DIR = pathlib.Path(__file__).parent.parent / "prompts"
 
 
 def _load_yaml(version: str) -> dict[str, Any]:
-    """Load and parse prompts/<version>.yaml.  Raises FileNotFoundError if absent."""
+    """Load a prompt version.
+
+    Two layouts are supported:
+      - DIRECTORY (current): prompts/<version>/{person,vehicle,query_parser,
+        vqa,retry}.yaml — one file per function. Assembled here into the
+        legacy single-dict shape so the builder code below is layout-agnostic.
+      - SINGLE FILE (legacy archives): prompts/<version>.yaml.
+    """
+    vdir = _PROMPTS_DIR / version
+    if vdir.is_dir():
+        def _fn(name: str) -> dict[str, Any]:
+            with (vdir / f"{name}.yaml").open(encoding="utf-8") as fh:
+                d = yaml.safe_load(fh)
+            if not isinstance(d, dict):
+                raise ValueError(f"{vdir / name}.yaml did not parse to a dict")
+            return d
+        person, vehicle = _fn("person"), _fn("vehicle")
+        qp = _fn("query_parser")
+        return {
+            "format": "yaml",
+            "commit_enums": bool(person.get("commit_enums", False)),
+            "plr": {
+                "system": person["system"],
+                "vehicle_system": vehicle["system"],
+                "person_user": person["user_cot"],
+                "person_user_no_reason": person["user_plain"],
+                "vehicle_user": vehicle["user"],
+            },
+            "query_parser": {"system": qp["system"], "user": qp["user"]},
+        }
     path = _PROMPTS_DIR / f"{version}.yaml"
     with path.open(encoding="utf-8") as fh:
         data = yaml.safe_load(fh)
@@ -119,6 +148,7 @@ class FilePromptProvider(PromptProvider):
             return _base(values)
 
         if object_hint == "vehicle":
+            sys_text = plr.get("vehicle_system", plr["system"]).rstrip("\n")
             user_text = plr["vehicle_user"].rstrip("\n").format(
                 colors=", ".join(_e(COLOR_ENUM, "colors")),
                 vehicle_types=", ".join(_e(VEHICLE_TYPE_ENUM, "vehicle_types")),

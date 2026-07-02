@@ -1,7 +1,7 @@
 """Experiment matrix runner for the PLR prompt lab (P2-2).
 
 Enumerates the cross-product of datasets × models × prompts × pipelines ×
-attributes (× formats × reasons, both optional) from an experiment.yaml, then
+attributes (× reasons, optional) from an experiment.yaml, then
 for each cell:
 
   (a) run  — re_score.re_score with get_model(model)
@@ -100,9 +100,14 @@ def _validate_schema(cfg: dict[str, Any], path: str | Path) -> None:
                     f"experiment.yaml ({path}): all items in 'attributes' must be "
                     f"strings, got {item!r}"
                 )
-    # Optional env axes: 'formats' (IR_PLR_FORMAT) and 'reasons' (IR_PLR_REASON).
-    # Closed value sets — anything else is a typo we want to fail loudly on.
-    _ENV_AXES = {"formats": {"yaml", "json"}, "reasons": {"on", "off"}}
+    # Optional env axis: 'reasons' (IR_PLR_REASON). Closed value set —
+    # anything else is a typo we want to fail loudly on.
+    if "formats" in cfg:
+        raise ValueError(
+            f"experiment.yaml ({path}): the 'formats' axis was removed with the "
+            "legacy JSON prompt path (2026-07) — YAML is the only wire format."
+        )
+    _ENV_AXES = {"reasons": {"on", "off"}}
     for key, allowed in _ENV_AXES.items():
         if key not in cfg:
             continue
@@ -152,7 +157,6 @@ class Cell:
     prompt: str      # version tag (e.g. plr_v1.4_cot)
     pipeline: str
     attribute: str   # PLR attribute (e.g. gender)
-    fmt: str = ""    # IR_PLR_FORMAT axis value ("yaml"|"json"); "" = env untouched
     reason: str = "" # IR_PLR_REASON axis value ("on"|"off"); "" = env untouched
 
     def label(self) -> str:
@@ -164,8 +168,6 @@ class Cell:
         ]
         if self.attribute:
             parts.append(f"attribute={self.attribute!r}")
-        if self.fmt:
-            parts.append(f"format={self.fmt!r}")
         if self.reason:
             parts.append(f"reason={self.reason!r}")
         return "{" + ", ".join(parts) + "}"
@@ -175,8 +177,6 @@ class Cell:
         two cells that differ only in the format/reason env axes (prompt_hash
         hashes files, not env), so the axis values are appended to the tag."""
         tag = self.prompt
-        if self.fmt:
-            tag += f"+{self.fmt}"
         if self.reason:
             tag += f"+reason-{self.reason}"
         return tag
@@ -205,20 +205,18 @@ def enumerate_cells(cfg: dict[str, Any]) -> list[Cell]:
     prompts: list[str] = cfg["prompts"]
     pipelines: list[str] = cfg["pipelines"]
     attributes: list[str] = cfg.get("attributes") or [""]
-    formats: list[str] = cfg.get("formats") or [""]
     reasons: list[str] = cfg.get("reasons") or [""]
 
     cells: list[Cell] = []
     for pipeline, dataset, model, prompt in product(pipelines, datasets, models, prompts):
-        # one cell per attribute × format × reason
-        for attribute, fmt, reason in product(attributes, formats, reasons):
+        # one cell per attribute × reason
+        for attribute, reason in product(attributes, reasons):
             cells.append(Cell(
                 dataset=dataset,
                 model=model,
                 prompt=prompt,
                 pipeline=pipeline,
                 attribute=attribute,
-                fmt=fmt,
                 reason=reason,
             ))
     return cells
@@ -228,43 +226,10 @@ def enumerate_cells(cfg: dict[str, Any]) -> list[Cell]:
 # Cell runner
 # =====================================================================
 
-def _set_prompt_env(prompt_version: str) -> None:
-    """Set IR_PLR_FORMAT / IR_PLR_REASON from a prompt version tag.
-
-    Mirrors what _cmd_run does: only propagate when the version tag IS a wire
-    format name (yaml|json).  Named version tags like 'plr_v1.4_cot' are
-    passed directly as the --version arg to run_eval.
-    """
-    if prompt_version.strip().lower() in {"yaml", "json"}:
-        os.environ["IR_PLR_FORMAT"] = prompt_version.strip().lower()
-
 
 def _apply_env_axes(cell: Cell) -> None:
-    """Apply the cell's optional format/reason axes to the environment.
-
-    Called after _set_prompt_env so an explicit 'formats' axis wins over a
-    format-named prompt tag.  Guard: a yaml-backed prompt version pins its own
-    wire format (FilePromptProvider reads it from the yaml's `format:` key),
-    while the RESPONSE parser follows IR_PLR_FORMAT — a mismatch would make the
-    model emit one format and the parser expect the other, failing every crop.
-    Fail the cell loudly instead of producing garbage metrics.
-    """
-    if cell.fmt:
-        yaml_path = _LAB_ROOT / "prompts" / f"{cell.prompt}.yaml"
-        if yaml_path.exists():
-            import yaml
-
-            data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
-            pinned = str(data.get("format", "yaml")).strip().lower()
-            if pinned != cell.fmt:
-                raise RuntimeError(
-                    f"format axis {cell.fmt!r} conflicts with prompts/{cell.prompt}.yaml "
-                    f"which pins format={pinned!r}: the prompt would ask for {pinned} "
-                    f"but the response parser (IR_PLR_FORMAT={cell.fmt}) would reject it. "
-                    f"Drop this (prompt, format) combination or use a constants-backed "
-                    f"version tag for the format axis."
-                )
-        os.environ["IR_PLR_FORMAT"] = cell.fmt
+    """Apply the cell's optional reason axis to the environment. (The formats
+    axis died with the legacy JSON prompt path — YAML is the only format.)"""
     if cell.reason:
         os.environ["IR_PLR_REASON"] = cell.reason
 
@@ -282,7 +247,6 @@ def _run_plr_cell(cell: Cell, ledger_path: str) -> None:
         )
 
     model = get_model(cell.model)
-    _set_prompt_env(cell.prompt)
     _apply_env_axes(cell)
 
     meta = rs.re_score(
@@ -336,7 +300,7 @@ def run_cell(cell: Cell, ledger_path: str) -> CellResult:
     """
     label = cell.label()
     print(f"[experiment] CELL {label}", flush=True)
-    saved_env = {k: os.environ.get(k) for k in ("IR_PLR_FORMAT", "IR_PLR_REASON")}
+    saved_env = {k: os.environ.get(k) for k in ("IR_PLR_REASON",)}
     try:
         _run_plr_cell(cell, ledger_path)
         print(f"[experiment]   OK  {label}", flush=True)

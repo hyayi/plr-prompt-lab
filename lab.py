@@ -213,13 +213,6 @@ def _cmd_run(args: argparse.Namespace) -> int:
     from evalkit.dataset import resolve_dataset_dir
     from registry import get_model
 
-    # IR_PLR_FORMAT selects the WIRE format (yaml|json) the prompt/parser use —
-    # not the ledger version tag. Only propagate --version when it names a wire
-    # format; a version tag like 'plr_v1.5_cot' or 'mock_v1' must NOT clobber the
-    # format (that routed parsing to the JSON path and broke yaml runs).
-    if args.version and args.version.strip().lower() in {"yaml", "json"}:
-        os.environ["IR_PLR_FORMAT"] = args.version.strip().lower()
-
     model_name = getattr(args, "model", "gemma")
     attribute = args.attribute
     ds_dir = resolve_dataset_dir(_LAB_ROOT, attribute, getattr(args, "dataset", None))

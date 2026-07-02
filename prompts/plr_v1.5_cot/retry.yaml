@@ -1,0 +1,9 @@
+# 스키마 실패 재시도 템플릿 ({error_reason}/{original_response} 주입)
+user: |-
+  Your previous response did not match the required schema:
+    Error: {error_reason}
+
+  Your previous output was:
+  {original_response}
+
+  Output ONLY a corrected YAML response that conforms to the schema. No markdown fences, no leading prose.

@@ -1,0 +1,56 @@
+# PLR vehicle 추출 프롬프트
+commit_enums: true
+system: |-
+  Extract visual attributes from CCTV crops as compact YAML.
+  - YAML only. No prose. No markdown fences.
+  - Use only the listed enum values.
+  - Always commit to a concrete value. Never answer unknown; express low confidence via margins.
+  - Be conservative with gender/age — visual appearance only, not identity.
+user: |-
+  Image: vehicle crop. The TARGET vehicle is highlighted by four YELLOW
+  corner marks at the centre of the crop (L-shaped strokes at the corners
+  of a centred ~65%-of-shorter-side box). Label ONLY the vehicle inside
+  those corner marks. If another vehicle is parked next to it, or a person
+  is walking past, ignore them — do not mix their colours or shapes into
+  the answer. The yellow corner marks themselves are visual cues; do not
+  pick "yellow" as the vehicle colour because of them.
+
+  Describe using exactly this YAML shape:
+
+  target: vehicle
+  color: <color>
+  type: <vehicle_type>
+  military: <{military_enum}>
+
+  Enums:
+  - color: {colors}
+  - vehicle_type: {vehicle_types}
+  - military: {military_enum}
+
+  Category hints (visual cues — pick the matching enum value):
+  - sedan       = 4-door car with separate trunk (most common car shape)
+  - suv         = taller / boxier passenger car, raised ride height
+  - hatchback   = 3/5-door car with rear hatch (no separate trunk)
+  - light_car   = very small Korean-market 경차 (Morning, Casper, Ray, Spark sized)
+  - van/minivan = tall passenger box with sliding doors
+  - pickup_truck = open cargo bed behind the cab
+  - truck/bus   = large commercial (long box / passenger row)
+  - taxi        = passenger car painted as taxi (rooftop sign / livery)
+  - ambulance/police_car/fire_truck = clearly marked emergency livery
+  - motorcycle = engine + fuel tank, no rider in this crop
+  - bicycle    = no engine, pedals + chain
+  - scooter    = step-through frame, small wheels
+  - kickboard  = standing platform, no seat
+  - construction_vehicle = excavator/crane/forklift/etc.
+
+  ALWAYS commit to the closest matching type — never answer vehicle_unknown;
+  express low confidence by picking the nearest category instead.
+
+  Color hint:
+  - military_olive = Korean military olive-drab (국방색) — dull yellowish-green used on ROK Army vehicles
+
+  Military hint (judge `military`):
+  - military = camouflage paint, military body type (military truck / APC / armored / jeep / tactical), military markings / insignia.
+  - civilian = ordinary passenger / commercial vehicles (sedan / bus / delivery truck), even if dark green. When cues are inconclusive answer civilian.
+
+  Output only YAML. No fences. No prose.

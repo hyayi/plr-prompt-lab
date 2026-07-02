@@ -43,8 +43,8 @@ exact authoring procedure, so a new version is runnable with
 ## Authoring procedure
 
 ```bash
-# 1. Copy the current version as the base
-cp prompts/plr_v1.5_cot.yaml prompts/plr_v1.6_cot.yaml
+# 1. Copy the current version DIRECTORY as the base (one file per function)
+cp -r prompts/plr_v1.5_cot prompts/plr_v1.6_cot
 ```
 
 2. Edit the header comment: version name, date, and a per-change rationale
@@ -63,60 +63,20 @@ for h in ('person','vehicle'):
 python3 lab.py experiment run my_ab.yaml   # prompts: [plr_v1.5_cot, plr_v1.6_cot]
 ```
 
-## YAML structure template
+## Layout (function-per-file, one directory per version)
 
-```yaml
-# plr_v1.6_cot — <one-line intent> (<date>)
-# Changes vs plr_v1.5_cot:
-#   - <change 1>: <rationale, cite obj_ids/metrics if from improve-prompt>
-format: yaml            # wire format the templates emit (parser follows IR_PLR_FORMAT)
-commit_enums: true      # provider injects *unknown*-filtered enum lists
-plr:
-  system: |-
-    <system prompt — role + output discipline + commit rule>
-  person_user: |-
-    <CoT person template — used when IR_PLR_REASON=on (production default)>
-  person_user_no_reason: |-
-    <plain person template — IR_PLR_REASON=off>
-  vehicle_user: |-
-    <vehicle template>
-# query_parser:         # OPTIONAL for lab experiments — REQUIRED when the
-#   system: |-           # version is ported to core/ir (one yaml serves both
-#     ...                # prompts there). Copy verbatim from the production
-#   user: |-             # version at promotion time.
-#     ...
+```
+prompts/plr_v1.6_cot/
+  person.yaml         # commit_enums + system + user_cot + user_plain
+  vehicle.yaml        # commit_enums + system + user
+  query_parser.yaml   # REQUIRED at core/ir promotion (search uses it)
+  vqa.yaml            # search VQA system prompt
+  retry.yaml          # schema-failure retry template ({error_reason}/{original_response})
 ```
 
-## Experiment configs — parameter combinations (configs/<name>.yaml)
-
-A prompt yaml holds templates ONLY. To cross a prompt with other input
-knobs (enum lists, preprocessing, sampling) WITHOUT copying template text,
-write an experiment config that references each component by path (see
-`configs/example.yaml`):
-
-```yaml
-prompt: prompts/plr_v1.5_cot.yaml    # component by path (bare name also ok)
-enums: { colors: [black, white, red] }   # inline, or a yaml path
-preprocess: { marker: false }
-sampling: { max_tokens: 256, temperature: 0.2 }
-```
-
-`lab run --version <config-name>` resolves the combination; the ledger
-stamps the config name; prompt_hash covers configs/*.yaml. Same prompt ×
-N knob-sets = N config files, zero template copies.
-
-**Enum overrides may only NARROW the vocabulary** (subset — enforced,
-fail-loud). The parser coerces every slot back onto the schema vocabulary
-(measured: color `crimson`→`gray`, action `crawling`→`posture_unknown`), so
-offering the model a word the schema doesn't know is a half-experiment —
-the answer gets thrown away at parse time.
-
-**EXTENDING a vocabulary = edit `schema/vocab.yaml`** (the declarative
-single source — plr_schema derives constants, parser normalisation, group
-functions and JSON schemas from it, so injection AND parsing move together
-automatically). vocab.yaml is part of the port/hash surface: the change is
-provenance-stamped, `lab port` diffs it against core/ir, and promotion
-copies it home like any other surface file.
+Header-comment each changed file with the per-change rationale. Enum
+placeholders ({colors} …) stay — injection + commit_enums filtering happen
+at composition time.
 
 ## Domain lessons (encoded history — do not relearn these the hard way)
 

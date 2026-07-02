@@ -153,7 +153,8 @@ def re_score(
         # (mock_v1, demo tags) fall back to the module constants.
         variant = load_config(here, prompt_version)
         prompt_yaml_ver = variant.prompt if variant else prompt_version
-        if (here / "prompts" / f"{prompt_yaml_ver}.yaml").exists():
+        if ((here / "prompts" / prompt_yaml_ver).is_dir()
+                or (here / "prompts" / f"{prompt_yaml_ver}.yaml").exists()):
             from providers.file_prompt_provider import FilePromptProvider
 
             _enum_overrides = dict(variant.enums) if variant else None

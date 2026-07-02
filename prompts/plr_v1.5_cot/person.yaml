@@ -1,0 +1,115 @@
+# PLR person 추출 프롬프트 (기능 단위 파일 — 버전 = 디렉터리명)
+commit_enums: true
+system: |-
+  Extract visual attributes from CCTV crops as compact YAML.
+  - YAML only. No prose. No markdown fences.
+  - Use only the listed enum values.
+  - Always commit to a concrete value. Never answer unknown; express low confidence via margins.
+  - Be conservative with gender/age — visual appearance only, not identity.
+user_cot: |-
+  Image: person crop. The TARGET subject is highlighted by four YELLOW
+  corner marks at the centre of the crop (L-shaped strokes at the corners
+  of a centred ~65%-of-shorter-side box). Label ONLY the person inside
+  those corner marks. If another figure is visible outside the marked area,
+  ignore them — do not mix their clothing colours, gender, posture, or
+  equipment into the answer. The yellow corner marks themselves are visual
+  cues; do not include "yellow" as a clothing colour because of them. The
+  corner marks do not enclose the subject — never label clothing as
+  "uniform", "one-piece", or "jumpsuit" purely because the marks frame the
+  person.
+
+  Describe what you see using exactly this YAML shape:
+
+  target: person
+  gender_reason: <short cue, max 6 words, e.g. "broad shoulders, facial hair">
+  gender: <male|female>
+  age_reason: <short cue, max 6 words, e.g. "child-sized, uniform">
+  age: <adult|child>
+  outfit: <two_piece|one_piece|layered|obscured>
+  upper:
+    color: <color>
+    type: <upper_type>
+    sleeve: <long|short>
+  lower:
+    color: <color>
+    type: <lower_type>
+  military: <{military_enum}>
+  equipment: [<equipment>, ...]    # use [] if none
+  action: <static_action>
+  rider_vehicle:                   # ONLY when action is riding_* ; otherwise OMIT this section
+    color: <color>
+    type: <motorcycle|bicycle|scooter|kickboard>
+  margins:
+    gender: <0.0-1.0>
+    age: <0.0-1.0>
+    outfit: <0.0-1.0>
+    sleeve: <0.0-1.0>
+
+  Pick values strictly from these enums. ALWAYS commit to the single most
+  likely value — never answer unknown, even on a poor-quality crop. Express
+  low confidence through the `margins` block instead (a committed guess with
+  margin 0.1 beats a refusal).
+  - color: {colors}
+  - upper_type: {upper_types}
+  - lower_type: {lower_types}
+  - equipment: {equips}
+  - static_action: {actions}
+  - military: {military_enum}
+
+  Color hint:
+  - military_olive = Korean military olive-drab (국방색) — dull yellowish-green worn as ROK Army uniform; use for upper or lower if the garment is clearly 국방색 military fabric
+
+  Military hint (judge `military`, precision-aware):
+  - military = clear military cues: camouflage / disruptive-pattern clothing (woodland / desert / digital), field uniform or combat fatigues, military load-bearing gear (tactical vest, webbing, rucksack), combat helmet, olive-drab / khaki / field-green field dress.
+  - civilian = ordinary street clothes, business / casual, work hi-vis / safety vests (construction, NOT military), school / security / service uniforms.
+  - Be conservative: a single olive garment alone is NOT enough — without pattern / gear / uniform corroboration answer civilian.
+
+  Rules:
+  - Output only YAML. No markdown fences. No prose. Stop after the last line.
+  - Write `gender_reason` BEFORE `gender`, and `age_reason` BEFORE `age`,
+    using one short evidence cue from the image.
+  - One key per line. Two-space indentation under `upper:`, `lower:`, `rider_vehicle:`, `margins:`.
+  - `equipment` is a flow list (inline). Use [] for none.
+  - `margins` are decision confidence per slot (0.0 = guess, 1.0 = certain).
+  - One-piece outfit: still fill `lower.type: none` and `lower.color: <best guess>`.
+  - `rider_vehicle` is REQUIRED when `action` is one of riding_motorcycle /
+    riding_bicycle / riding_scooter / riding_kickboard. Otherwise OMIT the
+    rider_vehicle section entirely.
+user_plain: |-
+  Image: person crop. Describe what you see using exactly this YAML shape:
+
+  target: person
+  gender: <male|female>
+  age: <adult|child>
+  outfit: <two_piece|one_piece|layered|obscured>
+  upper:
+    color: <color>
+    type: <upper_type>
+    sleeve: <long|short>
+  lower:
+    color: <color>
+    type: <lower_type>
+  equipment: [<equipment>, ...]    # use [] if none
+  action: <static_action>
+  margins:
+    gender: <0.0-1.0>
+    age: <0.0-1.0>
+    outfit: <0.0-1.0>
+    sleeve: <0.0-1.0>
+
+  Pick values strictly from these enums. ALWAYS commit to the single most
+  likely value — never answer unknown, even on a poor-quality crop. Express
+  low confidence through the `margins` block instead (a committed guess with
+  margin 0.1 beats a refusal).
+  - color: {colors}
+  - upper_type: {upper_types}
+  - lower_type: {lower_types}
+  - equipment: {equips}
+  - static_action: {actions}
+
+  Rules:
+  - Output only YAML. No markdown fences. No prose. Stop after the last line.
+  - One key per line. Two-space indentation under `upper:`, `lower:`, `margins:`.
+  - `equipment` is a flow list (inline). Use [] for none.
+  - `margins` are decision confidence per slot (0.0 = guess, 1.0 = certain).
+  - One-piece outfit: still fill `lower.type: none` and `lower.color: <best guess>`.

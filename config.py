@@ -7,7 +7,7 @@
 # of those services (import-purity contract, see README).
 #
 # Runtime env vars the lab DOES use live outside this module:
-#   IR_PLR_FORMAT / IR_PLR_REASON   — prompt constants selector (plr_prompts.py)
+#   IR_PLR_REASON                   — CoT/plain person template toggle (plr_prompts.py)
 #   IR_GEMMA_REPO / IR_GEMMA_*      — GPU model download (gemma_backend.py)
 #   CORE_IR_PATH / RESULT_PATH / DATASET_DIR — paths (lab.py, dataset.py)
 # See .env.example for the full list.

@@ -47,8 +47,11 @@ def _resolve_prompt_version(root: Path, ref: str, cfg_path: Path) -> str:
     version name ("plr_v1.5_cot"). Returns the version name; dangling
     references fail loud."""
     ref = ref.strip()
-    version = Path(ref).stem if ref.endswith(".yaml") else ref
-    if not (root / "prompts" / f"{version}.yaml").exists():
+    version = Path(ref).stem if ref.endswith(".yaml") else ref.rstrip("/").split("/")[-1]
+    # A version is a DIRECTORY (function-per-file, current) or a single yaml
+    # (legacy archives).
+    if not ((root / "prompts" / version).is_dir()
+            or (root / "prompts" / f"{version}.yaml").exists()):
         raise ValueError(
             f"{cfg_path}: prompt {ref!r} not found under prompts/ — dangling reference"
         )

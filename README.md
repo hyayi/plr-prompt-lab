@@ -62,7 +62,7 @@ The lab's four selectable dimensions for an experiment:
 | **Prompt** | Edit `prompts/*.yaml` and pass `--version <name>` to `lab run` + `lab eval` | Built |
 | **Model** | `--model gemma\|mock` (registry, `registry.py`) | Built (P2-1) |
 | **Pipeline** | `plr` only (registry) — search removed 2026-07 | Built |
-| **format/reason** | `formats:` / `reasons:` axes in experiment.yaml (`IR_PLR_FORMAT`/`IR_PLR_REASON`) | Built |
+| **reason (CoT)** | `reasons:` axis in experiment.yaml (`IR_PLR_REASON`) — the formats axis died with the JSON path | Built |
 
 To run the cross-product of several axes at once, use
 `lab experiment run <yaml>` (see [EXPERIMENT_SPEC.md](docs/EXPERIMENT_SPEC.md));
