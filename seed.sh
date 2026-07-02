@@ -29,6 +29,7 @@ echo "seed.sh: dest   = $DST"
 # PIPELINES section; gemma_model carries LabGemmaModel/MockModel). Sync them manually if the shared slot layer changes.
 FILES=(
   plr_core.py
+  plr_parse.py
   providers/file_prompt_provider.py
   preprocess.py
   gemma_backend.py

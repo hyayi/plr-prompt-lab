@@ -71,10 +71,6 @@ _COMPARABLE = [
         "plr_v1.3_cot", "yaml", "on",
         marks=pytest.mark.xfail(reason="superseded; historical drift", strict=True),
     ),
-    pytest.param(
-        "plr_v0.4", "json", "off",
-        marks=pytest.mark.xfail(reason="legacy JSON constants/yaml diverged; v1.5 is the live target", strict=True),
-    ),
 ]
 
 
@@ -115,7 +111,7 @@ def test_constants_equal_yaml(version, fmt, reason, hint):
 # constants (qp_v0.4 — verified empirically at wiring time). If a future
 # version legitimately forks the search prompt, drop that version from this
 # list and record the fork in the version yaml's comment header.
-_QP_VERSIONS = ["plr_v0.4", "plr_v1.3_cot", "plr_v1.4_cot", "plr_v1.5_cot"]
+_QP_VERSIONS = ["plr_v1.3_cot", "plr_v1.4_cot", "plr_v1.5_cot"]
 
 
 @pytest.mark.parametrize("version", _QP_VERSIONS)

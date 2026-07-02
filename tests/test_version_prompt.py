@@ -8,7 +8,7 @@ fix:
 
   1. re_score(..., prompt_version="plr_v1.3_cot") vs "plr_v1.4_cot" send
      DIFFERENT user prompts on the SAME dataset (the whole point). Both also
-     differ from "plr_v0.4".
+     differ from "plr_v1.5_cot" (directory version).
   2. A yaml-less version ("mock_v1") falls back to the constants without error
      (build_messages None path).
   3. run_plr(..., build_messages=None) output is identical to the old default
@@ -137,7 +137,7 @@ def _reason_on(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_prompt_versions_produce_different_prompts(tmp_path: Path) -> None:
-    """re_score with plr_v1.3_cot vs plr_v1.4_cot vs plr_v0.4 sends distinct
+    """re_score with plr_v1.3_cot vs plr_v1.4_cot vs plr_v1.5_cot sends distinct
     user prompts on the SAME dataset — the whole point of the prompt axis."""
     from runners import re_score as rs
 
@@ -153,22 +153,22 @@ def test_prompt_versions_produce_different_prompts(tmp_path: Path) -> None:
                 golden_dir=str(_make_golden_dir(tmp_path / "v14", obj_ids)),
                 prompt_version="plr_v1.4_cot")
 
-    rec04 = RecordingMockModel()
-    rs.re_score("gender", rec04,
-                golden_dir=str(_make_golden_dir(tmp_path / "v04", obj_ids)),
-                prompt_version="plr_v0.4")
+    rec15 = RecordingMockModel()
+    rs.re_score("gender", rec15,
+                golden_dir=str(_make_golden_dir(tmp_path / "v15", obj_ids)),
+                prompt_version="plr_v1.5_cot")
 
     t13 = _first_user_text(rec13)
     t14 = _first_user_text(rec14)
-    t04 = _first_user_text(rec04)
+    t15 = _first_user_text(rec15)
 
     assert t13 != t14, (
         "plr_v1.3_cot and plr_v1.4_cot produced IDENTICAL user prompts — "
         "the prompt axis is not actually changing the prompt.\n"
         f"len(v1.3)={len(t13)} len(v1.4)={len(t14)}"
     )
-    assert t13 != t04, "plr_v1.3_cot and plr_v0.4 produced identical prompts"
-    assert t14 != t04, "plr_v1.4_cot and plr_v0.4 produced identical prompts"
+    assert t13 != t15, "plr_v1.3_cot and plr_v1.5_cot produced identical prompts"
+    assert t14 != t15, "plr_v1.4_cot and plr_v1.5_cot produced identical prompts"
 
 
 # =====================================================================

@@ -1,48 +1,13 @@
 # plr-prompt-lab Skills
 
-This directory contains Claude Code skills for operators working with the
-`plr-prompt-lab` dataset and evaluation workflow.
+Claude Code skills for the lab's prompt-improvement workflow.
 
-## Available Skills
+| Skill | When to use |
+|---|---|
+| `prepare-dataset/` | Turn raw crops into a validated lab dataset (structure fixed, labels yours — see docs/DATASET_SPEC.md) |
+| `author-prompt/` | Create a NEW prompt version (contracts, function-per-file layout, domain lessons, promotion steps) |
+| `improve-prompt/` | Turn experiment results + failure crops into a grounded improvement proposal (analyst → proposer → critic ⇄ reviser → judge, max 3 rounds) |
 
-### `prepare-dataset`
-
-**File**: `skills/prepare-dataset/SKILL.md`
-
-**When to use**: You have raw object crops (from a video's detection pipeline
-or collected independently) and need to build a `plr-prompt-lab`-compliant
-dataset — `crops/`, `labels.jsonl`, `manifest.yaml` — so you can run
-`lab validate-dataset`, `lab run`, and `lab eval`.
-
-**Done criterion**: `python3 lab.py validate-dataset --dataset <path>` exits 0
-(`Result: PASS`).
-
----
-
-## How to Use a Skill
-
-### Option A — Load into Claude Code (interactive)
-
-Copy `skills/prepare-dataset/SKILL.md` into your Claude skills directory
-(typically `~/.claude/skills/` or the project-local `.claude/skills/`), then
-invoke it from a Claude Code session:
-
-```
-/prepare-dataset
-```
-
-Claude Code will read the skill file and guide you through the steps.
-
-### Option B — Follow manually
-
-Open `skills/prepare-dataset/SKILL.md` in any text editor and follow the
-step-by-step workflow directly. Every command references `lab.py` subcommands
-that can be run without Claude Code.
-
----
-
-## Skill Authoring Notes
-
-Skills in this directory are docs-only: they describe operator workflows and
-reference real `lab.py` subcommands. They do not add Python logic. If you add
-a new skill, update this README with a one-line summary and its done criterion.
+Each skill is self-contained in its `SKILL.md`. Typical loop:
+prepare-dataset → `lab run`/`lab eval` → improve-prompt → author-prompt →
+`lab experiment run` (A/B) → promotion (`lab port`).
