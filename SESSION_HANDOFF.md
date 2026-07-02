@@ -98,6 +98,14 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 - `GUIDE.html` (구조+사용법 원페이지, 배포용): `654ca3a` · `d7285e3` · `7634a0a`
 - **`--version` 실-프롬프트-로드 픽스**: `51022f6`(feat) · `2553b13`(docs) — experiment의 프롬프트 축이 이제 진짜로 다른 프롬프트를 비교
 
+### 필수 기능 완성 (2026-07-02, 사용자 요구 6종)
+- **generic 데이터셋**: manifest.yaml이 `labels`/`pred_path`/`margin_path`/`bias_pair`/`object_type_hint` 선언 → validate/re_score/run_eval이 스펙 기반 동작 (`evalkit.dataset.attribute_spec`). gender/vehicle_type/military는 내장 프리셋(예시). 템플릿: `examples/dataset_template/` (validate PASS).
+- **지표 완성**: precision·F1(클래스별+macro) ledger 추가; report.html에 **전체 실험 비교표** + **confusion 매트릭스**(recall/precision/F1 컬럼) 렌더링.
+- **`lab gallery --dataset D`**: 크롭-라벨 시각화 자체완결 HTML — base64 썸네일, pred vs label, CORRECT/WRONG 배지, margin/quality, **오답 우선·저margin 우선** 정렬, 클래스 필터.
+- **`lab report --compare LEDGER_B`**: 실험군 요약표 나란히 비교.
+- **`skills/improve-prompt/SKILL.md`**: 분석자→제안자→비판자→수정자→(반복)→판단자 6역할 루프(최대 3라운드, 판단자 합격 기준 명시). 근거 규칙: 모든 제안은 실제로 본 크롭 obj_id + 이미지 관찰 + 수치 인용 필수. 산출물 = 분석 리포트 + prompts/<신버전>.yaml 초안 + 측정가능한 예상효과 + 검증 experiment yaml.
+- 테스트 83+α passed.
+
 ### 신뢰·품질 스코어 평가 활용 (2026-07-02)
 - **re_score**: 크롭마다 `margin`(모델 decision_margin — gender만 프롬프트가 emit, 그 외 None)과 `quality`(quality_gate 점수 — **측정 전용, 게이팅 아님**)를 predictions.jsonl에 기록.
 - **run_eval**: `margin_stats`/`quality_stats` — 임계값(기본 0.7/0.4, `--margin-threshold`/`--quality-threshold`) 기준 high/low 구간별 accuracy + 정답·오답 평균. **v1.5 강제커밋의 캘리브레이션 검증 지표**: 오답이 저margin/저품질에 몰리면 신호 유효(런타임 필터 활용 가능), 아니면 margin은 노이즈.

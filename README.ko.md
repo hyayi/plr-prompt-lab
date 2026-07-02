@@ -139,8 +139,11 @@ python3 lab.py eval --attribute gender --version plr_v1.4_cot [--dataset <dir>]
 # 실험 매트릭스 실행 (교차곱 — EXPERIMENT_SPEC.md 참고)
 python3 lab.py experiment run examples/experiment.example.yaml [--strict]
 
-# ledger → 자체완결 HTML 리포트 (추이·히트맵·프롬프트변화→Δ)
-python3 lab.py report --out report.html
+# ledger → 자체완결 HTML 리포트 (전체비교표·confusion 포함; --compare로 실험군 간 비교)
+python3 lab.py report --out report.html [--compare other_ledger.jsonl]
+
+# 크롭-라벨 시각화 HTML (오답 우선, 정오 배지, margin/quality)
+python3 lab.py gallery --dataset <dir>
 
 # 데이터셋 디렉터리 검증
 python3 lab.py validate-dataset --dataset <dir>

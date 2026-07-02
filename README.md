@@ -137,8 +137,11 @@ python3 lab.py eval --attribute gender --version plr_v1.4_cot [--dataset <dir>]
 # Run an experiment matrix (cross-product — see EXPERIMENT_SPEC.md)
 python3 lab.py experiment run examples/experiment.example.yaml [--strict]
 
-# Turn the ledger into a self-contained HTML report
-python3 lab.py report --out report.html
+# Turn the ledger into a self-contained HTML report (add --compare LEDGER_B for side-by-side)
+python3 lab.py report --out report.html [--compare other_ledger.jsonl]
+
+# Crops-vs-labels visual HTML (wrong-first, badges, margin/quality)
+python3 lab.py gallery --dataset <dir>
 
 # Validate a dataset directory
 python3 lab.py validate-dataset --dataset <dir>

@@ -22,7 +22,35 @@ datasets — they were the reference layout from which this spec was derived.
 ```
 
 Only `crops/`, `labels.jsonl`, and `manifest.yaml` are required for
-`lab validate-dataset` to pass. `predictions.jsonl` and `attributes.jsonl`
+`lab validate-dataset` to pass. A ready-to-copy skeleton lives at
+`examples/dataset_template/` (validates PASS as-is).
+
+**The structure is fixed; the label set is yours.** Besides the required
+manifest fields, a dataset may declare its own attribute (generic datasets):
+
+```yaml
+attribute: helmet                        # any name — presets: gender | vehicle_type | military
+labels: [helmet, no_helmet]              # allowed label values (validate enforces)
+pred_path: attributes.equipment[0].type  # where the pred lives in the PLR JSON (dots + [idx])
+margin_path: ...                         # optional — model confidence path
+bias_pair: [no_helmet, helmet]           # optional — headline bias [true, mistaken-as]
+object_type_hint: person                 # optional — person | vehicle (default person)
+```
+
+The three PLR attributes (gender / vehicle_type / military) are built-in
+presets — they need no declaration and double as reference examples of the
+scheme (`evalkit/dataset.py` `PRESET_SPECS`).
+
+### Creation procedure
+
+1. crops — `crops/<obj_id>.jpg` (`lab build-golden` for production videos,
+   or drop in arbitrary collected crops)
+2. manifest — copy `examples/dataset_template/manifest.yaml`, adjust
+3. labels — write `labels.jsonl` or use `lab label --dataset D ...`
+   (human-undecidable crops → `unknown`: excluded from scoring, reported
+   separately)
+4. `lab validate-dataset --dataset D` → 5. `lab run` → `lab eval` →
+   `lab gallery --dataset D` (visual check) `predictions.jsonl` and `attributes.jsonl`
 are written by `lab run` and read by `lab eval`. (The `queries.jsonl`
 search-dataset kind was removed 2026-07 — the lab is PLR-only.)
 
