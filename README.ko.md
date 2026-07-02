@@ -28,10 +28,11 @@ improve-prompt agent 스킬.
 
 lab은 `core/ir`의 PLR 개발 표면을 **lean 스냅샷**으로 담고 있습니다:
 
-- `plr_core.py`, `plr_prompts.py`, `plr_schema.py` — 순수 PLR 추론 코어
+- `plr_core.py`, `plr_prompts.py`, `plr_schema.py`, `preprocess.py` — 순수 PLR 인풋/아웃풋 표면
+- `schema/vocab.yaml` — 선언적 도메인 어휘 (단일 원천; plr_schema가 전부 파생)
 - `gemma_model.py` — `Model` 프로토콜 + `LabGemmaModel`(직접 호출, 스케줄러 없음)
 - `gemma_backend.py` — GPU GGUF 로더 (가드됨; `lab run` 전에는 import 안 됨)
-- `prompts/` — PLR 프롬프트 YAML (`plr_v0.4` … `plr_v1.5_cot`)
+- `prompts/` — PLR 프롬프트 버전(템플릿만) · `configs/` — 실험 파라미터 config(프롬프트 참조 + knob)
 - `eval/` — 골든셋, 러너 스크립트, ledger
 - `demo.py` — `lab demo`용 자체완결 MockModel + 합성 데이터셋
 - `registry.py`, `experiment.py`, `report.py` — 모델/파이프라인 레지스트리,

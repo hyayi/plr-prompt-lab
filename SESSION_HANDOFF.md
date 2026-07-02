@@ -98,6 +98,12 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 - `GUIDE.html` (구조+사용법 원페이지, 배포용): `654ca3a` · `d7285e3` · `7634a0a`
 - **`--version` 실-프롬프트-로드 픽스**: `51022f6`(feat) · `2553b13`(docs) — experiment의 프롬프트 축이 이제 진짜로 다른 프롬프트를 비교
 
+### 구조 슬림화 (2026-07-02) — 죽은 기계장치 제거
+- **registry.py 372→170줄**: get_provider/검증/폴백 등 슬롯 해석 기계장치 제거(lab은 provider를 registry로 해석하지 않음 — FilePromptProvider 직접 생성). 동기 모듈들의 import-시 self-register용 `register()` shim + MODELS/PIPELINES만 유지.
+- **providers/__init__.py 352→223줄**: Parser/ScoringStrategy ABC 제거(PLR 전용 — 소비자 0). PromptProvider(+gemma_backend용 ModelProvider) 유지.
+- **seed.sh 버그 수정**: DIRS에서 삭제된 `parser`, lab-소유 `eval`(재씨딩 시 run_eval 개조 소실 위험!), `providers`(lab이 더 슬림) 제거 → DIRS=(prompts schema), provider는 file_prompt_provider.py만 FILES로.
+- **파일 필요성 판정**: config.py(24줄 — 동기 모듈의 lazy import 대상, 유지) · SEED.md(provenance/stale 경고, 유지) · seed.sh(core/ir→lab 역방향 동기화 도구, 유지).
+
 ### 어휘 선언화 + 전처리 분리 (2026-07-02, 재설계 3단계 — core/ir 먼저·양쪽 동시)
 - **`schema/vocab.yaml` = 도메인 어휘의 단일 원천** (enum 13 + group 6 + map 1). `plr_schema.py`는 로더+파생물 생성기(모듈 상수·그룹 함수·JSON 스키마) — 프롬프트 주입/파서 정규화/게이트/저장 계약 4소비자가 같은 로드 결과를 봄. **"파일 하나 = 어휘 버전"** 성립: 어휘 확장은 이제 vocab.yaml 편집(주입·파싱이 자동으로 함께 움직임).
 - **`preprocess.py`**: 마커 전처리를 plr_core에서 분리(이미지 쪽 인풋 표면의 명명된 컴포넌트). plr_core가 옛 이름 re-export — indexing 등 무수정.
@@ -191,6 +197,9 @@ python3 lab.py demo                  # GPU 없이 전체 사이클 시연
 | `re_score.py` | plr 실행 러너 (재채점 → predictions/attributes.jsonl) |
 | `eval/run_eval.py` | 채점(accuracy/bias/pred_unknown) + ledger |
 | `plr_core.py` | `run_plr`(속성 추론 코어) — `build_messages` 주입구 |
+| `schema/vocab.yaml` | 선언적 도메인 어휘 — 단일 원천 (plr_schema가 로드·파생) |
+| `preprocess.py` | 이미지 전처리(마커) — 인풋 표면의 명명된 컴포넌트 |
+| `configs/*.yaml` | 실험 파라미터 config — prompt 경로 참조 + enum축소/마커/샘플링 knob |
 | `registry.py` | 모델/파이프라인 레지스트리 + `MockModel` |
 | `provenance.py` | `prompt_hash` + `surface_relpaths` + seed 헬퍼(read_seed_hash/warn_stale_seed) |
 | `experiment.py` | 매트릭스 러너 |

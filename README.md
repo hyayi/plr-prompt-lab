@@ -29,10 +29,11 @@ eval, generic manifest-declared labels, and the improve-prompt agent skill.
 
 The lab holds a **lean snapshot** of the PLR dev surface from `core/ir`:
 
-- `plr_core.py`, `plr_prompts.py`, `plr_schema.py` — pure PLR inference core
+- `plr_core.py`, `plr_prompts.py`, `plr_schema.py`, `preprocess.py` — pure PLR input/output surface
+- `schema/vocab.yaml` — declarative domain vocabulary (single source; plr_schema derives everything)
 - `gemma_model.py` — `Model` Protocol + `LabGemmaModel` (direct, no scheduler)
 - `gemma_backend.py` — GPU GGUF loader (guarded; not imported unless `lab run`)
-- `prompts/` — PLR prompt YAMLs (`plr_v0.4` … `plr_v1.5_cot`)
+- `prompts/` — PLR prompt versions (templates only) · `configs/` — experiment parameter configs (prompt × knobs by reference)
 - `eval/` — golden sets, runner scripts, ledger
 - `demo.py` — self-contained MockModel + synthetic dataset for `lab demo`
 

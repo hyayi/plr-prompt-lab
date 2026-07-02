@@ -29,6 +29,7 @@ echo "seed.sh: dest   = $DST"
 # PIPELINES section; gemma_model carries LabGemmaModel/MockModel). Sync them manually if the shared slot layer changes.
 FILES=(
   plr_core.py
+  providers/file_prompt_provider.py
   preprocess.py
   gemma_backend.py
   plr_prompts.py
@@ -37,12 +38,12 @@ FILES=(
 )
 
 # --- Directory dev surface ---
+# providers/ is NOT re-seeded as a directory: lab's providers/__init__.py is
+# deliberately slimmer (PLR-only). Only the byte-synced provider file comes over.
+# eval/ and parser/ are lab-owned / removed respectively.
 DIRS=(
   prompts
   schema
-  providers
-  parser
-  eval
 )
 
 RSYNC_EXCLUDES=(

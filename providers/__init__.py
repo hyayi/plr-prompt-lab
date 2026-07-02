@@ -11,8 +11,6 @@ implementation produced each indexed row.  Version strings follow the existing
 conventions found in the codebase:
   - ModelProvider   : e.g. "gemma4_e4b_q4_0"
   - PromptProvider  : e.g. "plr_v1.3_cot", "plr_v0.4"
-  - Parser          : e.g. "qp_v0.4"
-  - ScoringStrategy : e.g. "score_v0.5"
 
 These strings are written to ir_plr_index.{model_ver, prompt_ver,
 parser_ver, scoring_ver} — see storage.py for the column names.
@@ -209,60 +207,6 @@ class PromptProvider(ABC):
 # ===========================================================================
 
 
-class Parser(ABC):
-    """Converts raw model text output into structured Python dicts.
-
-    The concrete YamlParser wraps parse_plr_response() / parse_query()
-    from plr_prompts.py and query_parser.py and loads its surface-form
-    synonym tables from parser/<version>.yaml.
-    """
-
-    @property
-    @abstractmethod
-    def version(self) -> str:
-        """Parser version string written to ir_plr_index.parser_ver.
-
-        Example: "qp_v0.4".
-        """
-
-    @abstractmethod
-    def parse_plr_response(
-        self,
-        raw: str,
-        hint: str = "person",
-        *,
-        fmt: str | None = None,
-    ) -> dict[str, Any]:
-        """Parse a raw PLR model response into a validated dict.
-
-        Parameters:
-          raw  : raw text from ModelProvider.generate()
-          hint : 'person' or 'vehicle' (object type hint for YAML path)
-          fmt  : format override ('yaml' | 'json'); None = use env default
-
-        Returns a PLR dict conforming to plr_schema.PERSON_SCHEMA or
-        plr_schema.VEHICLE_SCHEMA.
-        Raises ValueError on unrecoverable parse failure.
-        """
-
-    @abstractmethod
-    def parse_query(
-        self,
-        user_text: str,
-        *,
-        backend: Any = None,
-        force_gemma: bool = False,
-    ) -> Any:
-        """Parse a user query string into a QueryJSON.
-
-        Parameters:
-          user_text   : raw Korean (or mixed) user query
-          backend     : optional ModelProvider instance (or legacy
-                        GemmaBackend); if None, uses dictionary-only path
-          force_gemma : skip dictionary fallback (used in tests)
-
-        Returns a query_parser.QueryJSON instance.
-        """
 
 
 # ===========================================================================
@@ -270,83 +214,10 @@ class Parser(ABC):
 # ===========================================================================
 
 
-class ScoringStrategy(ABC):
-    """Computes candidate scores and applies hard / strict filters.
-
-    The concrete DefaultScoringStrategy (scoring_provider.py) delegates
-    1-for-1 to the scoring.py functions, preserving the scoring formula.
-    """
-
-    @property
-    @abstractmethod
-    def version(self) -> str:
-        """Scoring version string written to ir_plr_index.scoring_ver.
-
-        Example: "score_v0.5".
-        """
-
-    @abstractmethod
-    def final_score(
-        self,
-        *,
-        query_required: dict[str, list[str]],
-        query_excluded: dict[str, list[str]] | None,
-        candidate_plr: dict[str, Any],
-        candidate_embedding: Any,
-        candidate_quality: float,
-        q_template_emb: Any,
-        q_raw_emb: Any,
-        is_vehicle: bool,
-    ) -> Any:
-        """Compute the full ScoreBreakdown for one candidate.
-
-        Parameters and semantics match scoring.final_score() exactly.
-        Returns a scoring.ScoreBreakdown instance.
-        """
-
-    @abstractmethod
-    def passes_hard_filter(
-        self,
-        query_required: dict[str, list[str]],
-        candidate_plr: dict[str, Any],
-        query_excluded: dict[str, list[str]] | None = None,
-    ) -> bool:
-        """Two-stage cascade gate.  Returns False to reject a candidate.
-
-        Parameters and semantics match scoring.passes_hard_filter() exactly.
-        """
-
-    @abstractmethod
-    def passes_strict_filter(
-        self,
-        query_required: dict[str, list[str]],
-        candidate_plr: dict[str, Any],
-        is_vehicle: bool,
-    ) -> bool:
-        """Strict mode: every required slot must score > 0.
-
-        Parameters and semantics match scoring.passes_strict_filter() exactly.
-        """
-
-    @abstractmethod
-    def attribute_match(
-        self,
-        query_required: dict[str, list[str]],
-        query_excluded: dict[str, list[str]] | None,
-        candidate_plr: dict[str, Any],
-        is_vehicle: bool,
-    ) -> tuple[float, dict[str, float]]:
-        """Slot-by-slot match score for diagnostics.
-
-        Returns (score_in_0_1, per_slot_contribution_dict).
-        Parameters and semantics match scoring.attribute_match() exactly.
-        """
 
 
 __all__ = [
     "GenResult",
     "ModelProvider",
     "PromptProvider",
-    "Parser",
-    "ScoringStrategy",
 ]
