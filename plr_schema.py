@@ -16,51 +16,43 @@ from __future__ import annotations
 
 from typing import Any, Final
 
+# ---------------------------------------------------------------------------
+# Declarative vocabulary — schema/vocab.yaml is the SINGLE SOURCE of the
+# domain enums / groups / maps; this module loads it and derives everything
+# else (module constants below, group-lookup functions, JSON validation
+# schemas). One file = one vocabulary version: prompt injection, response
+# normalisation, the search gates and the storage contract all see the same
+# loaded data.
+# ---------------------------------------------------------------------------
+from pathlib import Path as _Path
+
+import yaml as _yaml
+
+_VOCAB_PATH = _Path(__file__).resolve().parent / "schema" / "vocab.yaml"
+with open(_VOCAB_PATH, encoding="utf-8") as _fh:
+    _VOCAB: Final[dict] = _yaml.safe_load(_fh)
+
+
+def _enum(key: str) -> tuple[str, ...]:
+    return tuple(_VOCAB["enums"][key])
+
+
+def _vgroup(key: str) -> dict[str, tuple[str, ...]]:
+    return {k: tuple(v) for k, v in _VOCAB["groups"][key].items()}
+
+
+def _vmap(key: str) -> dict[str, str]:
+    return dict(_VOCAB["maps"][key])
+
+
 
 # =====================================================================
 # Color enum (shared by upper/lower clothing, equipment, vehicle)
 # =====================================================================
 
-COLOR_ENUM: Final[tuple[str, ...]] = (
-    # achromatic
-    "black", "dark_gray", "gray", "light_gray", "white", "silver",
-    # warm
-    "red", "orange", "yellow", "brown", "dark_brown", "beige", "cream", "gold",
-    # cool
-    "blue", "navy", "light_blue", "green", "dark_green",
-    # military / tactical
-    "military_olive",  # Korean 국방색: dark olive-drab used in military uniforms/vehicles
-    # other
-    "purple", "pink",
-    "mixed_pattern",   # stripe/check/floral — single color undecidable
-    "multi_color",     # two+ colors in roughly equal proportion
-)
+COLOR_ENUM: Final[tuple[str, ...]] = _enum("color")
 
-COLOR_GROUP: Final[dict[str, tuple[str, ...]]] = {
-    "dark": ("black", "dark_gray", "dark_brown", "dark_green", "military_olive"),
-    # The old `light` group lumped together five colours that look
-    # quite different on a CCTV crop — white, cream, beige (warm
-    # whites) on one side and silver, light_gray (cool metallics)
-    # on the other. The cascade hard-filter only checks group
-    # overlap, so a "흰색 세단" query was pulling in every silver
-    # car too (e.g. 85 white + 30 silver on the production video).
-    # Splitting the two families keeps recall high inside each
-    # family while preventing the cross-family false positives the
-    # user reported on 2026-05-26.
-    "light_white": ("white", "cream", "beige"),
-    "metallic_light": ("silver", "light_gray"),
-    "vivid": ("red", "orange", "yellow", "green", "purple", "pink", "gold"),
-    # `blue` is its own group: navy / light_blue used to be split across
-    # dark / light and `blue` itself lived under vivid. The result was
-    # that the cascade hard-filter's group-overlap match passed almost
-    # everything for "청바지" (which expands to lower_color=[blue, navy,
-    # light_blue]) — blue ∈ vivid, navy ∈ dark, light_blue ∈ light, so a
-    # candidate of any colour would match at least one group. Carving out
-    # a single `blue` group keeps the "denim intent" precise: navy and
-    # light_blue belong to the blue family, not to dark or light.
-    "blue": ("blue", "navy", "light_blue"),
-    "neutral": ("gray", "brown"),
-}
+COLOR_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("color_group")
 
 
 def color_group(label: str) -> str:
@@ -79,21 +71,7 @@ def color_group(label: str) -> str:
 # "검은색 차" does not want brown / green / 국방색 cars. Here black groups only
 # with dark_gray (achromatic dark); each chromatic dark stays with its own hue.
 # Used ONLY by passes_hard_filter's colour slots — color_group() is unchanged.
-COLOR_HARD_GROUP: Final[dict[str, tuple[str, ...]]] = {
-    "black": ("black", "dark_gray"),        # achromatic dark
-    "gray": ("gray",),
-    "white": ("white", "cream", "beige"),
-    "silver": ("silver", "light_gray"),
-    "red": ("red",),
-    "orange": ("orange",),
-    "yellow": ("yellow", "gold"),
-    "brown": ("brown", "dark_brown"),
-    "green": ("green", "dark_green"),
-    "blue": ("blue", "navy", "light_blue"),
-    "purple": ("purple",),
-    "pink": ("pink",),
-    "military_olive": ("military_olive",),   # 국방색 — never folds into black
-}
+COLOR_HARD_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("color_hard_group")
 
 
 def color_hard_group(label: str) -> str:
@@ -109,35 +87,14 @@ def color_hard_group(label: str) -> str:
 # Person attributes
 # =====================================================================
 
-GENDER_ENUM: Final[tuple[str, ...]] = ("male", "female")
-AGE_GROUP_ENUM: Final[tuple[str, ...]] = ("adult", "child")
+GENDER_ENUM: Final[tuple[str, ...]] = _enum("gender")
+AGE_GROUP_ENUM: Final[tuple[str, ...]] = _enum("age_group")
 
-OUTFIT_TYPE_ENUM: Final[tuple[str, ...]] = (
-    "two_piece",   # upper + lower separately
-    "one_piece",   # dress / jumpsuit / one-piece uniform
-    "layered",     # heavy coat hides lower body split
-    "obscured",    # occlusion/lighting — undecidable
-)
+OUTFIT_TYPE_ENUM: Final[tuple[str, ...]] = _enum("outfit_type")
 
-UPPER_TYPE_ENUM: Final[tuple[str, ...]] = (
-    # outerwear
-    "jacket", "coat", "padding", "windbreaker", "vest", "cardigan",
-    # tops
-    "tshirt", "long_sleeve_tee", "shirt", "blouse", "hoodie", "sweater", "knit",
-    # uniform/work
-    "uniform", "safety_vest", "workwear",
-    # one-piece (only when outfit_type=one_piece)
-    "dress", "one_piece_uniform", "jumpsuit",
-    # unknown
-    "upper_unknown",
-)
+UPPER_TYPE_ENUM: Final[tuple[str, ...]] = _enum("upper_type")
 
-UPPER_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = {
-    "upper_outerwear": ("jacket", "coat", "padding", "windbreaker", "vest", "cardigan"),
-    "upper_top": ("tshirt", "long_sleeve_tee", "shirt", "blouse", "hoodie", "sweater", "knit"),
-    "uniform_like": ("uniform", "safety_vest", "workwear"),
-    "one_piece_garment": ("dress", "one_piece_uniform", "jumpsuit"),
-}
+UPPER_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("upper_type_group")
 
 
 def upper_type_group(label: str) -> str:
@@ -147,20 +104,9 @@ def upper_type_group(label: str) -> str:
     return "unknown"
 
 
-LOWER_TYPE_ENUM: Final[tuple[str, ...]] = (
-    "pants", "jeans", "training_pants", "slacks", "leggings",
-    "shorts",
-    "skirt", "long_skirt",
-    "none",            # outfit_type=one_piece (no separate lower garment)
-    "lower_unknown",
-)
+LOWER_TYPE_ENUM: Final[tuple[str, ...]] = _enum("lower_type")
 
-LOWER_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = {
-    "pants_like": ("pants", "jeans", "training_pants", "slacks", "leggings"),
-    "shorts_like": ("shorts",),
-    "skirt_like": ("skirt", "long_skirt"),
-    "no_separate": ("none",),
-}
+LOWER_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("lower_type_group")
 
 
 def lower_type_group(label: str) -> str:
@@ -179,20 +125,10 @@ def lower_type_group(label: str) -> str:
 # fine `lower_type` label at read time (no reindex needed for this axis).
 # ---------------------------------------------------------------------
 
-LOWER_SHAPE_ENUM: Final[tuple[str, ...]] = (
-    "long_pants", "shorts", "long_skirt", "short_skirt",
-    "none", "lower_unknown",
-)
+LOWER_SHAPE_ENUM: Final[tuple[str, ...]] = _enum("lower_shape")
 
 # Fine lower_type label -> coarse shape (read-time derivation for old rows).
-LOWER_TYPE_TO_SHAPE: Final[dict[str, str]] = {
-    "pants": "long_pants", "jeans": "long_pants", "slacks": "long_pants",
-    "training_pants": "long_pants", "leggings": "long_pants",
-    "shorts": "shorts",
-    "skirt": "short_skirt", "long_skirt": "long_skirt",
-    "none": "none",
-    "lower_unknown": "lower_unknown",
-}
+LOWER_TYPE_TO_SHAPE: Final[dict[str, str]] = _vmap("lower_type_to_shape")
 
 
 def lower_shape_of(lower_type_label: str | None) -> str:
@@ -205,7 +141,7 @@ def lower_shape_of(lower_type_label: str | None) -> str:
 
 # Upper sleeve axis — HARD-FILTER level. Newly EXTRACTED field; absent on
 # pre-redesign rows -> the gate must wildcard-pass (handled in scoring).
-UPPER_SLEEVE_ENUM: Final[tuple[str, ...]] = ("long", "short", "unknown")
+UPPER_SLEEVE_ENUM: Final[tuple[str, ...]] = _enum("upper_sleeve")
 
 
 def upper_outer_of(upper_type_label: str | None) -> str:
@@ -219,44 +155,14 @@ def upper_outer_of(upper_type_label: str | None) -> str:
 
 
 # Equipment body-location — HARD-FILTER level (presence@location).
-EQUIP_LOCATION_ENUM: Final[tuple[str, ...]] = (
-    "head", "eye", "face", "back", "hand",
-)
+EQUIP_LOCATION_ENUM: Final[tuple[str, ...]] = _enum("equip_location")
 
 
-EQUIPMENT_TYPE_ENUM: Final[tuple[str, ...]] = (
-    # Bags
-    "backpack", "shoulder_bag", "handbag", "cross_bag", "cart",
-    # Outdoor / weather
-    "umbrella",
-    # Head wear — v0.9 collapsed beanie into hat (Gemma E4B can't reliably
-    # tell a knit beanie from a baseball cap from a brimmed hat in CCTV
-    # crops, so we route every soft headwear to "hat" and rely on the
-    # query_parser to map 캡/비니/베레모 → hat for searches).
-    "helmet", "construction_helmet", "hat",
-    # Face / accessories
-    "mask", "glasses", "sunglasses", "headphones",
-    # Hand-held objects (everyday)
-    "phone_in_hand",
-    "handheld_object",      # generic "something in hand", uncategorisable
-    "bottle", "clipboard",  # common workplace / public objects
-    # Weapons & dangerous items (security search)
-    "knife", "firearm", "bat_stick", "sharp_object",
-    # Mobility / other
-    "cane", "stroller", "other_equipment",
-)
+EQUIPMENT_TYPE_ENUM: Final[tuple[str, ...]] = _enum("equipment_type")
 
 # Coarse-group for equipment so query_parser's hard filter can pass any bag
 # when the user just says "가방", or any weapon when they say "무기".
-EQUIPMENT_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = {
-    "bag": ("backpack", "shoulder_bag", "handbag", "cross_bag"),
-    "headwear": ("helmet", "construction_helmet", "hat"),
-    "face_accessory": ("mask", "glasses", "sunglasses", "headphones"),
-    "weapon": ("knife", "firearm", "bat_stick", "sharp_object"),
-    "handheld": ("phone_in_hand", "handheld_object", "bottle", "clipboard"),
-    "mobility": ("cart", "cane", "stroller"),
-    "weather": ("umbrella",),
-}
+EQUIPMENT_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("equipment_type_group")
 
 
 def equipment_type_group(label: str) -> str:
@@ -265,52 +171,20 @@ def equipment_type_group(label: str) -> str:
             return grp
     return "unknown"
 
-STATIC_ACTION_ENUM: Final[tuple[str, ...]] = (
-    "standing", "walking_like", "running_like", "sitting", "bending", "squatting",
-    "lying_or_fallen_candidate",   # confirmation is temporal-module's job
-    "using_phone", "carrying_object", "pushing_or_pulling",
-    # Riding a two-wheel vehicle. PLR will set object_type=person on the
-    # rider and put the vehicle kind into action so a single query like
-    # "오토바이 탄 사람" reaches the rider, not the bike crop.
-    "riding_motorcycle", "riding_bicycle", "riding_scooter", "riding_kickboard",
-    "posture_unknown",
-)
+STATIC_ACTION_ENUM: Final[tuple[str, ...]] = _enum("static_action")
 
 
 # =====================================================================
 # Vehicle attributes
 # =====================================================================
 
-VEHICLE_TYPE_ENUM: Final[tuple[str, ...]] = (
-    # Passenger — light_car is the Korean "경차" bracket (Morning /
-    # Casper / Ray / Spark sized), which the v0.8 enum lumped into
-    # hatchback. Adding it back as a top-level category gives the
-    # search side a single bucket for "경차" queries without
-    # re-introducing model names.
-    "sedan", "suv", "hatchback", "light_car", "van", "minivan",
-    # Commercial / utility
-    "pickup_truck", "truck", "bus", "taxi",
-    # Emergency
-    "ambulance", "police_car", "fire_truck", "emergency_vehicle",
-    # Two-wheel
-    "motorcycle", "scooter", "bicycle", "kickboard",
-    # Special
-    "construction_vehicle",
-    # Unknown
-    "vehicle_unknown",
-)
+VEHICLE_TYPE_ENUM: Final[tuple[str, ...]] = _enum("vehicle_type")
 # v0.8 had ~30 Korean/foreign model names (sonata/grandeur/bmw/...).
 # Production re-index showed Gemma E4B identified only 2/214 cars as
 # "bmw" and 0 for everything else, so the model labels added prompt
 # tokens without improving recall. Dropped for v0.9.
 
-VEHICLE_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = {
-    "passenger": ("sedan", "suv", "hatchback", "light_car", "van", "minivan"),
-    "commercial": ("pickup_truck", "truck", "bus", "taxi"),
-    "emergency": ("ambulance", "police_car", "fire_truck", "emergency_vehicle"),
-    "two_wheel": ("motorcycle", "scooter", "bicycle", "kickboard"),
-    "special": ("construction_vehicle",),
-}
+VEHICLE_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("vehicle_type_group")
 
 
 def vehicle_type_group(label: str) -> str:
@@ -329,7 +203,7 @@ def vehicle_type_group(label: str) -> str:
 # (vehicle), instead of inferring it post-hoc from a single olive colour. The
 # parser pins the output to these three values; indexing._attach_military_flags
 # turns "military" into is_soldier / is_military (with olive kept as a fallback).
-MILITARY_ENUM: Final[tuple[str, ...]] = ("military", "civilian", "unknown")
+MILITARY_ENUM: Final[tuple[str, ...]] = _enum("military")
 
 
 # =====================================================================

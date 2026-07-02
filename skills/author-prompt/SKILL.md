@@ -106,12 +106,17 @@ stamps the config name; prompt_hash covers configs/*.yaml. Same prompt ×
 N knob-sets = N config files, zero template copies.
 
 **Enum overrides may only NARROW the vocabulary** (subset — enforced,
-fail-loud). The parser coerces every slot back onto the plr_schema enums
+fail-loud). The parser coerces every slot back onto the schema vocabulary
 (measured: color `crimson`→`gray`, action `crawling`→`posture_unknown`), so
 offering the model a word the schema doesn't know is a half-experiment —
-the answer gets thrown away at parse time. EXTENDING a vocabulary is a code
-change: plr_schema enum + parser normalisation together, promoted via
-`lab port` (see Promotion §4).
+the answer gets thrown away at parse time.
+
+**EXTENDING a vocabulary = edit `schema/vocab.yaml`** (the declarative
+single source — plr_schema derives constants, parser normalisation, group
+functions and JSON schemas from it, so injection AND parsing move together
+automatically). vocab.yaml is part of the port/hash surface: the change is
+provenance-stamped, `lab port` diffs it against core/ir, and promotion
+copies it home like any other surface file.
 
 ## Domain lessons (encoded history — do not relearn these the hard way)
 
@@ -139,8 +144,9 @@ human-gated step:
    version yaml byte-in-parity (test_prompt_surface_parity enforces).
 2. Bump `PROMPT_VERSION_YAML_COT` — this is the lazy-reindex trigger.
 3. `lab port` → apply to core/ir → core/ir tests → deploy decision.
-4. Variant knobs go back to their HOME files, not to the yaml:
-   `enums:` → plr_schema.py enum tuples · `preprocess.marker` →
-   indexing's marker call site · `sampling:` → the gemma generate call
-   sites. A knob that wins in the lab but is not carried home silently
-   reverts in production.
+4. Experiment knobs go back to their HOME files, not to the config yaml:
+   `enums:` narrowing → schema/vocab.yaml · vocabulary extension →
+   schema/vocab.yaml (already port surface) · `preprocess.marker` →
+   indexing's marker call site (preprocess.py) · `sampling:` → the gemma
+   generate call sites. A knob that wins in the lab but is not carried home
+   silently reverts in production.

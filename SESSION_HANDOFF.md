@@ -98,6 +98,13 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 - `GUIDE.html` (구조+사용법 원페이지, 배포용): `654ca3a` · `d7285e3` · `7634a0a`
 - **`--version` 실-프롬프트-로드 픽스**: `51022f6`(feat) · `2553b13`(docs) — experiment의 프롬프트 축이 이제 진짜로 다른 프롬프트를 비교
 
+### 어휘 선언화 + 전처리 분리 (2026-07-02, 재설계 3단계 — core/ir 먼저·양쪽 동시)
+- **`schema/vocab.yaml` = 도메인 어휘의 단일 원천** (enum 13 + group 6 + map 1). `plr_schema.py`는 로더+파생물 생성기(모듈 상수·그룹 함수·JSON 스키마) — 프롬프트 주입/파서 정규화/게이트/저장 계약 4소비자가 같은 로드 결과를 봄. **"파일 하나 = 어휘 버전"** 성립: 어휘 확장은 이제 vocab.yaml 편집(주입·파싱이 자동으로 함께 움직임).
+- **`preprocess.py`**: 마커 전처리를 plr_core에서 분리(이미지 쪽 인풋 표면의 명명된 컴포넌트). plr_core가 옛 이름 re-export — indexing 등 무수정.
+- 20개 상수 스냅샷 동등성 검증(순서 포함) 후 치환 — 동작 불변. core/ir `d65ee2e`(206 passed) → lab 동기화(90 passed).
+- **port/hash 표면 확장**: schema/*.yaml + plr_schema.py + preprocess.py 편입 → `lab port`가 어휘·전처리 parity까지 diff (확인: 전부 identical, plr_core divergence만). seed.sh FILES/DIRS 갱신, SEED.md `d65ee2e`.
+- exp_config의 subset 가드는 유지(런타임 축소용); **어휘 확장의 정식 경로는 vocab.yaml**로 승격됨.
+
 ### 실험 config — 인풋 조합의 독립 버저닝 (2026-07-02)
 - **원리(사용자 확정)**: 모델 인풋 = 템플릿 텍스트 + 주입 enum + 이미지 전처리(마커) + 샘플링 파라미터 — 조합이 중요하므로 **조합 자체를 버저닝**. 단, 프롬프트 복사를 피하려고 **분리 설계**: `prompts/<V>.yaml`=템플릿만, **`configs/<name>.yaml`=실험 파라미터 config**(`prompt: prompts/<V>.yaml` 경로 참조 + knob; enums는 inline 또는 yaml 경로). 같은 프롬프트 × N knob 조합 = config 파일 N개, 템플릿 복사 0. (명명: 사용자 지정 — 통용어 experiment config; 런타임 설정 config.py와는 별개)
 - `lab run --version <이름>`이 config명/프롬프트명 모두 해석(config 우선, dangling 참조는 fail-loud). ledger version=config명, `prompt_hash`가 configs/*.yaml 포함(port 표면에는 미포함 — lab 전용). 로더: `runners/exp_config.py`.

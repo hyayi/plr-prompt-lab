@@ -1,8 +1,10 @@
 """provenance — stable content hashes of the active prompt surface.
 
 The "prompt surface" is the same true-surface set that ``lab port`` diffs
-against core/ir: the prompt YAML files under ``prompts/`` plus ``plr_prompts.py``
-and ``plr_core.py`` (defined once in ``surface_relpaths`` and reused by both).
+against core/ir: prompts/*.yaml + schema/*.yaml (declarative vocabulary) +
+plr_prompts.py / plr_core.py / plr_schema.py / preprocess.py — everything
+that shapes the model's input bytes and output parsing (defined once in
+``surface_relpaths`` and reused by both).
 ``prompt_hash()`` returns a short, stable sha256 prefix of that content so every
 ledger writer (``eval/run_eval.py``) and any reporter
 stamps the SAME hash for a given prompt state — letting a ledger record be tied
@@ -26,7 +28,8 @@ _LAB_ROOT = Path(__file__).resolve().parent.parent  # lab root (evalkit/ is one 
 # any of these can change predictions, so all are tracked in the ledger hash and
 # surfaced by lab port. Keep this list and lab port in sync via this function.
 _PROMPTS_DIR = "prompts"
-_SURFACE_PY = ("plr_prompts.py", "plr_core.py")
+_SCHEMA_DIR = "schema"
+_SURFACE_PY = ("plr_prompts.py", "plr_core.py", "plr_schema.py", "preprocess.py")
 
 
 def surface_relpaths(
@@ -48,6 +51,9 @@ def surface_relpaths(
     prompts_dir = root / _PROMPTS_DIR
     if prompts_dir.is_dir():
         rels.extend(sorted(str(p.relative_to(root)) for p in prompts_dir.glob("*.yaml")))
+    schema_dir = root / _SCHEMA_DIR
+    if schema_dir.is_dir():
+        rels.extend(sorted(str(p.relative_to(root)) for p in schema_dir.glob("*.yaml")))
     if include_exp_configs:
         configs_dir = root / "configs"
         if configs_dir.is_dir():
