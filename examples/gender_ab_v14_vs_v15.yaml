@@ -1,0 +1,17 @@
+# gender 실측 A/B — v1.4(기준선) vs v1.5(강제커밋)
+# 실행: python3 lab.py experiment run examples/gender_ab_v14_vs_v15.yaml
+# 전제: eval/golden/gender/labels.jsonl 존재 (사람 라벨) + GPU 확보(ir 중지)
+datasets:
+  - ./eval/golden/gender
+models:
+  - gemma            # 실측. GPU 미확보 상태 점검은 mock으로 먼저
+prompts:
+  - plr_v1.4_cot     # 강제커밋 이전 기준선
+  - plr_v1.5_cot     # 강제커밋 (unknown 제거)
+pipelines:
+  - plr
+attributes:
+  - gender
+reasons:
+  - "on"             # 운영 기본 (CoT)
+ledger: ./eval/ledger.jsonl
