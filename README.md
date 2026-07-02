@@ -2,6 +2,7 @@
 
 > 📖 **처음이라면 [`GUIDE.html`](GUIDE.html)를 브라우저로 여세요** — 구조와 사용법을
 > 한 장(자체완결 HTML·오프라인)으로 그림과 함께 설명합니다.
+> **한글판 README**: [`README.ko.md`](README.ko.md)
 
 Standalone prompt/pipeline eval-cycle for PLR (Person-Level Recognition) **attribute
 scoring (A)** and **text-search (B)**, lean-extracted from `core/ir` at HEAD
@@ -53,13 +54,13 @@ The lab's four selectable dimensions for an experiment:
 |---|---|---|
 | **Dataset** | `--dataset /path/to/dir` (default: `eval/golden/<attribute>/`) | Built |
 | **Prompt** | Edit `prompts/*.yaml` and pass `--version <name>` to `lab run` + `lab eval` | Built |
-| **Model** | Hard-wired to Gemma-4-E4B GGUF (real runs) or MockModel (demo/tests) | Roadmap |
-| **Pipeline** | Hard-wired to `plr_core.run_plr` | Roadmap |
+| **Model** | `--model gemma\|mock` (registry, `registry.py`) | Built (P2-1) |
+| **Pipeline** | `--pipeline plr\|search` (registry) | Built (P2-1) |
+| **format/reason** | `formats:` / `reasons:` axes in experiment.yaml (`IR_PLR_FORMAT`/`IR_PLR_REASON`) | Built |
 
-**Roadmap (Phase 2 — not yet built)**: a model registry (swap GGUF without
-editing code), a pipeline registry (swap scoring/search logic), an experiment
-matrix runner (all combinations), and an HTML report generator. These are
-planned but not implemented; do not depend on them yet.
+To run the cross-product of several axes at once, use
+`lab experiment run <yaml>` (see [EXPERIMENT_SPEC.md](EXPERIMENT_SPEC.md));
+`lab report` turns the ledger into a self-contained HTML report.
 
 ---
 
@@ -147,6 +148,12 @@ python3 lab.py eval --attribute gender --version plr_v1.4_cot [--dataset <dir>]
 
 # Evaluate text-search (recall@k)
 python3 lab.py eval --attribute search --mode search --version plr_v1.4_cot [--dataset <dir>]
+
+# Run an experiment matrix (cross-product — see EXPERIMENT_SPEC.md)
+python3 lab.py experiment run examples/experiment.example.yaml [--strict]
+
+# Turn the ledger into a self-contained HTML report
+python3 lab.py report --out report.html
 
 # Validate a dataset directory
 python3 lab.py validate-dataset --dataset <dir>
