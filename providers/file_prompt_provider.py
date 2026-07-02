@@ -65,6 +65,12 @@ class FilePromptProvider(PromptProvider):
         self._ver = ver
         self._data = _load_yaml(ver)
         self._fmt: str = str(self._data.get("format", "yaml")).strip().lower()
+        # plr_v1.5_cot forced-commit contract: when the version yaml declares
+        # `commit_enums: true`, the `*unknown*` escape hatches are excluded
+        # from the enum lists offered to the model (mirrors
+        # plr_prompts._commit_enum). Per-version so older yamls (v1.3/v1.4)
+        # keep reproducing their historical prompts byte-for-byte.
+        self._commit_enums: bool = bool(self._data.get("commit_enums", False))
 
     # ------------------------------------------------------------------
     # PromptProvider contract
@@ -88,11 +94,17 @@ class FilePromptProvider(PromptProvider):
         plr = self._data["plr"]
         sys_text: str = plr["system"].rstrip("\n")
 
+        if self._commit_enums:
+            from plr_prompts import _commit_enum
+            _e = _commit_enum
+        else:
+            _e = tuple
+
         if object_hint == "vehicle":
             user_text = plr["vehicle_user"].rstrip("\n").format(
-                colors=", ".join(COLOR_ENUM),
-                vehicle_types=", ".join(VEHICLE_TYPE_ENUM),
-                military_enum="|".join(MILITARY_ENUM),
+                colors=", ".join(_e(COLOR_ENUM)),
+                vehicle_types=", ".join(_e(VEHICLE_TYPE_ENUM)),
+                military_enum="|".join(_e(MILITARY_ENUM)),
             )
         else:
             # person path — CoT (reason) vs plain depends on env + template key.
@@ -118,12 +130,12 @@ class FilePromptProvider(PromptProvider):
                 )
             else:
                 fmt_kwargs = dict(
-                    colors=", ".join(COLOR_ENUM),
-                    upper_types=", ".join(UPPER_TYPE_ENUM),
-                    lower_types=", ".join(LOWER_TYPE_ENUM),
-                    equips=", ".join(EQUIPMENT_TYPE_ENUM),
-                    actions=", ".join(STATIC_ACTION_ENUM),
-                    military_enum="|".join(MILITARY_ENUM),
+                    colors=", ".join(_e(COLOR_ENUM)),
+                    upper_types=", ".join(_e(UPPER_TYPE_ENUM)),
+                    lower_types=", ".join(_e(LOWER_TYPE_ENUM)),
+                    equips=", ".join(_e(EQUIPMENT_TYPE_ENUM)),
+                    actions=", ".join(_e(STATIC_ACTION_ENUM)),
+                    military_enum="|".join(_e(MILITARY_ENUM)),
                 )
             user_text = plr[tmpl_key].rstrip("\n").format(**fmt_kwargs)
 
@@ -269,6 +281,10 @@ class _Plrv14CotProvider(FilePromptProvider):
     _VERSION = "plr_v1.4_cot"
 
 
+class _Plrv15CotProvider(FilePromptProvider):
+    _VERSION = "plr_v1.5_cot"
+
+
 # ---------------------------------------------------------------------------
 # Self-registration at import time
 # ---------------------------------------------------------------------------
@@ -278,6 +294,7 @@ def _register_all() -> None:
     register(slot="prompt", version="plr_v0.4", provider_class=_Plrv04Provider)
     register(slot="prompt", version="plr_v1.3_cot", provider_class=_Plrv13CotProvider)
     register(slot="prompt", version="plr_v1.4_cot", provider_class=_Plrv14CotProvider)
+    register(slot="prompt", version="plr_v1.5_cot", provider_class=_Plrv15CotProvider)
 
 
 _register_all()

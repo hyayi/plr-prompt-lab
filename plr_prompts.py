@@ -126,7 +126,10 @@ def plr_user_prompt_vehicle() -> str:
 # should record plr_prompt_version="plr_v0.5_yaml".
 # =====================================================================
 
-PROMPT_VERSION_YAML = "plr_v0.5_yaml"
+# v0.6_yaml (2026-07): forced-commit — the unknown escape hatch is removed from
+# the answer space (gender/age/sleeve and the enum lists offered to the model).
+# Low confidence is expressed via `margins`, not by refusing to answer.
+PROMPT_VERSION_YAML = "plr_v0.6_yaml"
 # Keep under 16 chars — tb_cache_function_response.plr_prompt_version is
 # varchar(16). v0.9 = v0.8 minus the ~30 Korean/foreign car model names
 # (Gemma E4B identified only 2/214 as bmw, 0 for the rest), plus a
@@ -140,19 +143,26 @@ PROMPT_VERSION_YAML = "plr_v0.5_yaml"
 # Color hint, previously yaml-only, is now in BOTH sources) and makes military
 # detection prompt-native — Gemma emits `military: <military|civilian|unknown>`
 # directly from camo/uniform/gear cues instead of a post-hoc single-olive rule.
-PROMPT_VERSION_YAML_COT = "plr_v1.4_cot"
+# v1.5_cot (2026-07): forced-commit contract — `unknown` is removed from every
+# answer the model gives (gender/age/sleeve literals, military, and the enum
+# lists injected via _commit_enum). The model must always pick the most likely
+# concrete value; low confidence goes into `margins`. rider_vehicle is OMITTED
+# when not riding (the parser fills its N/A sentinel). Pairs with the
+# indexing-side single-view contract (quality gate and SR dual-view removed —
+# every crop gets exactly one Gemma call).
+PROMPT_VERSION_YAML_COT = "plr_v1.5_cot"
 
 
 _PLR_YAML_PERSON_TEMPLATE = """Image: person crop. Describe what you see using exactly this YAML shape:
 
 target: person
-gender: <male|female|unknown>
-age: <adult|child|unknown>
+gender: <male|female>
+age: <adult|child>
 outfit: <two_piece|one_piece|layered|obscured>
 upper:
   color: <color>
   type: <upper_type>
-  sleeve: <long|short|unknown>
+  sleeve: <long|short>
 lower:
   color: <color>
   type: <lower_type>
@@ -164,7 +174,10 @@ margins:
   outfit: <0.0-1.0>
   sleeve: <0.0-1.0>
 
-Pick values strictly from these enums. If uncertain pick the "_unknown" variant.
+Pick values strictly from these enums. ALWAYS commit to the single most
+likely value — never answer unknown, even on a poor-quality crop. Express
+low confidence through the `margins` block instead (a committed guess with
+margin 0.1 beats a refusal).
 - color: {colors}
 - upper_type: {upper_types}
 - lower_type: {lower_types}
@@ -176,8 +189,7 @@ Rules:
 - One key per line. Two-space indentation under `upper:`, `lower:`, `margins:`.
 - `equipment` is a flow list (inline). Use [] for none.
 - `margins` are decision confidence per slot (0.0 = guess, 1.0 = certain).
-- One-piece outfit: still fill `lower.type: none` and `lower.color: <best guess>`.
-"""
+- One-piece outfit: still fill `lower.type: none` and `lower.color: <best guess>`."""
 
 
 # v0.6 — chain-of-thought variant. Reason precedes the value so the model
@@ -208,30 +220,33 @@ Describe what you see using exactly this YAML shape:
 
 target: person
 gender_reason: <short cue, max 6 words, e.g. "broad shoulders, facial hair">
-gender: <male|female|unknown>
+gender: <male|female>
 age_reason: <short cue, max 6 words, e.g. "child-sized, uniform">
-age: <adult|child|unknown>
+age: <adult|child>
 outfit: <two_piece|one_piece|layered|obscured>
 upper:
   color: <color>
   type: <upper_type>
-  sleeve: <long|short|unknown>
+  sleeve: <long|short>
 lower:
   color: <color>
   type: <lower_type>
 military: <{military_enum}>
 equipment: [<equipment>, ...]    # use [] if none
 action: <static_action>
-rider_vehicle:                   # only when action is riding_* ; else omit or set type: unknown
+rider_vehicle:                   # ONLY when action is riding_* ; otherwise OMIT this section
   color: <color>
-  type: <motorcycle|bicycle|scooter|kickboard|unknown>
+  type: <motorcycle|bicycle|scooter|kickboard>
 margins:
   gender: <0.0-1.0>
   age: <0.0-1.0>
   outfit: <0.0-1.0>
   sleeve: <0.0-1.0>
 
-Pick values strictly from these enums. If uncertain pick the "_unknown" variant.
+Pick values strictly from these enums. ALWAYS commit to the single most
+likely value — never answer unknown, even on a poor-quality crop. Express
+low confidence through the `margins` block instead (a committed guess with
+margin 0.1 beats a refusal).
 - color: {colors}
 - upper_type: {upper_types}
 - lower_type: {lower_types}
@@ -245,8 +260,7 @@ Color hint:
 Military hint (judge `military`, precision-aware):
 - military = clear military cues: camouflage / disruptive-pattern clothing (woodland / desert / digital), field uniform or combat fatigues, military load-bearing gear (tactical vest, webbing, rucksack), combat helmet, olive-drab / khaki / field-green field dress.
 - civilian = ordinary street clothes, business / casual, work hi-vis / safety vests (construction, NOT military), school / security / service uniforms.
-- unknown = not determinable.
-- Be conservative: a single olive garment alone is NOT enough — look for pattern / gear / uniform corroboration.
+- Be conservative: a single olive garment alone is NOT enough — without pattern / gear / uniform corroboration answer civilian.
 
 Rules:
 - Output only YAML. No markdown fences. No prose. Stop after the last line.
@@ -256,9 +270,9 @@ Rules:
 - `equipment` is a flow list (inline). Use [] for none.
 - `margins` are decision confidence per slot (0.0 = guess, 1.0 = certain).
 - One-piece outfit: still fill `lower.type: none` and `lower.color: <best guess>`.
-- `rider_vehicle` is REQUIRED only when `action` is one of riding_motorcycle /
-  riding_bicycle / riding_scooter / riding_kickboard. Otherwise emit
-  `rider_vehicle:\\n  type: unknown` so the section stays well-formed."""
+- `rider_vehicle` is REQUIRED when `action` is one of riding_motorcycle /
+  riding_bicycle / riding_scooter / riding_kickboard. Otherwise OMIT the
+  rider_vehicle section entirely."""
 
 
 _PLR_YAML_VEHICLE_TEMPLATE = """Image: vehicle crop. The TARGET vehicle is highlighted by four YELLOW
@@ -297,36 +311,44 @@ Category hints (visual cues — pick the matching enum value):
 - kickboard  = standing platform, no seat
 - construction_vehicle = excavator/crane/forklift/etc.
 
-If the category is ambiguous, fall back to `vehicle_unknown`.
+ALWAYS commit to the closest matching type — never answer vehicle_unknown;
+express low confidence by picking the nearest category instead.
 
 Color hint:
 - military_olive = Korean military olive-drab (국방색) — dull yellowish-green used on ROK Army vehicles
 
 Military hint (judge `military`):
 - military = camouflage paint, military body type (military truck / APC / armored / jeep / tactical), military markings / insignia.
-- civilian = ordinary passenger / commercial vehicles (sedan / bus / delivery truck), even if dark green.
-- unknown otherwise.
+- civilian = ordinary passenger / commercial vehicles (sedan / bus / delivery truck), even if dark green. When cues are inconclusive answer civilian.
 
 Output only YAML. No fences. No prose."""
+
+
+def _commit_enum(values) -> tuple[str, ...]:
+    """Enum values as offered to the model — the `*unknown*` escape hatches are
+    excluded (plr_v1.5_cot forced-commit contract). The full enums in
+    plr_schema KEEP their unknown members: they are still needed to read
+    pre-v1.5 indexed rows and as defensive normalisation targets."""
+    return tuple(v for v in values if "unknown" not in v)
 
 
 def plr_yaml_user_prompt_person(with_reason: bool = False) -> str:
     template = _PLR_YAML_COT_PERSON_TEMPLATE if with_reason else _PLR_YAML_PERSON_TEMPLATE
     return template.format(
-        colors=", ".join(COLOR_ENUM),
-        upper_types=", ".join(UPPER_TYPE_ENUM),
-        lower_types=", ".join(LOWER_TYPE_ENUM),
-        equips=", ".join(EQUIPMENT_TYPE_ENUM),
-        actions=", ".join(STATIC_ACTION_ENUM),
-        military_enum="|".join(MILITARY_ENUM),
+        colors=", ".join(_commit_enum(COLOR_ENUM)),
+        upper_types=", ".join(_commit_enum(UPPER_TYPE_ENUM)),
+        lower_types=", ".join(_commit_enum(LOWER_TYPE_ENUM)),
+        equips=", ".join(_commit_enum(EQUIPMENT_TYPE_ENUM)),
+        actions=", ".join(_commit_enum(STATIC_ACTION_ENUM)),
+        military_enum="|".join(_commit_enum(MILITARY_ENUM)),
     )
 
 
 def plr_yaml_user_prompt_vehicle() -> str:
     return _PLR_YAML_VEHICLE_TEMPLATE.format(
-        colors=", ".join(COLOR_ENUM),
-        vehicle_types=", ".join(VEHICLE_TYPE_ENUM),
-        military_enum="|".join(MILITARY_ENUM),
+        colors=", ".join(_commit_enum(COLOR_ENUM)),
+        vehicle_types=", ".join(_commit_enum(VEHICLE_TYPE_ENUM)),
+        military_enum="|".join(_commit_enum(MILITARY_ENUM)),
     )
 
 
@@ -364,6 +386,8 @@ def build_plr_messages(object_hint: str = "person") -> list[dict[str, Any]]:
             "Extract visual attributes from CCTV crops as compact YAML.\n"
             "- YAML only. No prose. No markdown fences.\n"
             "- Use only the listed enum values.\n"
+            "- Always commit to a concrete value. Never answer unknown; "
+            "express low confidence via margins.\n"
             "- Be conservative with gender/age — visual appearance only, "
             "not identity."
         )

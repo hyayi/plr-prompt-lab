@@ -10,8 +10,9 @@ Decision (candidates / attributes):
   re_score pass.
 
 No DB / redis / gemma_backend is imported at module level. The only heavy
-dependency at import time is PIL and quality_gate (numpy). The model is
-injected by the caller (LabGemmaModel or a MockModel for tests).
+dependency at import time is PIL. The model is injected by the caller
+(LabGemmaModel or a MockModel for tests). The quality gate was removed with
+the plr_v1.5_cot single-view contract — every crop goes to the model.
 
 Military note: HINT["military"] = "person" because the military attribute
 lives on the person's attributes dict (plr_v1.4_cot: Gemma judges
@@ -121,7 +122,8 @@ def re_score(
       FileNotFoundError if a crop image is missing (fail-loud — no silent skip).
       AssertionError    if the written count != the golden obj_id count.
     """
-    import quality_gate
+    from types import SimpleNamespace
+
     import plr_core
 
     here = Path(__file__).parent
@@ -185,13 +187,13 @@ def re_score(
 
         pil = Image.open(crop_path).convert("RGB")
 
-        # Quality gate (SR-off: no super-res path)
-        qreport = quality_gate.evaluate(pil)
-
-        # PLR inference — SR disabled (v1 lab contract)
+        # PLR inference — single-view contract (plr_v1.5_cot): the quality
+        # gate no longer withholds crops from the model, so every crop gets
+        # exactly one call. run_plr's qreport parameter only steers its (now
+        # unused) coarse_only branch — pin the normal mode.
         plr_json = plr_core.run_plr(
             pil,
-            qreport,
+            SimpleNamespace(mode="normal_plr"),
             model,
             object_type_hint=object_type_hint,
             build_messages=build_messages,

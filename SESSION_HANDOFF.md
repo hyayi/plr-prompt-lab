@@ -10,7 +10,7 @@
 
 - **무엇**: PLR(객체 속성 추출) + 텍스트검색의 **프롬프트·파이프라인을 측정하며 개선**하는 독립 실험 도구. 데이터·모델·프롬프트·파이프라인을 파라미터로 조합 → 자동 eval → ledger 추이 → HTML 리포트.
 - **어디(lab)**: `/home/ziovision/plr-prompt-lab` — 별도 git repo, `master`, HEAD **`2553b13`**, 71 tracked files, **67 tests green** (GPU-free).
-- **운영 원본(ir)**: `/home/ziovision/ziomilitary/core/ir` — branch `fix/ir-classmap`, HEAD **`1690f25`** (미배포·작업트리→커밋, ir 재시작 시 반영).
+- **운영 원본(ir)**: `/home/ziovision/ziomilitary/core/ir` — branch **`feat/plr-single-call-commit`**, HEAD **`92d2665`** (미배포). ⚠️ 운영 컨테이너 `ziosummary-ir`이 이 트리를 바인드마운트 — **재시작 시 v1.5 강제커밋 + PROMPT_VERSION bump가 배포되고 lazy per-video reindex가 발동**함(사용자 결정 사항). 롤백 = `git checkout fix/ir-classmap`.
 - **진행 완료**: v1(사이클 코어) → v2 Phase 1(패키징+데이터준비) → v2 Phase 2(매트릭스+리포트) → GUIDE.html(구조/사용법 원페이지) → `--version` 실-프롬프트-로드 픽스 → **(2026-07-02) search `--version` 배선 + format/reason 매트릭스 축 + lab-side parity 테스트** (§8 갭 2·3·4 해소).
 - **미완/다음**: 실측 baseline 미실행(GPU + gender 라벨 필요) — 남은 유일한 실행 갭.
 
@@ -98,6 +98,14 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 ### GUIDE + 프롬프트-축 픽스
 - `GUIDE.html` (구조+사용법 원페이지, 배포용): `654ca3a` · `d7285e3` · `7634a0a`
 - **`--version` 실-프롬프트-로드 픽스**: `51022f6`(feat) · `2553b13`(docs) — experiment의 프롬프트 축이 이제 진짜로 다른 프롬프트를 비교
+
+### plr_v1.5_cot — 강제커밋 + single-view (2026-07-02, PLR 집중 재설계 1단계)
+- **설계 확정(사용자)**: ① quality_gate 제거(모든 크롭이 모델로) ② 크롭당 모델 호출 정확히 1회(SR 이중뷰 제거; transient/schema retry는 오류 처리라 유지) ③ **unknown 제거** — 프롬프트가 항상 커밋 강제, 저신뢰는 margins로.
+- **core/ir 먼저 수정 → lab 동기화** (사용자 지시로 개선 흐름 역방향; 표면은 바이트 동일 유지).
+- core/ir 커밋 `92d2665`: 프롬프트 unknown 제거 + `_commit_enum` 필터 + `PROMPT_VERSION_YAML_COT=plr_v1.5_cot`(reindex 트리거) + indexing single-view + provider `commit_enums:` yaml 플래그(구버전 yaml은 역사적 프롬프트 보존) + no-unknown 게이트 테스트. **206 passed, 6 xfailed**.
+- lab 동기화: plr_prompts.py/provider/v1.5 yaml 복사(바이트 동일), re_score quality_gate 제거, parity 테스트 v1.5 이동. **86 passed, 6 xfailed**, port diff = plr_core divergence만.
+- **유지된 것**: plr_schema enum의 unknown 멤버(구 인덱스 행 판독 + 방어적 정규화), 게이트의 unknown wildcard-pass(재인덱싱 완료 전까지), rider_vehicle N/A 센티널(shape 계약).
+- **다음**: gender 골든셋 라벨 + GPU로 v1.4 vs v1.5 A/B (`lab experiment run`, accuracy/bias 나란히) → 배포 결정.
 
 ### 갭 마감 (2026-07-02, §8의 2·3·4)
 - **search `--version` 배선**: `run_search_over_golden(prompt_version=…)` → `parse_query(build_messages=…)` → `parse_with_gemma` 주입구. gemma 백엔드가 있을 때 `prompts/<V>.yaml`의 `query_parser` 블록을 실제 전송(dictionary 경로는 무프롬프트라 영향 없음). lab.py / experiment.py 양쪽 배선.
