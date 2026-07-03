@@ -301,8 +301,10 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         attributes = [a.strip() for a in requested.split(",") if a.strip()]
 
     failures: list[str] = []
+    used_datasets: list[str] = []
     for attribute in attributes:
         ds_dir = resolve_dataset_dir(_LAB_ROOT, attribute, getattr(args, "dataset", None))
+        used_datasets.append(str(ds_dir))
         orig_argv = sys.argv
         sys.argv = ["run_eval", "--attribute", attribute,
                     "--golden", str(ds_dir),
@@ -326,6 +328,13 @@ def _cmd_eval(args: argparse.Namespace) -> int:
             sys.argv = orig_argv
         if len(attributes) > 1:
             print()
+
+    # 측정이 하나라도 성공했으면 시각화 자동 갱신 (--no-render로 끔).
+    if len(failures) < len(attributes) and not getattr(args, "no_render", False):
+        from evalkit.autorender import auto_render
+
+        ledger = args.ledger or os.path.join(_LAB_ROOT, "eval", "ledger.jsonl")
+        auto_render(used_datasets, ledger)
 
     if failures:
         print(f"[eval] {len(failures)}/{len(attributes)} attribute(s) failed: "
@@ -505,6 +514,8 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="path to core/ir repo (for stale-seed warning)")
     ev.add_argument("--dataset", default=None,
                     help="dataset dir (default: eval/golden/<attribute>)")
+    ev.add_argument("--no-render", action="store_true", dest="no_render",
+                    help="skip auto-rendering gallery.html/report.html after eval")
 
     # -- port --
     po = sub.add_parser(

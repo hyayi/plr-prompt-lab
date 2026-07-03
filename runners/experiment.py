@@ -377,6 +377,13 @@ def run_experiment(
                 print(f"[experiment]   {r.cell.label()}", flush=True)
                 print(f"[experiment]     {r.error}", flush=True)
 
+    # 측정이 하나라도 성공했으면 시각화 자동 갱신 — 데이터셋별 gallery +
+    # ledger 옆 report (렌더 실패는 경고만; 측정 결과는 이미 ledger에 있음).
+    if n_ok > 0:
+        from evalkit.autorender import auto_render
+
+        auto_render([c.dataset for c in cells], ledger_path)
+
     if n_ok == 0:
         # All cells failed
         return 2

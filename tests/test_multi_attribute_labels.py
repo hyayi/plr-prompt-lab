@@ -171,6 +171,9 @@ def test_eval_all_skips_declared_but_unlabeled(tmp_path: Path) -> None:
     assert "skip: military" in result.stdout
     evaluated = {json.loads(l)["attribute"] for l in open(ledger, encoding="utf-8")}
     assert evaluated == {"gender", "helmet"}
+    # eval 종료 시 시각화 자동 렌더 — 데이터셋 gallery + ledger 옆 report
+    assert (ds / "gallery.html").exists(), "eval 후 gallery.html 자동 생성"
+    assert (ledger.parent / "report.html").exists(), "eval 후 report.html 자동 생성"
 
 
 class _HintAwareModel:

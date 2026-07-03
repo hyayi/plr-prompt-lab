@@ -65,6 +65,12 @@ python3 -m pytest tests/ -q</code></pre>
   <b>프롬프트 품질과는 무관</b>합니다 — 품질 측정은 §7의 실측으로.
 </div>
 
+<div class="card">
+  <b>자동 렌더링</b>: §2·§3의 두 HTML은 <code>lab eval</code>·<code>lab experiment</code>가 끝날 때
+  자동 생성됩니다(데이터셋마다 gallery.html, ledger 옆 report.html — <code>--no-render</code>로 끔).
+  아래 수동 명령은 옵션을 바꿔 재생성할 때 씁니다.
+</div>
+
 <h2><span class="n">2</span> gallery — 크롭을 눈으로 검수</h2>
 <pre><code>python3 lab.py gallery --dataset datasets/demo
 <span class="out">[gallery] written: datasets/demo/gallery.html</span></code></pre>
