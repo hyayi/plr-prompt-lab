@@ -21,7 +21,9 @@ enums:
     hoodie, sweater, knit, uniform, safety_vest, workwear, dress, one_piece_uniform, jumpsuit, upper_unknown]
   lower_type: [pants, jeans, training_pants, slacks, leggings, shorts, skirt, long_skirt, none, lower_unknown]
   lower_shape: [long_pants, shorts, long_skirt, short_skirt, none, lower_unknown]
-  upper_sleeve: [long, short, unknown]
+  # sleeveless: 쿼리 매핑(나시/민소매→sleeveless)은 배선돼 있으나 추출 프롬프트는
+  # 아직 <long|short>만 제시 — 프롬프트가 제시할 때까지 dormant (deploy_2026 4차 복원).
+  upper_sleeve: [long, short, sleeveless, unknown]
   equip_location: [head, eye, face, back, hand]
   equipment_type: [backpack, shoulder_bag, handbag, cross_bag, cart, umbrella, helmet, construction_helmet,
     hat, mask, glasses, sunglasses, headphones, phone_in_hand, handheld_object, bottle, clipboard, knife,

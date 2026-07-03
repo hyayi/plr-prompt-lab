@@ -164,10 +164,12 @@ def _topk_one(label: str, fallback: str) -> list[dict[str, Any]]:
 
 
 def _norm_sleeve(value: str) -> str:
-    """upper.sleeve 값을 {long|short|unknown}으로 강제.
+    """upper.sleeve 값을 UPPER_SLEEVE_ENUM 안으로 강제 (vocab.yaml 동행).
     예) "LONG "→"long", "rolled-up"→"unknown" (미등록→unknown 방어)."""
+    from plr_schema import UPPER_SLEEVE_ENUM
+
     s = (value or "").strip().lower()
-    return s if s in {"long", "short"} else "unknown"
+    return s if s in {e.lower() for e in UPPER_SLEEVE_ENUM} else "unknown"
 
 
 def _norm_military(value: str) -> str:

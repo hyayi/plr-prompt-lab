@@ -347,6 +347,9 @@ PERSON_SCHEMA: Final[dict[str, Any]] = {
                         "female": {"type": "number", "minimum": 0.0, "maximum": 1.0},
                         "selected": {"type": "string", "enum": list(GENDER_ENUM)},
                         "decision_margin": {"type": "number"},
+                        # reason: 현행 파서가 채우는 근거 한 줄 (gender_reason emit).
+                        # evidence/caution은 v0.4 근거-목록 시절의 선택 필드 (구행 호환).
+                        "reason": {"type": "string"},
                         "evidence": {"type": "array", "items": {"type": "string"}},
                         "caution": {"type": "string"},
                     },
@@ -380,6 +383,8 @@ PERSON_SCHEMA: Final[dict[str, Any]] = {
                     "properties": {
                         "color_topk": _topk_array_schema(COLOR_ENUM),
                         "type_topk": _topk_array_schema(UPPER_TYPE_ENUM),
+                        # sleeve: plr_v1.5_cot부터 추출 프롬프트가 emit (upper.sleeve).
+                        "sleeve": {"type": "string", "enum": list(UPPER_SLEEVE_ENUM)},
                         "evidence": {"type": "string"},
                         # Scalar derived field for JSONB-containment queries (set at index time).
                         "primary_color": {"type": "string", "enum": list(COLOR_ENUM)},
@@ -413,11 +418,15 @@ PERSON_SCHEMA: Final[dict[str, Any]] = {
                     "type": "object",
                     "required": ["selected"],
                     "properties": {
+                        # 행동별 개별 점수 키(standing, sitting, …)는 enum에서 파생
+                        # — vocab.yaml 확장 시 선언도 자동 동행.
+                        **{
+                            action: {"type": "number", "minimum": 0.0, "maximum": 1.0}
+                            for action in STATIC_ACTION_ENUM
+                        },
                         "selected": {"type": "string", "enum": list(STATIC_ACTION_ENUM)},
+                        "decision_margin": {"type": "number"},
                         "evidence": {"type": "string"},
-                        # All actions in STATIC_ACTION_ENUM are optional numeric scores.
-                        # Validator is permissive — schema rejects only invalid enum
-                        # values, not missing scores.
                     },
                     "additionalProperties": True,
                 },
