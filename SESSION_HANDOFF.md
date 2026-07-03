@@ -218,6 +218,21 @@ python3 lab.py demo                  # GPU 없이 전체 사이클 시연
 
 ---
 
+## 7.5 재인덱싱-후 정리 백로그 (v1.5 배포 → reindex 완료가 선행 조건)
+
+구세대 행 호환 때문에 남긴 잔재들 — **모든 비디오가 v1.5로 재인덱싱된 뒤** 일괄 제거:
+1. PERSON/VEHICLE_SCHEMA의 `evidence`/`caution` 선택 필드 (v0.4 근거-목록 시절)
+2. `visibility` 빈 블록 (quality_gate 텔레메트리 자리 — shape 호환용으로만 잔존)
+3. 검색 게이트(scoring)의 unknown wildcard-pass (구행 보호 장치)
+4. `maps.lower_type_to_shape` 읽기시점 파생 + `upper_outer_of` (전용 추출 필드가 재인덱싱으로 채워지면)
+5. 파서 `_UNKNOWN_FALLBACKS` 축소 검토
+
+**제거 금지(잔재 아님·현역)**: 파서 관용 처리(모델은 계속 일탈 — 상시 방어) ·
+분포 플레이스홀더 male/female 1.0/0.0 (core/ir scoring이 인터페이스로 소비 — 제거는 scoring 개편과 한 몸) ·
+rider_vehicle unknown 센티널(N/A shape 계약).
+
+**지금 가능(누락 보완, additive)**: PERSON_SCHEMA에 현행 필드 `sleeve`·`reason` 명시.
+
 ## 8. 알려진 갭 / 다음 할 일
 
 1. **실측 baseline 미실행** — gender 골든셋(63)에 **사람 라벨**이 아직 없고 GPU 실행 필요. (`lab build-golden`으로 크롭 재생성 → `lab label` → `lab run --model gemma` → `lab eval`.)
