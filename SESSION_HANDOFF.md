@@ -215,7 +215,7 @@ python3 lab.py demo                  # GPU 없이 전체 사이클 시연
 | `eval/ledger.jsonl` | 실험 추이 저장소(append-only) |
 | `SEED.md` | 원본 core/ir 해시 |
 
-문서: 루트 `README.md`/`README.ko.md`/`SESSION_HANDOFF.md`/`SEED.md` · **`docs/`** (GUIDE.html · STRUCTURE.html · INSTALL.md · HANDOFF.md · DATASET_SPEC.md · EXPERIMENT_SPEC.md) · `skills/prepare-dataset/SKILL.md`
+문서: 루트 `README.md`(한글)/`SESSION_HANDOFF.md`/`SEED.md` · **`docs/`** (GUIDE.html · STRUCTURE.html · INSTALL.md · HANDOFF.md · DATASET_SPEC.md · EXPERIMENT_SPEC.md) · `skills/prepare-dataset/SKILL.md`
 
 ---
 
