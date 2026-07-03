@@ -226,6 +226,11 @@ python3 lab.py demo                  # GPU 없이 전체 사이클 시연
 3. 검색 게이트(scoring)의 unknown wildcard-pass (구행 보호 장치)
 4. `maps.lower_type_to_shape` 읽기시점 파생 + `upper_outer_of` (전용 추출 필드가 재인덱싱으로 채워지면)
 5. 파서 `_UNKNOWN_FALLBACKS` 축소 검토
+6. `_normalize_plr_json`의 vehicle 행 의복 플레이스홀더 제거(person 한정으로
+   — template_caption 등 upper_clothing 무조건 접근 소비자 확인 후;
+   tests/test_schema_declares_parser_keys.py의 whitelist를 비워 회귀 가드)
+7. `ziosummary_engine` DB의 빈 `ir_plr_index`/`ir_indexing_failures` 테이블 drop
+   (실사용은 ziosummary_management 쪽 — IR_PG_DB 확인 완료)
 
 **제거 금지(잔재 아님·현역)**: 파서 관용 처리(모델은 계속 일탈 — 상시 방어) ·
 분포 플레이스홀더 male/female 1.0/0.0 (core/ir scoring이 인터페이스로 소비 — 제거는 scoring 개편과 한 몸) ·
