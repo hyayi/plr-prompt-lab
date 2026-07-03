@@ -577,8 +577,9 @@ def _build_parser() -> argparse.ArgumentParser:
     ga.add_argument("--dataset", "-D", required=True,
                     help="dataset directory (crops/ + labels.jsonl [+ predictions.jsonl])")
     ga.add_argument("--attribute", "-A", default=None,
-                    help="which attribute's labels to render (required for "
-                         "multi-attribute labels.jsonl)")
+                    help="attribute(s) to render, comma list (default: every "
+                         "labeled attribute — cards get per-attribute tags "
+                         "and an AND/OR wrong-filter)")
     ga.add_argument("--out", default=None,
                     help="output HTML path (default: <dataset>/gallery.html)")
 

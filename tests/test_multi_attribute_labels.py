@@ -230,14 +230,25 @@ def test_mixed_dataset_routes_prompt_per_crop(tmp_path: Path) -> None:
     assert attrs == {"p1": "person", "v1": "vehicle"}
 
 
-def test_gallery_requires_attribute_when_ambiguous(tmp_path: Path) -> None:
+def test_gallery_multi_attribute_tags_and_filters(tmp_path: Path) -> None:
+    """다속성 데이터셋의 gallery 기본값: 라벨된 속성 전부를 카드마다 태그로
+    그리고, 속성 체크박스 + AND/OR 오답 필터가 들어가야 한다."""
     from evalkit.gallery import build_gallery
 
     ds = _make_multi_dataset(tmp_path / "ds")
 
-    with pytest.raises(SystemExit, match="pass\\s+--attribute"):
-        build_gallery(ds)
-
-    out = build_gallery(ds, attribute="helmet")
+    out = build_gallery(ds)  # -A 없이 → gender+helmet 둘 다
     html = Path(out).read_text(encoding="utf-8")
-    assert "WRONG" in html and "CORRECT" in html, "helmet 재추출 예측으로 배지가 그려져야"
+    assert "gender:" in html and "helmet:" in html, "속성별 태그가 있어야"
+    # 필터 기계: 속성 체크박스 + AND/OR 토글 + data-wrong 카드 속성
+    assert 'class="aflt" value="gender"' in html
+    assert 'class="aflt" value="helmet"' in html
+    assert "setMode('and'" in html and "setMode('or'" in html
+    assert 'data-wrong="' in html
+    # b는 equipment 없음 → helmet pred unknown → helmet 오답 카드가 존재
+    assert 'data-wrong="helmet"' in html
+
+    # 쉼표/단일 선택도 동작: helmet만 고르면 단일 모드(배지)로
+    out1 = build_gallery(ds, out_path=tmp_path / "g1.html", attribute="helmet")
+    html1 = Path(out1).read_text(encoding="utf-8")
+    assert "WRONG" in html1 and "CORRECT" in html1, "helmet 재추출 예측으로 배지가 그려져야"

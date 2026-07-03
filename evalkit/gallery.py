@@ -1,10 +1,14 @@
 """gallery — self-contained HTML of crops vs labels (visual eval evidence).
 
 Renders every crop in a dataset as a card: thumbnail (base64-inlined JPEG),
-prediction vs human label, a correct/wrong badge, and the margin / quality
-scores when present. Wrong predictions sort FIRST (lowest margin first) so
-the file opens on the failure cases — this is the primary evidence source
-for the improve-prompt skill and for humans reviewing an experiment.
+per-attribute prediction vs human label tags, and margin / quality scores.
+Wrong predictions sort FIRST (most-wrong, lowest margin first) so the file
+opens on the failure cases — the primary evidence source for the
+improve-prompt skill and for humans reviewing an experiment.
+
+다속성 데이터셋은 기본으로 **모든 라벨된 속성**을 카드마다 태그로 그리고,
+필터바에서 속성 체크박스 + AND/OR 토글로 "선택 속성들이 (모두/하나라도)
+오답인 카드"를 골라볼 수 있다. `--attribute a[,b]`로 부분 집합만 볼 수 있다.
 
 GPU-free, network-free, no external assets: the HTML works from a file://
 open or any static server.
@@ -46,10 +50,12 @@ _CSS = """
 body{margin:0;padding:24px;background:#0b1120;color:#dbe4f5;
      font-family:'Pretendard','Noto Sans KR','Malgun Gothic','Segoe UI',sans-serif}
 h1{font-size:20px;margin:0 0 4px} .sub{color:#8fa1c0;font-size:13px;margin-bottom:18px}
-.filters{margin:0 0 16px;display:flex;gap:8px;flex-wrap:wrap}
-.filters button{background:#16213b;border:1px solid #263452;color:#b8c6e4;border-radius:8px;
-                padding:5px 12px;font-size:12.5px;cursor:pointer}
+.filters{margin:0 0 8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filters button,.filters label{background:#16213b;border:1px solid #263452;color:#b8c6e4;
+                border-radius:8px;padding:5px 12px;font-size:12.5px;cursor:pointer}
 .filters button.on{border-color:#38bdf8;color:#e8f2ff}
+.filters label{display:inline-flex;align-items:center;gap:5px}
+.filters .sep{color:#3b4a6b;margin:0 2px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
 .card{background:#111a2e;border:1px solid #263452;border-radius:12px;padding:10px;text-align:center}
 .card.wrong{border-color:rgba(248,113,113,.65)}
@@ -63,9 +69,16 @@ h1{font-size:20px;margin:0 0 4px} .sub{color:#8fa1c0;font-size:13px;margin-botto
 .badge.no{background:rgba(248,113,113,.15);color:#f87171;border:1px solid rgba(248,113,113,.45)}
 .badge.unl{background:rgba(148,163,184,.15);color:#94a3b8;border:1px solid rgba(148,163,184,.4)}
 .sc{font-size:11px;color:#8fa1c0;margin-top:3px}
+.tags{margin-top:6px;display:flex;flex-direction:column;gap:3px}
+.tag{font-size:11px;border-radius:5px;padding:2px 7px;text-align:left;
+     font-family:ui-monospace,monospace}
+.tag b{font-weight:700}
+.tag.ok{background:rgba(52,211,153,.10);color:#34d399;border:1px solid rgba(52,211,153,.3)}
+.tag.no{background:rgba(248,113,113,.10);color:#f87171;border:1px solid rgba(248,113,113,.35)}
+.tag.unl{background:rgba(148,163,184,.10);color:#94a3b8;border:1px solid rgba(148,163,184,.3)}
 """
 
-_JS = """
+_JS_SINGLE = """
 function flt(mode, btn){
   document.querySelectorAll('.filters button').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
@@ -76,6 +89,88 @@ function flt(mode, btn){
 }
 """
 
+# 다속성 필터: 상태(전체/오답만/정답만) × 속성 체크박스 × AND/OR.
+#   오답만 + OR  → 선택 속성 중 "하나라도" 틀린 카드
+#   오답만 + AND → 선택 속성 "모두" 틀린 카드
+_JS_MULTI = """
+const state = {status:'all', mode:'or'};
+function _sel(){return [...document.querySelectorAll('.aflt:checked')].map(c=>c.value);}
+function upd(){
+  const sel = _sel();
+  document.querySelectorAll('.card').forEach(c=>{
+    const wrong   = (c.dataset.wrong  ||'').split(' ').filter(Boolean);
+    const correct = (c.dataset.correct||'').split(' ').filter(Boolean);
+    let show = true;
+    if(state.status==='wrong'){
+      show = sel.length>0 && (state.mode==='and'
+             ? sel.every(a=>wrong.includes(a))
+             : sel.some(a=>wrong.includes(a)));
+    } else if(state.status==='correct'){
+      show = sel.length>0 && (state.mode==='and'
+             ? sel.every(a=>correct.includes(a))
+             : sel.some(a=>correct.includes(a)));
+    }
+    c.style.display = show ? '' : 'none';
+  });
+}
+function setStatus(s,btn){state.status=s;
+  document.querySelectorAll('.stbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');upd();}
+function setMode(m,btn){state.mode=m;
+  document.querySelectorAll('.mdbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');upd();}
+"""
+
+
+def _extracted_preds(ds: Path, attribute: str,
+                     base_preds: dict[str, dict]) -> dict[str, dict]:
+    """attributes.jsonl(plr_json 전체 캐시)에서 한 속성의 pred/margin을 재추출.
+    None → "unknown" 강제는 run_eval 채점 규칙과 동일 — 배지와 지표가 항상
+    같은 예측을 본다. quality는 크롭 속성이라 기존 예측 행에서 재사용."""
+    from evalkit.dataset import attribute_spec, resolve_json_path
+
+    spec = attribute_spec(ds, attribute)
+    out: dict[str, dict] = {}
+    if not spec.get("pred_path"):
+        return out
+    for r in _jsonl(ds / "attributes.jsonl"):
+        pj = r.get("plr_json") or {}
+        pred = resolve_json_path(pj, spec["pred_path"])
+        row: dict = {"obj_id": r["obj_id"],
+                     "pred": "unknown" if pred in (None, "") else pred}
+        if spec.get("margin_path"):
+            m = resolve_json_path(pj, spec["margin_path"])
+            if isinstance(m, (int, float)):
+                row["margin"] = float(m)
+        q = (base_preds.get(r["obj_id"]) or {}).get("quality")
+        if q is not None:
+            row["quality"] = q
+        out[r["obj_id"]] = row
+    return out
+
+
+def _preds_for(ds: Path, attribute: str | None,
+               base_preds: dict[str, dict]) -> dict[str, dict]:
+    """predictions.jsonl이 요청 속성의 추출물이면 그대로, 아니면 재추출."""
+    stamped = {r.get("attribute") for r in base_preds.values() if r.get("attribute")}
+    if attribute and stamped and attribute not in stamped:
+        return _extracted_preds(ds, attribute, base_preds)
+    return base_preds
+
+
+def _doc(ds: Path, sub: str, filters_html: str, cards: list[tuple[tuple, str]],
+         js: str) -> str:
+    cards.sort(key=lambda t: t[0])  # wrong first, low margin first
+    return (
+        "<!DOCTYPE html><html lang='ko'><head><meta charset='utf-8'>"
+        f"<title>gallery — {html.escape(ds.name)}</title><style>{_CSS}</style></head><body>"
+        f"<h1>크롭 시각화 — {html.escape(str(ds))}</h1>"
+        f'<div class="sub">{sub}</div>'
+        f"{filters_html}"
+        f'<div class="grid">{"".join(c for _r, c in cards)}</div>'
+        f"<script>{js}</script></body></html>"
+    )
+
 
 def build_gallery(
     dataset_dir: str | Path,
@@ -84,56 +179,45 @@ def build_gallery(
 ) -> str:
     """Build <dataset>/gallery.html (or out_path). Returns the output path.
 
-    Needs labels.jsonl + crops/; predictions.jsonl enriches each card with
-    pred / correct-wrong / margin / quality when present (cards without a
-    prediction render as unlabeled-by-model).
+    Needs labels.jsonl + crops/; predictions.jsonl / attributes.jsonl enrich
+    each card with per-attribute pred / correct-wrong tags + margin / quality.
 
-    attribute: 다속성 labels.jsonl({"labels": {...}} 행)일 때 어느 속성의
-    라벨/배지를 그릴지. 미지정이면 manifest 선언 속성이 하나일 때 그것을
-    자동 선택하고, 여러 개면 명시를 요구한다.
+    attribute: 그릴 속성의 쉼표 목록. 미지정이면 라벨에 등장하는 속성 전부
+    (eval -A all과 같은 기준). 속성이 2개 이상이면 카드마다 속성별 태그가
+    붙고 필터바에 속성 체크박스 + AND/OR 토글이 생긴다.
     """
     ds = Path(dataset_dir)
     out = Path(out_path) if out_path else ds / "gallery.html"
 
-    from evalkit.dataset import declared_attributes, load_labels
+    from evalkit.dataset import declared_attributes, labeled_attributes, load_labels
 
-    if attribute is None:
+    if attribute:
+        attrs = [a.strip() for a in str(attribute).split(",") if a.strip()]
+    else:
         declared = declared_attributes(ds)
-        if len(declared) == 1:
-            attribute = declared[0]
-        elif len(declared) > 1:
-            raise SystemExit(
-                f"multi-attribute dataset ({', '.join(declared)}) — pass "
-                f"--attribute to pick which labels to render."
-            )
-    labels: dict[str, str | None] = dict(load_labels(ds, attribute))
-    preds = {r["obj_id"]: r for r in _jsonl(ds / "predictions.jsonl")}
-    # 예측 행의 attribute 스탬프가 요청 속성과 다르면(다속성 데이터셋에서
-    # 다른 속성으로 re_score된 경우) attributes.jsonl에서 재추출 — run_eval과
-    # 같은 규칙이라 gallery 배지와 eval 지표가 항상 같은 예측을 본다.
-    stamped = {r.get("attribute") for r in preds.values() if r.get("attribute")}
-    if attribute and stamped and attribute not in stamped:
-        from evalkit.dataset import attribute_spec, resolve_json_path
+        labeled = labeled_attributes(ds)
+        if labeled:
+            attrs = [a for a in declared if a in labeled] or labeled
+        else:
+            attrs = declared[:1]  # legacy 단일 label 데이터셋 (익명 라벨)
 
-        spec = attribute_spec(ds, attribute)
-        extracted: dict[str, dict] = {}
-        if spec.get("pred_path"):
-            for r in _jsonl(ds / "attributes.jsonl"):
-                pj = r.get("plr_json") or {}
-                # None → "unknown": run_eval의 채점 규칙과 동일하게 — 모델이
-                # 답했는데 그 슬롯이 빈 경우는 UNSCORED가 아니라 오답이다.
-                pred = resolve_json_path(pj, spec["pred_path"])
-                row: dict = {"obj_id": r["obj_id"],
-                             "pred": "unknown" if pred in (None, "") else pred}
-                if spec.get("margin_path"):
-                    m = resolve_json_path(pj, spec["margin_path"])
-                    if isinstance(m, (int, float)):
-                        row["margin"] = float(m)
-                q = (preds.get(r["obj_id"]) or {}).get("quality")
-                if q is not None:
-                    row["quality"] = q
-                extracted[r["obj_id"]] = row
-        preds = extracted
+    base_preds = {r["obj_id"]: r for r in _jsonl(ds / "predictions.jsonl")}
+
+    if len(attrs) >= 2:
+        return _build_multi(ds, out, attrs, base_preds)
+    return _build_single(ds, out, attrs[0] if attrs else None, base_preds)
+
+
+# ---------------------------------------------------------------------
+# 단일 속성 (기존 모습 유지 — 단순 배지 + label 값 필터)
+# ---------------------------------------------------------------------
+
+def _build_single(ds: Path, out: Path, attribute: str | None,
+                  base_preds: dict[str, dict]) -> str:
+    from evalkit.dataset import load_labels
+
+    labels: dict[str, str | None] = dict(load_labels(ds, attribute))
+    preds = _preds_for(ds, attribute, base_preds)
     obj_ids = sorted(set(labels) | set(preds))
     if not obj_ids:
         raise FileNotFoundError(
@@ -165,7 +249,7 @@ def build_gallery(
             rank = (0, margin if isinstance(margin, (int, float)) else 0.0)
         if label:
             classes.add(str(label))
-        card = (
+        cards.append((rank, (
             f'<div class="card{cls}" data-k="{kind}" '
             f'data-label="{html.escape(str(label or ""))}" data-pred="{html.escape(str(pred or ""))}">'
             f'<img src="data:image/jpeg;base64,{_thumb_b64(crop)}" alt="{html.escape(oid)}">'
@@ -175,28 +259,106 @@ def build_gallery(
             f"{badge}"
             f'<div class="sc">margin {_fmt(margin)} · quality {_fmt(quality)}</div>'
             f"</div>"
-        )
-        cards.append((rank, card))
+        )))
 
-    cards.sort(key=lambda t: t[0])  # wrong first, low margin first
     n = n_ok + n_wrong
     acc = f"{n_ok / n:.3f}" if n else "—"
-
     filters = ['<button class="on" onclick="flt(\'all\',this)">전체</button>',
                '<button onclick="flt(\'wrong\',this)">오답만</button>',
                '<button onclick="flt(\'correct\',this)">정답만</button>']
     for c in sorted(classes):
         filters.append(f'<button onclick="flt(\'{html.escape(c)}\',this)">label={html.escape(c)}</button>')
+    sub = (f"scored {n} (correct {n_ok} · wrong {n_wrong} · unscored {n_nolabel})"
+           f" · accuracy {acc} · 오답이 먼저, 저-margin 순")
+    out.write_text(
+        _doc(ds, sub, f'<div class="filters">{"".join(filters)}</div>', cards, _JS_SINGLE),
+        encoding="utf-8")
+    return str(out)
 
-    doc = (
-        "<!DOCTYPE html><html lang='ko'><head><meta charset='utf-8'>"
-        f"<title>gallery — {html.escape(ds.name)}</title><style>{_CSS}</style></head><body>"
-        f"<h1>크롭 시각화 — {html.escape(str(ds))}</h1>"
-        f'<div class="sub">scored {n} (correct {n_ok} · wrong {n_wrong} · unscored {n_nolabel})'
-        f" · accuracy {acc} · 오답이 먼저, 저-margin 순</div>"
-        f'<div class="filters">{"".join(filters)}</div>'
-        f'<div class="grid">{"".join(c for _r, c in cards)}</div>'
-        f"<script>{_JS}</script></body></html>"
-    )
-    out.write_text(doc, encoding="utf-8")
+
+# ---------------------------------------------------------------------
+# 다속성 (속성별 태그 + 체크박스 × AND/OR 필터)
+# ---------------------------------------------------------------------
+
+def _build_multi(ds: Path, out: Path, attrs: list[str],
+                 base_preds: dict[str, dict]) -> str:
+    from evalkit.dataset import load_labels
+
+    labels_by = {a: load_labels(ds, a) for a in attrs}
+    preds_by = {a: _preds_for(ds, a, base_preds) for a in attrs}
+    obj_ids = sorted({oid for m in labels_by.values() for oid in m}
+                     | {oid for m in preds_by.values() for oid in m})
+    if not obj_ids:
+        raise FileNotFoundError(
+            f"No labels.jsonl / predictions.jsonl content in {ds} — nothing to render."
+        )
+
+    cards: list[tuple[tuple, str]] = []
+    stat = {a: {"ok": 0, "wrong": 0} for a in attrs}
+    for oid in obj_ids:
+        crop = ds / "crops" / f"{oid}.jpg"
+        if not crop.exists():
+            continue
+        tags: list[str] = []
+        wrong_attrs: list[str] = []
+        correct_attrs: list[str] = []
+        min_margin = 1.0
+        quality = None
+        for a in attrs:
+            label = labels_by[a].get(oid)
+            p = preds_by[a].get(oid) or {}
+            pred, margin = p.get("pred"), p.get("margin")
+            if quality is None:
+                quality = p.get("quality")
+            if label is None or pred is None or label == "unknown":
+                tags.append(f'<div class="tag unl">{html.escape(a)}: '
+                            f'<b>{html.escape(str(pred or "—"))}</b> · unscored</div>')
+                continue
+            if pred == label:
+                correct_attrs.append(a)
+                stat[a]["ok"] += 1
+                tags.append(f'<div class="tag ok">{html.escape(a)}: '
+                            f'<b>{html.escape(str(pred))}</b> ✓</div>')
+            else:
+                wrong_attrs.append(a)
+                stat[a]["wrong"] += 1
+                if isinstance(margin, (int, float)):
+                    min_margin = min(min_margin, margin)
+                tags.append(f'<div class="tag no">{html.escape(a)}: '
+                            f'<b>{html.escape(str(pred))}</b> ✗ (label {html.escape(str(label))})</div>')
+        # 정렬: 오답 있는 카드 먼저 → 오답 많은 순 → 저-margin 순
+        rank = (0 if wrong_attrs else (1 if correct_attrs else 2),
+                -len(wrong_attrs), min_margin)
+        cls = " wrong" if wrong_attrs else ""
+        cards.append((rank, (
+            f'<div class="card{cls}" '
+            f'data-wrong="{html.escape(" ".join(wrong_attrs))}" '
+            f'data-correct="{html.escape(" ".join(correct_attrs))}">'
+            f'<img src="data:image/jpeg;base64,{_thumb_b64(crop)}" alt="{html.escape(oid)}">'
+            f'<div class="oid">{html.escape(oid)}</div>'
+            f'<div class="tags">{"".join(tags)}</div>'
+            f'<div class="sc">quality {_fmt(quality)}</div>'
+            f"</div>"
+        )))
+
+    per_attr = " · ".join(
+        f"{a} {s['ok']}/{s['ok'] + s['wrong']}" if (s["ok"] + s["wrong"]) else f"{a} —"
+        for a, s in stat.items())
+    sub = f"속성별 정답률: {per_attr} · 오답 많은 카드 먼저, 저-margin 순"
+
+    checkboxes = "".join(
+        f'<label><input type="checkbox" class="aflt" value="{html.escape(a)}" '
+        f'checked onchange="upd()">{html.escape(a)}</label>'
+        for a in attrs)
+    filters_html = (
+        '<div class="filters">'
+        '<button class="stbtn on" onclick="setStatus(\'all\',this)">전체</button>'
+        '<button class="stbtn" onclick="setStatus(\'wrong\',this)">오답만</button>'
+        '<button class="stbtn" onclick="setStatus(\'correct\',this)">정답만</button>'
+        '<span class="sep">|</span>' + checkboxes +
+        '<span class="sep">|</span>'
+        '<button class="mdbtn on" onclick="setMode(\'or\',this)">OR (하나라도)</button>'
+        '<button class="mdbtn" onclick="setMode(\'and\',this)">AND (모두)</button>'
+        "</div>")
+    out.write_text(_doc(ds, sub, filters_html, cards, _JS_MULTI), encoding="utf-8")
     return str(out)
