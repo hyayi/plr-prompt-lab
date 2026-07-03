@@ -1,2 +1,2 @@
-{"obj_id": "sample_001", "label": "helmet"}
-{"obj_id": "sample_002", "label": "no_helmet"}
+{"obj_id": "sample_001", "labels": {"gender": "male", "helmet": "helmet"}}
+{"obj_id": "sample_002", "labels": {"gender": "unknown", "helmet": "no_helmet"}}

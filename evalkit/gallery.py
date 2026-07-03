@@ -80,18 +80,60 @@ function flt(mode, btn){
 def build_gallery(
     dataset_dir: str | Path,
     out_path: str | Path | None = None,
+    attribute: str | None = None,
 ) -> str:
     """Build <dataset>/gallery.html (or out_path). Returns the output path.
 
     Needs labels.jsonl + crops/; predictions.jsonl enriches each card with
     pred / correct-wrong / margin / quality when present (cards without a
     prediction render as unlabeled-by-model).
+
+    attribute: 다속성 labels.jsonl({"labels": {...}} 행)일 때 어느 속성의
+    라벨/배지를 그릴지. 미지정이면 manifest 선언 속성이 하나일 때 그것을
+    자동 선택하고, 여러 개면 명시를 요구한다.
     """
     ds = Path(dataset_dir)
     out = Path(out_path) if out_path else ds / "gallery.html"
 
-    labels = {r["obj_id"]: r.get("label") for r in _jsonl(ds / "labels.jsonl")}
+    from evalkit.dataset import declared_attributes, load_labels
+
+    if attribute is None:
+        declared = declared_attributes(ds)
+        if len(declared) == 1:
+            attribute = declared[0]
+        elif len(declared) > 1:
+            raise SystemExit(
+                f"multi-attribute dataset ({', '.join(declared)}) — pass "
+                f"--attribute to pick which labels to render."
+            )
+    labels: dict[str, str | None] = dict(load_labels(ds, attribute))
     preds = {r["obj_id"]: r for r in _jsonl(ds / "predictions.jsonl")}
+    # 예측 행의 attribute 스탬프가 요청 속성과 다르면(다속성 데이터셋에서
+    # 다른 속성으로 re_score된 경우) attributes.jsonl에서 재추출 — run_eval과
+    # 같은 규칙이라 gallery 배지와 eval 지표가 항상 같은 예측을 본다.
+    stamped = {r.get("attribute") for r in preds.values() if r.get("attribute")}
+    if attribute and stamped and attribute not in stamped:
+        from evalkit.dataset import attribute_spec, resolve_json_path
+
+        spec = attribute_spec(ds, attribute)
+        extracted: dict[str, dict] = {}
+        if spec.get("pred_path"):
+            for r in _jsonl(ds / "attributes.jsonl"):
+                pj = r.get("plr_json") or {}
+                # None → "unknown": run_eval의 채점 규칙과 동일하게 — 모델이
+                # 답했는데 그 슬롯이 빈 경우는 UNSCORED가 아니라 오답이다.
+                pred = resolve_json_path(pj, spec["pred_path"])
+                row: dict = {"obj_id": r["obj_id"],
+                             "pred": "unknown" if pred in (None, "") else pred}
+                if spec.get("margin_path"):
+                    m = resolve_json_path(pj, spec["margin_path"])
+                    if isinstance(m, (int, float)):
+                        row["margin"] = float(m)
+                q = (preds.get(r["obj_id"]) or {}).get("quality")
+                if q is not None:
+                    row["quality"] = q
+                extracted[r["obj_id"]] = row
+        preds = extracted
     obj_ids = sorted(set(labels) | set(preds))
     if not obj_ids:
         raise FileNotFoundError(

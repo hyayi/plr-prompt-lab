@@ -105,6 +105,58 @@ class Dataset:
         return f"Dataset({str(self.path)!r})"
 
 
+def load_labels(
+    dataset_dir: str | Path, attribute: str | None = None
+) -> dict[str, str]:
+    """labels.jsonl → {obj_id: label} — 단일/다속성 두 형식을 모두 수용.
+
+    지원 형식 (한 파일 안에 혼재 가능):
+      단일(legacy):  {"obj_id": "M3", "label": "male"}
+                     → 어떤 attribute 요청에도 그 라벨을 반환 (기존 데이터셋 무변경)
+      다속성:        {"obj_id": "M3", "labels": {"gender": "male", "upper_color": "black"}}
+                     → labels[attribute]만 반환; 그 속성 라벨이 없는 행은 제외
+                       (= 미라벨 크롭: 채점 조인에서 자연 탈락, unknown과 구분됨)
+
+    입력/출력 예) load_labels(ds, "gender")
+      → {"M3": "male", "M7": "unknown"}   (M9가 gender 키를 안 가지면 M9 없음)
+    """
+    path = Path(dataset_dir) / "labels.jsonl"
+    out: dict[str, str] = {}
+    if not path.exists():
+        return out
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            rec = json.loads(line)
+            oid = rec.get("obj_id")
+            if oid is None:
+                continue
+            multi = rec.get("labels")
+            if isinstance(multi, dict):
+                if attribute is not None and multi.get(attribute) is not None:
+                    out[str(oid)] = str(multi[attribute])
+                continue
+            single = rec.get("label") or rec.get("true")
+            if single is not None:
+                out[str(oid)] = str(single)
+    return out
+
+
+def declared_attributes(dataset_dir: str | Path) -> list[str]:
+    """manifest가 선언한 평가 속성 목록 — `lab eval --attribute all`의 순회 대상.
+
+    manifest.yaml의 `attributes:` 맵(다속성) 키들이 우선, 없으면 단일
+    `attribute:` 필드, 둘 다 없으면 [].
+    """
+    manifest = Dataset(Path(dataset_dir)).manifest
+    attrs = manifest.get("attributes")
+    if isinstance(attrs, dict) and attrs:
+        return [str(k) for k in attrs]
+    single = manifest.get("attribute")
+    return [str(single)] if single else []
+
+
 def resolve_dataset_dir(
     lab_root: str | os.PathLike[str],
     attribute: str,
@@ -192,7 +244,19 @@ def resolve_json_path(data: Any, dotted: str) -> Any:
 def attribute_spec(dataset_dir: str | Path, attribute: str) -> dict[str, Any]:
     """Effective spec for one attribute: manifest declaration wins, preset
     fills the gaps, unknown attribute without a manifest declaration gets an
-    empty spec (callers fail loudly where a field is required)."""
+    empty spec (callers fail loudly where a field is required).
+
+    다속성 manifest는 `attributes:` 맵으로 속성별 스펙을 선언한다::
+
+        attributes:
+          gender: {}                       # 프리셋 그대로 (빈 dict)
+          upper_color:
+            labels: [black, white, red]
+            pred_path: attributes.upper_clothing.primary_color
+
+    맵 항목이 있으면 그 속성에 한해 프리셋을 덮어쓴다. 단일 `attribute:` +
+    최상위 labels/pred_path/... 필드(legacy)도 계속 동작.
+    """
     base = dict(PRESET_SPECS.get(attribute) or {
         "labels": None, "pred_path": None, "margin_path": None,
         "bias_pair": None, "object_type_hint": "person",
@@ -201,6 +265,12 @@ def attribute_spec(dataset_dir: str | Path, attribute: str) -> dict[str, Any]:
         manifest = Dataset(Path(dataset_dir)).manifest
     except Exception:  # noqa: BLE001 — malformed manifest is validate's job
         manifest = {}
+    attrs_map = manifest.get("attributes")
+    if isinstance(attrs_map, dict) and isinstance(attrs_map.get(attribute), dict):
+        for key, val in attrs_map[attribute].items():
+            if val is not None:
+                base[key] = val
+        return base
     if manifest.get("attribute") == attribute or "attribute" not in manifest:
         for key in ("labels", "pred_path", "margin_path", "bias_pair", "object_type_hint"):
             if manifest.get(key) is not None:

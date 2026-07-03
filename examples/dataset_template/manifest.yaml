@@ -1,16 +1,23 @@
 # manifest.yaml — 데이터셋 선언 (구조는 고정, 라벨은 자유)
 #
-# 필수 4개 필드:
-attribute: helmet                 # 평가할 속성명 (자유 — 내장 프리셋: gender | vehicle_type | military)
+# 필수 필드: attributes(또는 단일 attribute) + n + created + source_note
 n: 2                              # 라벨된 크롭 수
-created: "2026-07-02"             # 생성일
+created: "2026-07-03"             # 생성일
 source_note: "예시 템플릿 — 실제 출처/수집 방법을 적으세요"
 
-# --- generic 속성일 때 필수 (내장 프리셋이면 생략 가능) ---
-labels: [helmet, no_helmet]       # 허용 라벨 집합 (validate가 이 집합으로 검사)
-pred_path: attributes.equipment[0].type   # PLR JSON에서 예측값을 뽑는 경로 (dots + [idx])
+# --- 다속성 선언 (권장): 같은 크롭셋에 속성별 정답을 함께 라벨 ---
+# 크롭당 모델 호출은 1회(attributes.jsonl에 전체 plr_json 저장)이므로,
+# 여기 선언한 모든 속성을 `lab eval --attribute all -D <dir>`이 한 번에 채점한다.
+attributes:
+  gender: {}                      # 내장 프리셋(gender|vehicle_type|military)은 빈 dict면 충분
+  helmet:                         # 커스텀 속성은 labels + pred_path 선언
+    labels: [helmet, no_helmet]   # 허용 라벨 집합 (validate가 이 집합으로 검사)
+    pred_path: attributes.equipment[0].type   # PLR JSON에서 예측값 경로 (dots + [idx])
+    # margin_path: attributes.gender_scores.decision_margin  # 옵션: 신뢰 스코어 경로
+    # bias_pair: [no_helmet, helmet]   # 옵션: 헤드라인 bias [정답, 오인]
+    # object_type_hint: person         # 옵션: person | vehicle (기본 person)
 
-# --- 옵션 ---
-# margin_path: attributes.gender_scores.decision_margin  # 신뢰 스코어 경로
-# bias_pair: [no_helmet, helmet]  # 헤드라인 bias: [정답클래스, 오인클래스]
-# object_type_hint: person        # person | vehicle (기본 person)
+# --- 단일 속성(legacy)도 계속 지원: 위 attributes: 대신 아래처럼 ---
+# attribute: helmet
+# labels: [helmet, no_helmet]
+# pred_path: attributes.equipment[0].type

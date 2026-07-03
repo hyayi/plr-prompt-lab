@@ -275,8 +275,10 @@ def re_score(
                 margin = None
 
         new_preds.append({
-            "obj_id": obj_id, "pred": pred, "reason": reason,
-            "margin": margin, "quality": quality,
+            # attribute 스탬프: 이 행이 "어느 속성의 추출물"인지 기록 —
+            # run_eval이 다른 속성 평가 시 attributes.jsonl 재추출로 전환하는 근거.
+            "obj_id": obj_id, "attribute": attribute, "pred": pred,
+            "reason": reason, "margin": margin, "quality": quality,
         })
         new_attrs.append({"obj_id": obj_id, "plr_json": plr_json})
 

@@ -141,14 +141,61 @@ def main() -> None:
     seed_hash = read_seed_hash(_LAB_ROOT)
     warn_stale_seed(_LAB_ROOT, seed_hash, args.core_ir)
 
+    from evalkit.dataset import attribute_spec, load_labels, resolve_json_path
+
     gdir = args.golden or os.path.join(here, "golden", args.attribute)
-    pred_rows = {r["obj_id"]: r for r in _jsonl(os.path.join(gdir, "predictions.jsonl"))}
-    preds = {i: (r.get("pred") or "unknown") for i, r in pred_rows.items()}
-    labels = {r["obj_id"]: (r.get("label") or r.get("true") or "unknown") for r in _jsonl(os.path.join(gdir, "labels.jsonl"))}
+    spec = attribute_spec(gdir, args.attribute)
+
+    preds_path = os.path.join(gdir, "predictions.jsonl")
+    attrs_path = os.path.join(gdir, "attributes.jsonl")
+    pred_rows = (
+        {r["obj_id"]: r for r in _jsonl(preds_path)}
+        if os.path.exists(preds_path) else {}
+    )
+
+    # predictions.jsonl은 re_score가 마지막으로 돌린 "한 속성"의 추출물.
+    # 행의 attribute 스탬프가 요청 속성과 다르거나 파일이 없으면,
+    # attributes.jsonl(크롭당 plr_json 전체 캐시)에서 pred/margin을 재추출한다
+    # — 모델 1회 실행으로 라벨된 모든 속성을 평가할 수 있는 근거.
+    stamped = {r.get("attribute") for r in pred_rows.values() if r.get("attribute")}
+    if (not pred_rows) or (stamped and args.attribute not in stamped):
+        if not os.path.exists(attrs_path):
+            raise SystemExit(
+                f"No predictions for attribute={args.attribute!r} and no "
+                f"attributes.jsonl to extract from — run `lab run` first."
+            )
+        if not spec.get("pred_path"):
+            raise SystemExit(
+                f"attribute={args.attribute!r}: no pred_path (declare it in "
+                f"manifest.yaml `attributes:` or use a preset attribute)."
+            )
+        extracted: dict[str, dict] = {}
+        for r in _jsonl(attrs_path):
+            oid = r["obj_id"]
+            pj = r.get("plr_json") or {}
+            row: dict = {"obj_id": oid, "attribute": args.attribute,
+                         "pred": resolve_json_path(pj, spec["pred_path"])}
+            if spec.get("margin_path"):
+                m = resolve_json_path(pj, spec["margin_path"])
+                if isinstance(m, (int, float)):
+                    row["margin"] = float(m)
+            q = (pred_rows.get(oid) or {}).get("quality")
+            if q is not None:  # 품질은 크롭의 속성 — 어느 속성 평가든 재사용 가능
+                row["quality"] = q
+            extracted[oid] = row
+        pred_rows = extracted
+
+    preds = {i: (str(r.get("pred")) if r.get("pred") not in (None, "") else "unknown")
+             for i, r in pred_rows.items()}
+    labels = load_labels(gdir, args.attribute)
 
     ids = [i for i in preds if i in labels]
     if not ids:
-        raise SystemExit("No overlap between predictions.jsonl and labels.jsonl")
+        raise SystemExit(
+            f"No overlap between predictions and labels for "
+            f"attribute={args.attribute!r} (multi-attribute labels.jsonl rows "
+            f"must carry that key inside \"labels\")."
+        )
 
     # Forced-commit compliance (plr_v1.5_cot): how often the model still
     # answered unknown despite the commit instruction. Measured over ALL
@@ -213,19 +260,12 @@ def main() -> None:
     margin_stats = _signal_stats(margins, eval_ids, is_correct, args.margin_threshold)
     quality_stats = _signal_stats(qualities, eval_ids, is_correct, args.quality_threshold)
 
-    # Headline bias pair: dataset manifest declaration wins over the preset.
+    # Headline bias pair: attribute_spec이 manifest(속성별 attributes: 맵 →
+    # legacy 최상위 필드) → 프리셋 순으로 병합해 준다.
     pair = None
-    try:
-        import yaml
-        with open(os.path.join(gdir, "manifest.yaml"), encoding="utf-8") as f:
-            _mani = yaml.safe_load(f) or {}
-        bp = _mani.get("bias_pair")
-        if isinstance(bp, (list, tuple)) and len(bp) == 2:
-            pair = (str(bp[0]), str(bp[1]))
-    except FileNotFoundError:
-        pass
-    except Exception as exc:  # noqa: BLE001 — malformed manifest is validate's job
-        print(f"WARNING: manifest.yaml unreadable for bias_pair: {exc}", file=sys.stderr)
+    bp = spec.get("bias_pair")
+    if isinstance(bp, (list, tuple)) and len(bp) == 2:
+        pair = (str(bp[0]), str(bp[1]))
     if pair is None:
         pair = BIAS_PAIR.get(args.attribute)
 

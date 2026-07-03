@@ -82,10 +82,31 @@ model: "plr_v1.4_cot"      # PLR prompt version used for initial predictions
 prompt: "prompts/plr_v1.4_cot.yaml"  # prompt file path
 ```
 
-**Required fields**: `attribute`, `n`, `created`, `source_note`.
+**Required fields**: `attribute` (or `attributes`, below), `n`, `created`,
+`source_note`.
 
 The `attribute` value governs which label vocabulary is enforced by
 `validate-dataset` (see section 5).
+
+### Multi-attribute manifest (`attributes:` map — recommended)
+
+같은 크롭셋에 여러 속성의 정답을 함께 라벨할 때는 단일 `attribute:` 대신
+속성별 스펙 맵을 선언한다. 모델 호출은 크롭당 1회뿐이고(`attributes.jsonl`에
+전체 plr_json 저장), `lab eval --attribute all -D <dir>`이 선언된 모든 속성을
+한 번에 채점한다 — 속성별 예측은 `attributes.jsonl`에서 `pred_path`로
+재추출되므로 GPU 재실행이 없다.
+
+```yaml
+n: 150
+created: "2026-07-03"
+source_note: "..."
+attributes:
+  gender: {}                      # built-in preset — empty spec inherits it
+  helmet:                         # custom attribute — declare labels + pred_path
+    labels: [helmet, no_helmet]
+    pred_path: attributes.equipment[0].type
+    # margin_path / bias_pair / object_type_hint — same optional keys as §3
+```
 
 ---
 
@@ -106,6 +127,24 @@ One JSON object per line (UTF-8, no trailing comma). Blank lines are ignored.
 | `label`  | string | Human ground-truth value (see vocabulary below)  |
 
 **Optional fields per line**: `notes` (free text), any additional attributes.
+
+### Multi-attribute rows (`"labels"` dict)
+
+다속성 데이터셋(§3의 `attributes:` 맵)의 행은 `label` 대신 속성별 dict를 쓴다.
+두 형식은 한 파일에 혼재해도 된다 (legacy 단일 `label` 행은 어느 속성 평가에도
+그 값이 쓰인다):
+
+```json
+{"obj_id": "1003", "labels": {"gender": "female", "helmet": "no_helmet"}}
+{"obj_id": "1013", "labels": {"gender": "unknown", "helmet": "helmet"}}
+{"obj_id": "1021", "labels": {"helmet": "helmet"}}
+```
+
+- 어떤 속성 키가 **없는** 행은 그 속성 평가에서 **자연 제외**된다(미라벨 —
+  `unknown`과 다름: unknown은 "사람도 판별 불가"로 별도 집계, 미라벨은 조인
+  자체에서 빠짐). 1021처럼 속성별로 라벨 가능한 것만 채우면 된다.
+- manifest `attributes:`에 선언되지 않은 속성 키는 `validate-dataset`이
+  **error**로 잡는다 (오타가 조용히 평가에서 빠지는 사고 방지).
 
 **`label: unknown` policy (forced-commit, plr_v1.5_cot)**: label a crop
 `unknown` ONLY when a human cannot decide the attribute from the crop

@@ -85,17 +85,22 @@ yaml 안의 상대경로는 <b>yaml 파일 기준</b>으로 해석됩니다. 종
   <code>prompts:</code>에 버전을 추가하면 A/B가 됩니다. 스펙: <code>docs/EXPERIMENT_SPEC.md</code>
 </div>
 
-<h2><span class="n">5</span> 내 데이터셋 만들기</h2>
-<pre><code>cp -r examples/dataset_template my_helmet_test     <span class="c"># ① 템플릿 복사</span>
-<span class="c"># ② crops/&lt;obj_id&gt;.jpg 채우고 manifest.yaml의 attribute/labels/pred_path 선언</span>
-python3 lab.py validate-dataset --dataset my_helmet_test   <span class="c"># ③ 형식 검증 (fail-loud)</span>
-<span class="c"># ④ 사람 라벨: 오분류 obj_id만 나열하면 labels.jsonl 생성</span>
-python3 lab.py label --dataset my_helmet_test --female-in-male M3,M7 --unknown M9</code></pre>
+<h2><span class="n">5</span> 내 데이터셋 만들기 — 다속성 라벨</h2>
+<pre><code>cp -r examples/dataset_template my_test            <span class="c"># ① 템플릿 복사 (다속성 예제)</span>
+<span class="c"># ② crops/&lt;obj_id&gt;.jpg 채우고 manifest.yaml의 attributes: 맵 선언</span>
+<span class="c"># ③ labels.jsonl — 크롭당 한 줄, 속성별 정답을 dict로:</span>
+<span class="c">#    {"obj_id":"M3","labels":{"gender":"male","helmet":"helmet"}}</span>
+python3 lab.py validate-dataset --dataset my_test  <span class="c"># ④ 형식 검증 (fail-loud)</span>
+python3 lab.py run  -A gender -X plr_v1.5_cot --dataset my_test   <span class="c"># ⑤ 모델 1회 (mock 가능)</span>
+python3 lab.py eval -A all --dataset my_test       <span class="c"># ⑥ 선언된 전 속성 한 번에 채점 ★</span></code></pre>
 <div class="card" style="--c:var(--green)">
-  <b>gender / vehicle_type / military는 내장 프리셋</b>(manifest 선언 불필요).
-  커스텀 속성은 manifest에 <code>labels: [helmet, no_helmet]</code> +
-  <code>pred_path: attributes.equipment[0].type</code>처럼 선언하면 validate/run/eval이 그대로 동작.
-  판별 불가 크롭은 <code>unknown</code> — 채점에서 제외되고 별도 집계됩니다.
+  <b>모델 호출은 크롭당 1회</b> — run이 <code>attributes.jsonl</code>에 전체 plr_json을
+  저장하고, <code>eval -A all</code>이 속성별 예측을 <code>pred_path</code>로 재추출해
+  채점합니다 (GPU 재실행 없음). <b>gender / vehicle_type / military는 내장 프리셋</b>
+  (빈 dict로 선언), 커스텀 속성은 <code>labels:</code> + <code>pred_path:</code> 선언.
+  라벨 정책: 판별 불가 = <code>unknown</code>(채점 제외·별도 집계), 그 속성 키 자체를
+  빼면 미라벨(조인에서 제외). 단일 <code>label</code> 형식(구 데이터셋)도 계속 동작.
+  gallery는 <code>--attribute</code>로 속성을 골라 배지를 그립니다.
   상세: <code>docs/DATASET_SPEC.md</code>, 스킬: <code>skills/prepare-dataset/SKILL.md</code>
 </div>
 

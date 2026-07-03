@@ -238,7 +238,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     """Score predictions vs golden labels (PLR attribute eval → eval/run_eval.py)."""
     import importlib.util
 
-    from evalkit.dataset import resolve_dataset_dir
+    from evalkit.dataset import declared_attributes, resolve_dataset_dir
 
     model_name = getattr(args, "model", "gemma")
 
@@ -249,25 +249,53 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     re_mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
     spec.loader.exec_module(re_mod)  # type: ignore[union-attr]
 
-    ds_dir = resolve_dataset_dir(_LAB_ROOT, args.attribute, getattr(args, "dataset", None))
-    orig_argv = sys.argv
-    sys.argv = ["run_eval", "--attribute", args.attribute,
-                "--golden", str(ds_dir),
-                "--model", model_name, "--pipeline", "plr",
-                "--dataset", str(ds_dir)]
-    if args.version:
-        sys.argv += ["--version", args.version]
-    if args.ledger:
-        sys.argv += ["--ledger", args.ledger]
-    if getattr(args, "core_ir", None):
-        sys.argv += ["--core-ir", args.core_ir]
-    try:
-        re_mod.main()
-    except SystemExit as e:
-        return int(e.code) if e.code is not None else 0
-    finally:
-        sys.argv = orig_argv
+    # --attribute all → manifest 선언 속성 전부 순회, "a,b" → 나열 순회.
+    # 모델 재실행 없음: 각 속성 예측은 attributes.jsonl(전체 plr_json 캐시)에서
+    # run_eval이 재추출한다 — 라벨 1회 + 모델 1회로 전 속성 평가.
+    requested = str(args.attribute)
+    if requested == "all":
+        if not getattr(args, "dataset", None):
+            print("[eval] --attribute all requires --dataset", file=sys.stderr)
+            return 2
+        attributes = declared_attributes(args.dataset)
+        if not attributes:
+            print(f"[eval] {args.dataset}: manifest.yaml에 attributes:/attribute "
+                  f"선언이 없어 'all'을 해석할 수 없습니다", file=sys.stderr)
+            return 2
+    else:
+        attributes = [a.strip() for a in requested.split(",") if a.strip()]
 
+    failures: list[str] = []
+    for attribute in attributes:
+        ds_dir = resolve_dataset_dir(_LAB_ROOT, attribute, getattr(args, "dataset", None))
+        orig_argv = sys.argv
+        sys.argv = ["run_eval", "--attribute", attribute,
+                    "--golden", str(ds_dir),
+                    "--model", model_name, "--pipeline", "plr",
+                    "--dataset", str(ds_dir)]
+        if args.version:
+            sys.argv += ["--version", args.version]
+        if args.ledger:
+            sys.argv += ["--ledger", args.ledger]
+        if getattr(args, "core_ir", None):
+            sys.argv += ["--core-ir", args.core_ir]
+        try:
+            re_mod.main()
+        except SystemExit as e:
+            code = int(e.code) if isinstance(e.code, int) else 1
+            if code:
+                failures.append(f"{attribute}: {e.code}")
+        except Exception as exc:  # noqa: BLE001 — 한 속성 실패가 나머지를 막지 않게
+            failures.append(f"{attribute}: {type(exc).__name__}: {exc}")
+        finally:
+            sys.argv = orig_argv
+        if len(attributes) > 1:
+            print()
+
+    if failures:
+        print(f"[eval] {len(failures)}/{len(attributes)} attribute(s) failed: "
+              + "; ".join(failures), file=sys.stderr)
+        return 1
     return 0
 
 
@@ -427,7 +455,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Score predictions vs golden labels (PLR attribute eval).",
     )
     ev.add_argument("--attribute", "-A", required=True,
-                    help="PLR attribute (gender | vehicle_type | military)")
+                    help="PLR attribute (gender | vehicle_type | military | "
+                         "custom), comma list, or 'all' (= manifest-declared "
+                         "attributes; requires --dataset)")
     ev.add_argument("--model", default="gemma",
                     help="registry model name recorded in the ledger (default: gemma)")
     ev.add_argument("--version", default="plr_v1.5_cot",
@@ -508,6 +538,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     ga.add_argument("--dataset", "-D", required=True,
                     help="dataset directory (crops/ + labels.jsonl [+ predictions.jsonl])")
+    ga.add_argument("--attribute", "-A", default=None,
+                    help="which attribute's labels to render (required for "
+                         "multi-attribute labels.jsonl)")
     ga.add_argument("--out", default=None,
                     help="output HTML path (default: <dataset>/gallery.html)")
 
@@ -574,7 +607,8 @@ def _cmd_gallery(args: argparse.Namespace) -> int:
     """Self-contained crops-vs-labels HTML (wrong-first). GPU-free."""
     from evalkit.gallery import build_gallery
 
-    out = build_gallery(args.dataset, out_path=getattr(args, "out", None))
+    out = build_gallery(args.dataset, out_path=getattr(args, "out", None),
+                        attribute=getattr(args, "attribute", None))
     print(f"[gallery] written: {out}")
     return 0
 
