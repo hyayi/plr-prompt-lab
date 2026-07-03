@@ -1,16 +1,16 @@
-# INSTALL — plr-prompt-lab on a fresh machine
+# INSTALL — 새 머신에 plr-prompt-lab 설치
 
-This lab is a portable, standalone package. It has two paths:
+이 lab은 이동 가능한 독립 패키지이고, 설치 경로가 두 갈래입니다:
 
-- **GPU-free path** — imports, tests, and the `lab demo`-style mock/synthetic
-  cycle. Needs only Python + the deps in `requirements.txt`.
-- **Real-run path** — `lab run` re-scores crops with Gemma on a GPU.
+- **GPU-free 경로** — import·테스트·`lab demo`식 mock/합성 사이클.
+  Python + `requirements.txt`의 의존성만 있으면 됩니다.
+- **실측 경로** — `lab run`이 GPU에서 Gemma로 크롭을 재채점합니다.
 
 ---
 
-## 1. Python environment
+## 1. Python 환경
 
-Python 3.10+ is required (the code uses `X | None` type syntax).
+Python **3.10 이상**이 필요합니다 (`X | None` 타입 문법 사용).
 
 ```bash
 cd plr-prompt-lab
@@ -20,45 +20,45 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Configure your environment (all vars are optional for the GPU-free path):
+환경변수 설정 (GPU-free 경로에서는 전부 옵션):
 
 ```bash
 cp .env.example .env
-# edit .env, then export the ones you need, e.g.:
+# .env를 편집한 뒤 필요한 것만 export, 예:
 #   export CORE_IR_PATH=/path/to/ziomilitary/core/ir
 #   export RESULT_PATH=./results
 ```
 
-### Verify the GPU-free path
+### GPU-free 경로 검증
 
 ```bash
-python3 -c "import lab, dataset, re_score, config; print('portable import OK')"
-python3 -m pytest tests/ -q      # expect: 21 passed
+python3 -m pytest tests/ -q      # 기대: 99 passed, 4 xfailed
+python3 lab.py demo              # mock 전체 사이클 (3초, exit 0)
 ```
 
-This works with **no GPU, no database, no Redis, no model download**. It is the
-recommended onboarding step for a new machine or a new recipient of this package.
+**GPU·DB·Redis·모델 다운로드 전부 없이** 통과해야 정상입니다. 새 머신이나
+패키지를 새로 받은 사람의 권장 첫 단계입니다.
 
 ---
 
-## 2. llama-cpp-python — GPU build (real runs only)
+## 2. llama-cpp-python — GPU 빌드 (실측 전용)
 
-The `llama-cpp-python` wheel installed by `requirements.txt` is CPU-only. For
-`lab run` you need a CUDA build:
+`requirements.txt`가 설치하는 `llama-cpp-python` 휠은 **CPU 전용**입니다.
+`lab run`에는 CUDA 빌드가 필요합니다:
 
 ```bash
 CMAKE_ARGS="-DGGML_CUDA=on" pip install --force-reinstall --no-cache-dir llama-cpp-python
 ```
 
-Requires a working CUDA toolkit and a matching NVIDIA driver. Pick the GPU with
-`CUDA_VISIBLE_DEVICES` (see `.env.example`).
+동작하는 CUDA 툴킷 + 대응 NVIDIA 드라이버가 전제입니다. GPU 선택은
+`CUDA_VISIBLE_DEVICES`로 (`.env.example` 참고).
 
 ---
 
-## 3. Model download (real runs only)
+## 3. 모델 다운로드 (실측 전용)
 
-`lab run` loads a **Gemma-4-E4B GGUF** model into VRAM. Download it from Hugging
-Face and point the env vars at it:
+`lab run`은 **Gemma-4-E4B GGUF** 모델을 VRAM에 올립니다. Hugging Face에서
+받아서 env 변수로 지정하세요:
 
 ```bash
 pip install huggingface_hub
@@ -67,32 +67,36 @@ huggingface-cli download unsloth/gemma-4-E4B-it-GGUF \
     --local-dir ./models/gemma-4-E4B-it-GGUF
 
 export IR_GEMMA_REPO=unsloth/gemma-4-E4B-it-GGUF
-# optional: pin the exact main file (else the Q4_0 file is auto-detected)
+# 옵션: 메인 파일 고정 (없으면 Q4_0 파일 자동 탐지)
 export IR_GEMMA_MAIN_FILE=gemma-4-E4B-it-Q4_0.gguf
 ```
 
-`gemma_backend` also reads `IR_GEMMA_MAIN_FILE` / `IR_GEMMA_MMPROJ_FILE` /
-`IR_GEMMA_N_CTX` / `IR_GEMMA_N_GPU_LAYERS` (see that module's header).
+`gemma_backend`는 `IR_GEMMA_MAIN_FILE` / `IR_GEMMA_MMPROJ_FILE` /
+`IR_GEMMA_N_CTX` / `IR_GEMMA_N_GPU_LAYERS`도 읽습니다 (해당 모듈 헤더 참고).
 
 ---
 
-## 4. Real runs need a GPU
+## 4. 실측에는 GPU가 필요하다
 
-`lab run` requires a dedicated GPU (or an off-peak window if another service
-holds the GPU). See the **Real-run preconditions** section in `README.md` — it
-also needs a human-labeled golden set (`labels.jsonl`).
+`lab run`은 전용 GPU가 필요합니다 (다른 서비스가 GPU를 물고 있으면 중지
+협의 또는 오프피크 사용 — 운영 `ir` 컨테이너 중지는 관리자와 결정).
+사람이 라벨한 골든셋(`labels.jsonl`)도 전제입니다 (DATASET_SPEC.md 참고).
 
 ```bash
-python3 lab.py run  --attribute gender --version plr_v1.4_cot
-python3 lab.py eval --attribute gender --version plr_v1.4_cot
+python3 lab.py run  -X plr_v1.5_cot --dataset datasets/my_test
+python3 lab.py eval -A all --dataset datasets/my_test   # gallery/report 자동 생성
 ```
 
 ---
 
-## 5. GPU-free onboarding (the fast path)
+## 5. GPU-free 온보딩 (가장 빠른 길)
 
-To try the full eval cycle without a GPU or real data, use the mock/synthetic
-path exercised by the tests (see `tests/test_cycle_e2e.py`): it builds a
-synthetic dataset dir, runs `re_score` with a mock model, and scores it — no
-model download, no GPU, no DB. That is the quickest way to confirm a fresh
-checkout is wired correctly before provisioning GPU + labels for a real run.
+GPU도 실데이터도 없이 전체 eval 사이클을 체험하려면:
+
+```bash
+python3 lab.py demo --keep       # 합성 데이터셋 + mock 모델 전체 사이클
+```
+
+`datasets/demo/`에 산출물이 남고, 신규 체크아웃의 배선이 올바른지
+GPU·라벨 준비 전에 확인하는 가장 빠른 방법입니다. 이어서
+`docs/GUIDE.html`의 §1부터 따라 하세요.

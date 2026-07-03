@@ -1,273 +1,223 @@
-# PLR Prompt Lab — External Prompt-Engineer Handoff Guide
+# PLR Prompt Lab — 외부 프롬프트 엔지니어 인수인계 가이드
 
-This guide is for a **prompt engineer improving PLR prompts** without
-touching the ZioVision inference service directly. (The lab is PLR-only:
-its text-search pipeline was removed 2026-07.)
-
----
-
-## Who this is for
-
-You are a prompt engineer who has received the `plr-prompt-lab` package. Your
-job is to iterate on the prompts that drive PLR (Person-Level Recognition)
-attribute scoring, measure the effect of your
-changes on a labeled golden dataset, and hand back a diff + winning YAML to the
-ZioVision team. You do **not** have access to the production database, Redis, or
-the live GPU service — and you do not need them.
+**ZioVision 추론 서비스를 직접 건드리지 않고 PLR 프롬프트를 개선하는
+프롬프트 엔지니어**를 위한 문서다. (lab은 PLR 전용 — 텍스트 검색
+파이프라인은 2026-07 제거.) 손으로 따라 하는 실습은
+[GUIDE.html](GUIDE.html)이 짝 문서다 — 이 문서는 역할·규칙·경계 중심.
 
 ---
 
-## What you edit
+## 누구를 위한 문서인가
 
-### Primary (actual runtime source): `prompts/<current-version>.yaml`
+`plr-prompt-lab` 패키지를 전달받은 프롬프트 엔지니어. 할 일은 PLR(객체
+속성 추출)을 움직이는 프롬프트를 반복 개선하고, 라벨된 골든셋에서 효과를
+측정하고, 이긴 버전 + diff를 ZioVision 팀에 반납하는 것이다. 운영 DB,
+Redis, 라이브 GPU 서비스에는 접근 권한이 **없고, 필요하지도 않다**.
 
-Since 2026-07 the live templates are LOADED from
-`prompts/<PROMPT_VERSION_YAML_COT>.yaml` (single source — the historical
-constants were removed after byte-equality verification). Editing the
-current version's yaml IS editing the runtime prompt. Two env vars still
-switch variants:
+---
 
-```
-IR_PLR_REASON = on | off        # on = chain-of-thought (longer, ~+35% tokens)
-```
+## 무엇을 편집하는가
 
-Also available as an experiment-matrix axis (`reasons:` in experiment.yaml —
-see EXPERIMENT_SPEC.md). The legacy IR_PLR_FORMAT switch was removed 2026-07:
-YAML is the only wire format.
+### 유일한 원천: `prompts/<버전>/` 디렉터리 (기능별 yaml 5개)
 
-What to edit (to actually change behavior): the yaml blocks of the current
-version file —
+2026-07부터 프롬프트 텍스트는 **전부 yaml에 산다** — `plr_prompts.py`는
+프롬프트 텍스트 0줄, 로드와 조합만 한다:
 
 ```
-prompts/plr_v1.5_cot/        # one DIRECTORY per version, one file per function
-  person.yaml                # system + user_cot (production) + user_plain
+prompts/plr_v1.5_cot/        # 버전당 디렉터리 1개, 기능당 파일 1개
+  person.yaml                # system + user_cot(운영 기본) + user_plain + commit_enums
   vehicle.yaml               # system + user
-  query_parser.yaml          # search prompt (core/ir side; keep intact)
-  vqa.yaml                   # search VQA system prompt
-  retry.yaml                 # schema-failure retry template
-```
-plr_prompts.py holds ZERO prompt text — it only loads and composes.
-
-### Keep `prompts/*.yaml` in parity (declarative mirror — not read at runtime)
-
-```
-prompts/
-    plr_v0.4.yaml         # early baseline (reference only)
-    plr_v1.3_cot.yaml     # v1.3 chain-of-thought
-    plr_v1.4_cot.yaml     # pre-forced-commit (A/B baseline)
-    plr_v1.5_cot.yaml     # current — forced-commit (no unknown)
+  query_parser.yaml          # 검색 쿼리 파서 (core/ir 검색용 — 건드리지 말 것)
+  vqa.yaml                   # 검색 VQA system
+  retry.yaml                 # 스키마 실패 재시도 템플릿
 ```
 
-These per-version yaml files are a human-readable MIRROR of the constants above,
-used for versioned diffing and `lab port` — **not loaded on the runtime path**.
-Keep them identical to the constants: core/ir enforces this with
-`tests/test_prompt_source_parity.py`; the lab checks it via `lab port` diff.
+- **새 버전 만들기** = 디렉터리 복사 후 수정 (`cp -r prompts/plr_v1.5_cot
+  prompts/plr_v1.6_test`). 이름 ≤16자. `lab run -X plr_v1.6_test`가 그
+  디렉터리를 로드한다 — 실험의 prompt 축이 이렇게 실제 변형들을 비교한다.
+- **현재/기본 버전**(`-X` 없이 도는 것) = `plr_prompts.PROMPT_VERSION_YAML_COT`
+  상수가 가리키는 디렉터리. 이 포인터 bump가 승격의 핵심이다.
+- CoT 토글: `IR_PLR_REASON=on|off` (on = 근거-먼저 user_cot, 토큰 ~+35%).
+  experiment yaml의 `reasons:` 축으로도 지정 가능.
+- **어휘(enum) 확장은 프롬프트가 아니라 `schema/vocab.yaml`** — 주입·파싱·
+  검증이 자동 동행한다. 프롬프트의 `{colors}` 같은 주입 자리는 지우지 말 것.
+- 출력 슬롯을 추가/변경하면 파서(`plr_parse.py`)와 스키마(`plr_schema.py`)가
+  동행해야 한다 — `skills/co-change/SKILL.md`의 매트릭스를 먼저 볼 것
+  (스키마 선언 누락은 `tests/test_schema_declares_parser_keys.py`가 잡는다).
 
-**Two edit paths:**
-- To iterate a **specific version** for experiments: edit that `prompts/<version>.yaml`.
-  `lab run --version <version>` loads it via `FilePromptProvider`, so the change
-  takes effect for that version (this is how the experiment prompt-axis compares
-  real prompt variants in one checkout).
-- To change the **default / current** prompt (what runs without `--version`, and
-  what `lab port` ships to core/ir): edit the `plr_prompts.py` constants **and**
-  keep `prompts/plr_v1.5_cot.yaml` in parity with them.
+### 지켜야 할 프롬프트 계약 (전체는 `skills/author-prompt/SKILL.md`)
 
-Also update `parse_plr_response()` in `plr_prompts.py` if you change the output
-schema (add/rename a field).
+- **강제커밋(v1.5+)**: `unknown`을 답 선택지로 제시 금지. 저신뢰는
+  `margins` 블록으로 — `test_live_prompt_never_offers_unknown`이 감시.
+- enum은 손글씨 금지, placeholder 주입 유지 (`commit_enums: true`).
+- 출력 형식은 파서와 한 몸 — 형식을 바꾸면 co-change 매트릭스 따라 동행.
 
-### What NOT to touch
+### 건드리지 말 것
 
-| File / area | Reason |
+| 파일/영역 | 이유 |
 |---|---|
-| `re_score.py` | Core re-scoring runner — edit prompts, not the runner. |
-| `plr_core.py` | PLR inference core — edit prompts, not the inference logic. |
-| `plr_schema.py` | PLR output schema — only change if the schema itself changes. |
-| `gemma_model.py`, `gemma_backend.py` | GPU model loader — out of scope for prompt work. |
-| `eval/` runner scripts | Eval harness — edit to fix bugs only, not to inflate scores. |
-| `core/ir/` | Production service — never edit directly. Hand diffs back to ZioVision. |
+| `runners/re_score.py` | 재채점 러너 — 프롬프트를 고쳐라, 러너 말고 |
+| `plr_core.py` | PLR 추론 코어 |
+| `plr_schema.py`, `plr_parse.py` | 스키마·파서 — 출력 슬롯 변경 시에만, co-change 절차로 |
+| `gemma_model.py`, `gemma_backend.py` | GPU 모델 로더 — 프롬프트 작업 범위 밖 |
+| `eval/` 채점 스크립트 | 버그 수정만 — 점수 부풀리기 금지 |
+| `core/ir/` | 운영 서비스 — 직접 수정 금지, diff 반납으로 |
 
 ---
 
-## The iteration loop
+## 반복 루프
 
 ```
-prepare dataset  →  lab run  →  lab eval  →  read Δ  →  edit prompt  →  repeat
-                                                             ↓ (when improved)
-                                                          lab port  →  hand diff to ZioVision
+데이터셋 준비 → lab run → lab eval -A all → gallery/report(자동) 분석
+                                  ↑                    │
+                                  └── 새 버전 작성 ◄────┘
+                                        │ (이겼을 때)
+                                  experiment A/B → lab port → ZioVision에 반납
 ```
 
-### 1. Prepare / point at a dataset
+### 1. 데이터셋 준비 / 지정
 
-A dataset is a directory containing labeled crops. See [DATASET_SPEC.md](DATASET_SPEC.md)
-for the exact layout and file schemas.
+데이터셋 = 라벨된 크롭 디렉터리. 정확한 레이아웃과 스키마는
+[DATASET_SPEC.md](DATASET_SPEC.md).
 
-**Receiving an existing dataset**: if ZioVision hands you a dataset tarball,
-unpack it and validate:
+**기존 데이터셋을 받았다면** 풀고 검증만:
 
 ```bash
 python3 lab.py validate-dataset --dataset /path/to/my_dataset/
 ```
 
-**Preparing a fresh dataset** (requires a real video + DB — operator step):
-use the `prepare-dataset` skill documented in the lab's skills directory or run
-`lab build-golden` + `lab label`. This is a ZioVision operator step; as an
-external prompt engineer you will normally receive a pre-built, labeled dataset.
+**새로 만들려면** (실 비디오 + DB 필요 — 운영자 단계): `prepare-dataset`
+스킬 또는 `lab build-golden` + `lab label`. 외부 엔지니어는 보통 라벨
+완료된 데이터셋을 전달받는다.
 
-### 2. Run re-scoring (GPU required for real data)
-
-```bash
-python3 lab.py run --attribute gender --version plr_v1.5_cot --dataset /path/to/my_dataset/
-```
-
-This calls Gemma on every crop in the dataset using the prompt version you name.
-It writes `predictions.jsonl` and `attributes.jsonl` into the dataset directory.
-
-**Preconditions for a real run** (see [INSTALL.md](INSTALL.md)):
-- A dedicated GPU with no other service holding VRAM (stop the live `ir`
-  container first — see INSTALL.md section 4).
-- The Gemma-4-E4B GGUF model downloaded and env vars set.
-- A human-labeled `labels.jsonl` in the dataset (see DATASET_SPEC.md).
-
-**GPU-free trial**: run `python3 lab.py demo` instead — it runs a complete mock
-cycle with no GPU, no DB, and no real data so you can see the loop immediately.
-
-### 3. Evaluate
+### 2. 재채점 (실데이터는 GPU 필요)
 
 ```bash
-# Attribute accuracy (gender / vehicle_type / military)
-python3 lab.py eval --attribute gender --version plr_v1.5_cot --dataset /path/to/my_dataset/
+python3 lab.py run -X plr_v1.5_cot --dataset /path/to/my_dataset/
 ```
 
-### 4. Read accuracy, bias, recall, and ledger Δ
+데이터셋의 모든 크롭에 지정 버전 프롬프트로 Gemma를 **크롭당 1회** 호출하고
+`predictions.jsonl`(추출 뷰) / `attributes.jsonl`(plr_json 전체) /
+`raw_responses.jsonl`(모델 원문+토큰수)을 쓴다. `-A`는 옵션 — 모델 호출은
+속성과 무관하며, 사람/차량 혼합 데이터셋은 labels.jsonl 행의
+`object_type`이 크롭별 프롬프트를 정한다.
 
-`lab eval` prints to stdout:
+**실측 전제조건** ([INSTALL.md](INSTALL.md)):
+- 전용 GPU (다른 서비스가 VRAM을 물고 있으면 중지 협의 — 운영 `ir` 컨테이너
+  중지/재기동은 관리자 결정).
+- Gemma-4-E4B GGUF 다운로드 + env 설정.
+- 사람이 라벨한 `labels.jsonl`.
+
+**GPU 없는 체험**: `python3 lab.py demo` — mock 전체 사이클.
+
+### 3. 평가 — 라벨된 전 속성 한 번에
+
+```bash
+python3 lab.py eval -A all --dataset /path/to/my_dataset/
+```
+
+속성마다 ledger 레코드가 쌓이고, 끝나면 `<dataset>/gallery.html`(오답 우선,
+속성별 태그, AND/OR 오답 필터)과 ledger 옆 `report.html`(버전 비교표)이
+**자동 생성**된다. 단일/부분은 `-A gender` / `-A gender,helmet`.
+
+### 4. 숫자 읽기
 
 ```
 === gender eval: plr_v1.5_cot (n=150) ===
 accuracy: 0.927 (139/150)   Δ vs plr_v1.4_cot: +0.014 (0.913 → 0.927)
 bias female->male: 0.067 (5/75)   Δ: -0.027
-recall: female=0.933, male=0.920
-confusion (rows=true, cols=pred):
-          female      male   unknown
-  female      70         5         0
-    male       6      67         2
- unknown       0         1         0
+margin split (>= 0.7): high acc=0.96 (n=120)  low acc=0.77 (n=30)
+recall / precision / f1 / confusion ...
 ```
 
-Key numbers to track:
-
-| Metric | What it means |
+| 지표 | 의미 |
 |---|---|
-| `accuracy` | Overall fraction correct |
-| `bias female->male` | Rate at which females are predicted male (lower = better for this pair) |
-| `recall` | Per-class recall — catch rate for each label |
-| `Δ vs <prior>` | Change vs the most recent other version in the ledger |
+| `accuracy` | 전체 정답률 |
+| `bias female->male` | 여성이 남성으로 오분류되는 비율 (이 쌍에선 낮을수록 좋음) |
+| `recall`/`precision`/`f1` | 클래스별 성능 (+macro_f1) |
+| `pred_unknown` | 강제커밋 준수도 — 모델이 그래도 unknown이라 답한 비율 |
+| `margin/quality split` | 오답이 저신뢰/저품질 크롭에 몰리는가 (캘리브레이션) |
+| `Δ vs <이전>` | ledger의 직전 다른 버전 대비 변화 |
 
-The ledger record is appended to `eval/ledger.jsonl` (or the dataset's own
-ledger if you pass `--ledger`). Every run is recorded — you can always diff
-any two versions.
+### 5. 반복
 
-### 5. Iterate
+`prompts/<개선 중인 버전>/person.yaml`을 고치고 2번으로. ledger Δ가
+개선 여부를 말해준다. A/B는 experiment로:
 
-Edit `prompts/plr_v1.5_cot.yaml` (or whichever version you are improving),
-go back to step 2. The ledger Δ tells you whether the change helped.
+```bash
+# my_ab.yaml: datasets/models 지정 + prompts: [plr_v1.5_cot, plr_v1.6_test]
+python3 lab.py experiment run my_ab.yaml     # 셀마다 run+eval, report 자동
+```
 
-**Rules**:
-- Do not change prompts without measuring. A prompt that reads better but
-  scores worse is not an improvement.
-- Do not ship unlabeled datasets. `lab eval` on an unlabeled dataset produces
-  meaningless numbers.
-- Do not commit to production (`core/ir`) yourself. See hand-back mechanics below.
+**규칙**:
+- 측정 없이 프롬프트를 바꾸지 말 것 — 읽기 좋아졌는데 점수가 내려간 건
+  개선이 아니다.
+- 라벨 없는 데이터셋으로 eval 하지 말 것 — 숫자가 무의미하다.
+- `core/ir`에 직접 커밋하지 말 것 — 아래 반납 절차로.
 
-### 6. Hand back to ZioVision (lab port)
+### 6. ZioVision에 반납 (lab port)
 
-When a new version improves accuracy/recall over the baseline:
+새 버전이 기준선을 이겼을 때:
 
 ```bash
 python3 lab.py port [--core-ir /path/to/ziomilitary/core/ir]
 ```
 
-This prints a unified diff of every file in the prompt surface
-(`prompts/*.yaml`, `plr_prompts.py`, `plr_core.py`) between the lab and
-`core/ir`. It does **not** write to `core/ir` (read-only by default).
+프롬프트 표면 전체(`prompts/**`, `schema/vocab.yaml`, `plr_prompts.py`,
+`plr_parse.py`, `plr_core.py`, `plr_schema.py`, `preprocess.py`)의 lab ↔
+core/ir unified diff를 출력한다. 기본은 **읽기 전용** — core/ir에 쓰지
+않는다. **개발 중에 diff가 있는 것은 정상**이다 (실험 중 표면은 의도적으로
+달라져 있음 — `skills/co-change` "개발 단계" 참고).
 
-Send the ZioVision team:
+ZioVision 팀에 보내는 것:
 
-1. The diff printed by `lab port` (copy-paste or redirect to a file).
-2. The winning `prompts/<version>.yaml` file.
-3. The ledger record(s) showing the before/after Δ — excerpt from
-   `eval/ledger.jsonl` or the eval stdout.
+1. `lab port`가 출력한 diff (복사 또는 파일로).
+2. 이긴 `prompts/<버전>/` 디렉터리.
+3. 전/후 Δ를 보여주는 ledger 레코드 (eval stdout 또는
+   `eval/ledger.jsonl` 발췌) + `report.html`.
 
-The ZioVision team applies the diff to `core/ir`, runs the parity test
-(`tests/test_prompt_source_parity.py`), and gates the change on a re-eval
-inside the service before deploying. **Do not apply the diff to `core/ir`
-yourself.**
-
----
-
-## GPU-free trial: `lab demo`
-
-Before you have GPU access or a real dataset, run:
-
-```bash
-python3 lab.py demo
-```
-
-This builds a 5-crop synthetic dataset, runs two mock-model versions (v1 =
-all-female predictions, v2 = all-male predictions), evaluates both against
-ground truth, and prints the accuracy + Δ. Exit code 0, no GPU, no DB.
-
-Use `lab demo` to:
-- Confirm the lab is installed correctly on a new machine.
-- Understand the cycle structure before working with real data.
-- Demonstrate the loop to a new team member.
+적용은 ZioVision이 `skills/co-change`의 **승격 체크리스트**(byte-sync →
+양쪽 테스트 → `PROMPT_VERSION_YAML_COT` bump)로 수행하고, 배포는 컨테이너
+재시작(= 재인덱싱 트리거)이므로 별도 결정 사항이다. **직접 적용 금지.**
 
 ---
 
-## Quick reference
+## 빠른 참조
 
 ```bash
-# GPU-free onboarding
-python3 lab.py demo
-
-# Validate a received dataset
-python3 lab.py validate-dataset --dataset /path/to/dataset/
-
-# Re-score (GPU + model required)
-python3 lab.py run  --attribute gender --version plr_v1.5_cot --dataset /path/to/dataset/
-
-# Evaluate attribute accuracy
-python3 lab.py eval --attribute gender --version plr_v1.5_cot --dataset /path/to/dataset/
-
-
-# Show diff to hand back
-python3 lab.py port
-
-# Run all tests (no GPU)
-python3 -m pytest tests/ -q
+python3 lab.py demo                                       # GPU-free 온보딩
+python3 lab.py validate-dataset --dataset D               # 받은 데이터셋 검증
+python3 lab.py run -X plr_v1.5_cot --dataset D            # 재채점 (GPU+모델)
+python3 lab.py eval -A all --dataset D                    # 전 속성 평가 (+자동 렌더)
+python3 lab.py experiment run my_ab.yaml                  # A/B 매트릭스
+python3 lab.py port                                       # 반납용 diff
+python3 -m pytest tests/ -q                               # 전체 테스트 (99 passed, 4 xfailed)
 ```
 
 ---
 
-## References
+## 참고 문서
 
-- [DATASET_SPEC.md](DATASET_SPEC.md) — full dataset directory format and file schemas
-- [INSTALL.md](INSTALL.md) — Python env setup, GPU build, model download
-- [SEED.md](SEED.md) — which `core/ir` commit this lab was extracted from
-- `prompts/plr_v1.4_cot.yaml` — current production prompt (start here when iterating)
-- `eval/ledger.jsonl` — historical accuracy/recall records across all versions
+- [GUIDE.html](GUIDE.html) — 복붙 실습 가이드 (전체 개선 루프 + 명령 레시피)
+- [DATASET_SPEC.md](DATASET_SPEC.md) — 데이터셋 형식·파일 스키마 전체
+- [EXPERIMENT_SPEC.md](EXPERIMENT_SPEC.md) — experiment.yaml 스펙
+- [INSTALL.md](INSTALL.md) — Python 환경, GPU 빌드, 모델 다운로드
+- `SEED.md` — 이 lab이 추출된 core/ir 커밋
+- `skills/` — author-prompt(작성 계약) · improve-prompt(개선 루프) ·
+  prepare-dataset(데이터셋 구성) · co-change(동행 수정 매트릭스)
+- `eval/ledger.jsonl` — 전 버전의 지표 이력
 
 ---
 
-## Don'ts (summary)
+## 금지 사항 (요약)
 
-- **Don't change prompts without measuring.** Always run `lab run` + `lab eval`
-  before and after any edit; guessing is not a workflow.
-- **Don't ship unlabeled datasets.** `labels.jsonl` must exist and be
-  human-verified before `lab eval` means anything.
-- **Don't edit `core/ir` directly.** Hand the diff back via `lab port`;
-  let ZioVision apply it after their own re-eval.
-- **Don't run `lab run` while the live `ir` container is up** — you will OOM
-  or contend for the GPU. Stop the container first (see INSTALL.md).
-- **Don't commit crops or labels to git.** The `eval/golden/*/crops/` directories
-  are gitignored; keep them local to the machine that ran `lab build-golden`.
+- **측정 없이 프롬프트 변경 금지.** 편집 전/후 `lab run` + `lab eval` —
+  감으로 하는 건 워크플로가 아니다.
+- **라벨 없는 데이터셋 반출 금지.** `labels.jsonl`이 사람 검증까지 끝나야
+  eval이 의미를 가진다.
+- **`core/ir` 직접 수정 금지.** diff를 `lab port`로 반납하고 ZioVision이
+  자체 재검증 후 적용한다.
+- **라이브 `ir` 컨테이너가 떠 있는 동안 `lab run` 금지** — GPU 경합/OOM.
+  중지는 관리자와 협의.
+- **크롭/라벨 git 커밋 금지.** `datasets/`와 `eval/golden/*/crops/`는
+  gitignore — 사적 CCTV 데이터는 로컬에만 둔다.

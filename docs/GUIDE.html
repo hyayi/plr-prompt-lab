@@ -37,6 +37,23 @@
   a{color:var(--acc)}
   .muted{color:var(--muted);font-size:12.5px}
   footer{margin-top:56px;color:#5b6f96;font-size:12px;text-align:center}
+  /* 개선 루프 타임라인 */
+  .steps{position:relative;margin:18px 0 6px;padding-left:0;list-style:none}
+  .steps::before{content:"";position:absolute;left:19px;top:8px;bottom:8px;width:2px;
+                 background:linear-gradient(#38bdf8,#a78bfa)}
+  .step{position:relative;display:flex;gap:16px;margin:0 0 18px}
+  .step .num{flex:0 0 40px;height:40px;border-radius:50%;display:flex;align-items:center;
+             justify-content:center;font-weight:800;font-size:15px;color:#0b1120;
+             background:linear-gradient(135deg,#38bdf8,#a78bfa);z-index:1;
+             box-shadow:0 0 0 5px #0b1120}
+  .step .body{flex:1;background:var(--panel);border:1px solid var(--line);
+              border-radius:12px;padding:12px 16px}
+  .step .body h3{margin:0 0 2px;font-size:14.5px;color:#e8f2ff}
+  .step .body .desc{font-size:12.5px;color:var(--muted);margin-bottom:8px}
+  .step .body pre{margin:0;padding:10px 12px;font-size:12px}
+  .step.gpu .num{background:linear-gradient(135deg,#fbbf24,#fb923c)}
+  .loopback{position:relative;margin:-6px 0 18px 56px;color:#a78bfa;font-size:12.5px;
+            border:1px dashed #4c3f7a;border-radius:10px;padding:7px 12px;background:rgba(167,139,250,.06)}
 </style>
 </head>
 <body>
@@ -50,41 +67,86 @@
   <span class="muted">(2026-07-03 · plr_v1.5_cot 강제커밋 · 모든 명령 실행 검증됨)</span>
 </div>
 
-<h2><span class="n">∞</span> 전체 개선 루프 — 이 도구의 존재 이유</h2>
-<pre><code>┌────────────────────────────────────────────────────────────────────────┐
-│  ① 데이터셋 준비          ② 기준선 측정            ③ 오답 분석          │
-│  crops + labels + manifest │ run (모델 1회, GPU)     │ gallery 오답 필터   │
-│  validate-dataset          │ eval -A all             │ raw_responses.jsonl │
-│         │                  │ └→ gallery/report 자동  │ /improve-prompt 스킬│
-│         ▼                  ▼                         ▼                   │
-│  ⑥ 승격 ◄─── ⑤ A/B 판정 ◄─── ④ 프롬프트 새 버전 작성                    │
-│  PROMPT_VERSION bump       │ experiment (구 vs 신)   │ prompts/&lt;신버전&gt;/  │
-│  lab port → 배포(재시작)   │ report 비교표           │ (author-prompt 계약)│
-│                            └── 지면 ④로 다시 ────────┘                   │
-└────────────────────────────────────────────────────────────────────────┘</code></pre>
+<h2><span class="n">∞</span> 전체 개선 루프 — 무엇을 어떤 순서로 실행하나</h2>
+
+<ol class="steps">
+<li class="step"><div class="num">1</div><div class="body">
+  <h3>데이터셋 준비 <span class="muted">— §5 상세</span></h3>
+  <div class="desc">템플릿 복사 → crops/에 크롭 넣기 → labels.jsonl에 속성별 정답 → 형식 검증</div>
+  <pre><code>cp -r examples/dataset_template datasets/my_test
+<span class="c"># crops/&lt;obj_id&gt;.jpg 채우고, labels.jsonl 한 줄씩:</span>
+<span class="c">#   {"obj_id":"M3","labels":{"gender":"male","helmet":"helmet"}}</span>
+python3 lab.py validate-dataset --dataset datasets/my_test</code></pre>
+</div></li>
+
+<li class="step gpu"><div class="num">2</div><div class="body">
+  <h3>기준선 측정 <span class="muted">— §5·§5⁺ 상세 · 실측은 GPU(§7), 연습은 --model mock</span></h3>
+  <div class="desc">모델 호출은 크롭당 딱 1회 — eval이 라벨된 전 속성을 채점하고 gallery/report를 자동 생성</div>
+  <pre><code>python3 lab.py run -X plr_v1.5_cot --dataset datasets/my_test
+python3 lab.py eval -A all --dataset datasets/my_test
+<span class="out">[render] datasets/my_test/gallery.html   ← 자동 생성</span>
+<span class="out">[render] eval/report.html</span></code></pre>
+</div></li>
+
+<li class="step"><div class="num">3</div><div class="body">
+  <h3>오답 분석 <span class="muted">— §2·§8 상세</span></h3>
+  <div class="desc">gallery에서 [오답만 + 속성 체크 + AND/OR]로 실패 패턴 찾기 → 모델 원문 확인 → 체계적 개선안은 스킬로</div>
+  <pre><code><span class="c"># 브라우저: datasets/my_test/gallery.html (오답 우선 정렬)</span>
+grep '"obj_id": "틀린ID"' datasets/my_test/raw_responses.jsonl   <span class="c"># 모델이 실제 뱉은 원문</span>
+<span class="c"># Claude에게: skills/improve-prompt/SKILL.md 따라 분석·제안 요청</span></code></pre>
+</div></li>
+
+<li class="step"><div class="num">4</div><div class="body">
+  <h3>프롬프트 새 버전 작성 <span class="muted">— §6 상세 · 계약: unknown 선택지 금지, {colors} 주입 자리 유지</span></h3>
+  <div class="desc">기존 버전을 복사해 문구만 수정 (이름 ≤16자) → mock으로 배관 확인</div>
+  <pre><code>cp -r prompts/plr_v1.5_cot prompts/plr_v1.6_test
+<span class="c"># prompts/plr_v1.6_test/person.yaml 문구 수정</span>
+python3 lab.py run -X plr_v1.6_test --dataset datasets/my_test --model mock</code></pre>
+</div></li>
+
+<li class="step gpu"><div class="num">5</div><div class="body">
+  <h3>A/B 판정 <span class="muted">— §4 상세</span></h3>
+  <div class="desc">experiment yaml의 prompts 축에 두 버전을 넣고 실행 → report 비교표에서 Δ 확인</div>
+  <pre><code>cp examples/experiment.example.yaml my_ab.yaml
+<span class="c"># my_ab.yaml 수정: datasets: [./datasets/my_test] / models: [gemma] / prompts: [plr_v1.5_cot, plr_v1.6_test]</span>
+python3 lab.py experiment run my_ab.yaml
+<span class="out">[render] eval/report.html   ← 버전별 accuracy·F1 나란히</span></code></pre>
+</div></li>
+
+<li class="loopback">↺ 신버전이 <b>지면</b>: 3번(오답 분석)으로 돌아가 다음 가설로 4~5를 반복</li>
+
+<li class="step"><div class="num">6</div><div class="body">
+  <h3>승격 — 이겼을 때만, 1회 <span class="muted">— §9 상세 · skills/co-change 승격 체크리스트</span></h3>
+  <div class="desc">core/ir 보유자가 수행: 표면 diff 확인 → byte-sync → 양쪽 테스트 → PROMPT_VERSION bump. 운영 반영 = 컨테이너 재시작(관리자 결정)</div>
+  <pre><code>python3 lab.py port          <span class="c"># lab ↔ core/ir 표면 diff (읽기 전용)</span>
+<span class="c"># 이후 절차는 skills/co-change/SKILL.md "승격/최종 반영 단계" 그대로</span></code></pre>
+</div></li>
+</ol>
 <div class="card" style="--c:var(--amber)">
-  <b>실행 순서 요약</b> (섹션 번호 = 아래 상세):
-  <ol style="margin:6px 0 2px 18px;padding:0">
-    <li><b>준비</b> — <code>cp -r examples/dataset_template datasets/내이름</code> → 크롭·라벨 채우기 →
-        <code>lab validate-dataset</code> (§5)</li>
-    <li><b>기준선</b> — <code>lab run -X plr_v1.5_cot --dataset datasets/내이름</code> (모델 크롭당 1회)
-        → <code>lab eval -A all --dataset datasets/내이름</code> — gallery/report가 자동 생성됨 (§5, §5⁺)</li>
-    <li><b>분석</b> — gallery.html의 오답 필터(AND/OR)로 실패 패턴 찾기, 모델 원문은
-        raw_responses.jsonl, 체계적 개선안은 <code>skills/improve-prompt</code> 6역할 루프 (§2, §8)</li>
-    <li><b>새 버전</b> — <code>cp -r prompts/plr_v1.5_cot prompts/plr_v1.6_시도</code> → 문구 수정
-        (계약: unknown 금지·enum 주입 유지) → mock으로 배관 확인 (§6)</li>
-    <li><b>A/B</b> — experiment yaml에 <code>prompts: [구버전, 신버전]</code> →
-        <code>lab experiment run</code> → report 비교표에서 Δ 확인. 지면 3~4 반복 (§4, §7)</li>
-    <li><b>승격</b> — 이겼을 때만 1회: <code>skills/co-change</code> 승격 체크리스트
-        (byte-sync → 양쪽 테스트 → PROMPT_VERSION bump) → 운영 반영은 컨테이너 재시작 (§9)</li>
-  </ol>
-  ②까지는 mock으로 GPU 없이 연습 가능 — 실측(§7)만 GPU가 필요합니다.
+  <b>처음이라면</b>: 1~2단계를 <code>--model mock</code>으로 한 바퀴 돌려 배관을 익힌 뒤(§0~§4의
+  체험 코스), 실제 크롭·GPU로 다시 시작하세요. 주황 번호(2·5)만 GPU가 필요합니다.
 </div>
 
-<h2><span class="n">0</span> 설치 확인 — 테스트가 전부 도는지</h2>
-<pre><code>cd ~/plr-prompt-lab
-python3 -m pytest tests/ -q</code></pre>
-<div class="expect">기대 결과: <code>99 passed, 4 xfailed</code> — GPU·DB·Redis 없이 전부 통과해야 정상.</div>
+<h2><span class="n">0</span> 설치 — 새 머신 기준 (GPU 없이 여기까지)</h2>
+<pre><code>cd plr-prompt-lab                        <span class="c"># 패키지를 받은 위치</span>
+python3 -m venv .venv                    <span class="c"># Python 3.10+ 필요</span>
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+cp .env.example .env                     <span class="c"># 환경변수 — GPU-free 경로에선 전부 옵션</span>
+
+python3 -m pytest tests/ -q              <span class="c"># 설치 검증</span></code></pre>
+<div class="expect">기대 결과: <code>99 passed, 4 xfailed</code> — GPU·DB·Redis·모델 다운로드 없이 전부 통과해야 정상.
+여기까지로 §1~§6 전부(mock 경로) 사용 가능합니다.</div>
+<div class="card">
+  <b>실측(§7)용 GPU 준비는 두 단계 추가</b> — 상세와 env 변수는 <code>docs/INSTALL.md</code>:
+  <pre style="margin:8px 0 2px"><code><span class="c"># ① llama-cpp-python을 CUDA 빌드로 교체 (requirements의 휠은 CPU 전용)</span>
+CMAKE_ARGS="-DGGML_CUDA=on" pip install --force-reinstall --no-cache-dir llama-cpp-python
+<span class="c"># ② Gemma GGUF 모델 다운로드 + env 지정</span>
+huggingface-cli download unsloth/gemma-4-E4B-it-GGUF --include "*Q4_0*.gguf" "*mmproj*" \
+    --local-dir ./models/gemma-4-E4B-it-GGUF
+export IR_GEMMA_REPO=unsloth/gemma-4-E4B-it-GGUF</code></pre>
+</div>
 
 <h2><span class="n">1</span> demo — 전체 루프를 3초에 체험 (mock 모델)</h2>
 <pre><code>python3 lab.py demo --keep    <span class="c"># --keep: 생성물(datasets/demo/)을 지우지 않고 남김</span></code></pre>

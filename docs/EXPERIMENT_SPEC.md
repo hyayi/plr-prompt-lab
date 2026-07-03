@@ -1,71 +1,74 @@
-# EXPERIMENT_SPEC.md — Experiment Matrix Runner
+# EXPERIMENT_SPEC.md — 실험 매트릭스 러너
 
-The `lab experiment run <experiment.yaml>` command enumerates the
-**cross-product** of `datasets × models × prompts × pipelines × attributes`
-and for each cell runs:
+`lab experiment run <experiment.yaml>`은
+`datasets × models × prompts × pipelines × attributes`의 **교차곱**을
+셀 단위로 열거하고, 각 셀마다:
 
-1. **run** — the pipeline's runner via the registry
-2. **eval** — scores predictions and appends a ledger record
+1. **run** — registry를 통해 해당 파이프라인의 러너 실행 (re_score)
+2. **eval** — 예측을 채점하고 ledger에 레코드 1줄 append
 
-## Schema
+전 셀 종료 후 참여 데이터셋마다 gallery.html, ledger 옆 report.html이
+**자동 생성**됩니다 (렌더 실패는 경고만 — 측정 결과는 무효화되지 않음).
+
+## 스키마
 
 ```yaml
-# Required axes
-datasets:   [./datasets/gender_v1]        # one or more dataset directory paths
-models:     [mock]                         # registry model names (mock | gemma)
-prompts:    [plr_v1.4_cot, plr_v1.5_exp]  # version tags passed as --version to run_eval
-pipelines:  [plr]                          # plr (PLR-only lab; search removed 2026-07)
-attributes: [gender]                       # PLR attributes (plr pipeline only)
+# 필수 축
+datasets:   [./datasets/gender_v1]        # 데이터셋 디렉터리 경로 (1개 이상)
+models:     [mock]                         # registry 모델명 (mock | gemma)
+prompts:    [plr_v1.4_cot, plr_v1.5_exp]  # 버전 태그 — run_eval의 --version으로 전달
+pipelines:  [plr]                          # plr (PLR 전용 lab — 검색은 2026-07 제거)
+attributes: [gender]                       # PLR 속성 (plr 파이프라인 전용)
 
-# Optional
-ledger:     ./eval/ledger.jsonl            # ledger path (default: eval/ledger.jsonl)
-reasons:    ["on", "off"]                  # IR_PLR_REASON axis (on | off), plr cells only
+# 옵션
+ledger:     ./eval/ledger.jsonl            # ledger 경로 (기본: eval/ledger.jsonl)
+reasons:    ["on", "off"]                  # IR_PLR_REASON 축 (on | off), plr 셀 전용
 ```
 
-### Field reference
+### 필드 레퍼런스
 
-| Field        | Type           | Required | Description |
+| 필드 | 타입 | 필수 | 설명 |
 |-------------|----------------|----------|-------------|
-| `datasets`  | list[str]      | yes      | Paths to dataset directories. Each must contain `crops/`, `labels.jsonl`, and `predictions.jsonl`. Relative paths are resolved relative to the experiment YAML file (same as `ledger`). |
-| `models`    | list[str]      | yes      | Registry model names. `mock` is GPU-free; `gemma` requires weights. Unknown names raise an error before any cell runs. |
-| `prompts`   | list[str]      | yes      | Prompt version tags. Passed as `--version` to `run_eval`. |
-| `pipelines` | list[str]      | yes      | `plr` (attribute extraction). The search pipeline was removed (2026-07). Unknown names raise an error before any cell runs. |
-| `attributes`| list[str]      | no       | PLR attribute names (e.g. `gender`, `vehicle_type`, `military`). Default: `[""]`. |
-| `ledger`    | str            | no       | Path to the ledger JSONL file. Relative paths are resolved relative to the experiment YAML file. Default: `eval/ledger.jsonl` inside the lab root. |
-| `reasons`   | list[str]      | no       | `IR_PLR_REASON` env axis; allowed values `on`, `off` (**quote them** — bare YAML `on`/`off` parse as booleans). Default: env untouched. |
+| `datasets`  | list[str]      | 예       | 데이터셋 디렉터리 경로. 각각 `crops/`, `labels.jsonl`, `predictions.jsonl`을 포함해야 한다. 상대경로는 **이 experiment yaml 파일 기준**으로 해석 (`ledger`와 동일). |
+| `models`    | list[str]      | 예       | registry 모델명. `mock`은 GPU-free, `gemma`는 모델 가중치 필요. 미등록 이름은 **셀 실행 전에** 오류. |
+| `prompts`   | list[str]      | 예       | 프롬프트 버전 태그. `run_eval`에 `--version`으로 전달된다. |
+| `pipelines` | list[str]      | 예       | `plr` (속성 추출). 검색 파이프라인은 2026-07 제거. 미등록 이름은 셀 실행 전에 오류. |
+| `attributes`| list[str]      | 아니오   | PLR 속성명 (예: `gender`, `vehicle_type`, `military`, 커스텀). 기본: `[""]`. |
+| `ledger`    | str            | 아니오   | ledger JSONL 경로. 상대경로는 yaml 파일 기준. 기본: lab 루트의 `eval/ledger.jsonl`. |
+| `reasons`   | list[str]      | 아니오   | `IR_PLR_REASON` env 축. 허용값 `on`, `off` (**따옴표 필수** — YAML에서 맨 on/off는 불리언으로 파싱됨). 기본: env 미변경. |
 
-### reason axis semantics
+### reason 축의 의미
 
-- `IR_PLR_REASON` picks the CoT (`user_cot`) vs plain (`user_plain`) person
-  template. (The `formats` axis was removed 2026-07 with the legacy JSON
-  prompt path — YAML is the only wire format.)
-- **Ledger disambiguation**: cells differing only in the reason axis stamp
-  distinct version tags (`plr_v1.5_cot+reason-off`).
+- `IR_PLR_REASON`은 person 템플릿의 CoT(`user_cot`) vs plain(`user_plain`)을
+  선택한다. (`formats` 축은 레거시 JSON 프롬프트 경로와 함께 2026-07 제거 —
+  YAML이 유일한 wire format.)
+- **ledger 구분**: reason 축만 다른 셀은 버전 태그가 구분되어 찍힌다
+  (`plr_v1.5_cot+reason-off`).
 
-## Cell enumeration
+## 셀 열거
 
-The cross-product is:
+교차곱은:
 `pipelines × datasets × models × prompts × attributes × reasons`
-(the last three axes are optional; omitted axes contribute a single cell).
+(뒤 세 축은 옵션 — 생략된 축은 셀 1개로 계산).
 
-## Dispatch via registry
+## registry를 통한 디스패치
 
-- **plr cell** → `registry.get_model(model)` + `re_score.re_score(attribute, model, golden_dir=dataset)` → `eval/run_eval.py main()`
+- **plr 셀** → `registry.get_model(model)` +
+  `re_score.re_score(attribute, model, golden_dir=dataset)` →
+  `eval/run_eval.py main()`
 
-Each cell appends a ledger record carrying:
-`dataset`, `model`, `pipeline`, `prompt_hash` (from `provenance.prompt_hash`).
+각 셀의 ledger 레코드에는 `dataset`, `model`, `pipeline`,
+`prompt_hash`(`provenance.prompt_hash`)가 함께 찍힌다.
 
-## Validation
+## 검증
 
-Unknown `models` or `pipelines` values raise a `ValueError` with a clear
-message listing available names **before any cell runs**.
+미등록 `models`/`pipelines` 값은 **어떤 셀도 실행되기 전에** 가용 이름
+목록을 담은 `ValueError`를 낸다.
 
-## Fail-loud-but-continue
+## fail-loud-but-continue
 
-A cell that raises any exception is caught, logged with a per-cell error line,
-recorded as `status=failed`, and the runner continues to the next cell.
-
-After all cells run, a matrix summary is printed:
+예외를 낸 셀은 잡아서 셀별 오류 줄로 기록하고(`status=failed`), 러너는
+다음 셀로 계속 간다. 전 셀 종료 후 매트릭스 요약이 출력된다:
 
 ```
 [experiment] === MATRIX SUMMARY ===
@@ -75,30 +78,30 @@ After all cells run, a matrix summary is printed:
 [experiment]     FileNotFoundError: Dataset directory not found: ./datasets/missing
 ```
 
-## Exit codes
+## 종료 코드
 
-| Code | Meaning |
+| 코드 | 의미 |
 |------|---------|
-| 0    | All cells passed (or at least one passed without `--strict`) |
-| 1    | `--strict` flag set and at least one cell failed |
-| 2    | ALL cells failed |
+| 0    | 전 셀 성공 (또는 `--strict` 없이 1개 이상 성공) |
+| 1    | `--strict` 지정 + 1개 이상 실패 |
+| 2    | **전** 셀 실패 |
 
-## CLI usage
+## CLI 사용법
 
 ```bash
-# Run the matrix
+# 매트릭스 실행
 python3 lab.py experiment run examples/experiment.example.yaml
 
-# Fail immediately on first failure (for CI)
+# 첫 실패에서 즉시 실패 처리 (CI용)
 python3 lab.py experiment run examples/experiment.example.yaml --strict
 
-# GPU-free smoke test with mock model
+# mock 모델로 GPU-free 스모크
 python3 lab.py experiment run tests/fixtures/mock_experiment.yaml
 ```
 
-## Ledger record shape
+## ledger 레코드 형태
 
-Each cell appends a record to the ledger:
+각 셀이 ledger에 append하는 레코드:
 
 ```json
 {
@@ -121,6 +124,6 @@ Each cell appends a record to the ledger:
 }
 ```
 
-## Example file
+## 예제 파일
 
-See `examples/experiment.example.yaml` for a fully-annotated example.
+전체 주석이 달린 예제는 `examples/experiment.example.yaml` 참고.
