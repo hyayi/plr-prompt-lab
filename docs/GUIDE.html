@@ -50,6 +50,37 @@
   <span class="muted">(2026-07-03 · plr_v1.5_cot 강제커밋 · 모든 명령 실행 검증됨)</span>
 </div>
 
+<h2><span class="n">∞</span> 전체 개선 루프 — 이 도구의 존재 이유</h2>
+<pre><code>┌────────────────────────────────────────────────────────────────────────┐
+│  ① 데이터셋 준비          ② 기준선 측정            ③ 오답 분석          │
+│  crops + labels + manifest │ run (모델 1회, GPU)     │ gallery 오답 필터   │
+│  validate-dataset          │ eval -A all             │ raw_responses.jsonl │
+│         │                  │ └→ gallery/report 자동  │ /improve-prompt 스킬│
+│         ▼                  ▼                         ▼                   │
+│  ⑥ 승격 ◄─── ⑤ A/B 판정 ◄─── ④ 프롬프트 새 버전 작성                    │
+│  PROMPT_VERSION bump       │ experiment (구 vs 신)   │ prompts/&lt;신버전&gt;/  │
+│  lab port → 배포(재시작)   │ report 비교표           │ (author-prompt 계약)│
+│                            └── 지면 ④로 다시 ────────┘                   │
+└────────────────────────────────────────────────────────────────────────┘</code></pre>
+<div class="card" style="--c:var(--amber)">
+  <b>실행 순서 요약</b> (섹션 번호 = 아래 상세):
+  <ol style="margin:6px 0 2px 18px;padding:0">
+    <li><b>준비</b> — <code>cp -r examples/dataset_template datasets/내이름</code> → 크롭·라벨 채우기 →
+        <code>lab validate-dataset</code> (§5)</li>
+    <li><b>기준선</b> — <code>lab run -X plr_v1.5_cot --dataset datasets/내이름</code> (모델 크롭당 1회)
+        → <code>lab eval -A all --dataset datasets/내이름</code> — gallery/report가 자동 생성됨 (§5, §5⁺)</li>
+    <li><b>분석</b> — gallery.html의 오답 필터(AND/OR)로 실패 패턴 찾기, 모델 원문은
+        raw_responses.jsonl, 체계적 개선안은 <code>skills/improve-prompt</code> 6역할 루프 (§2, §8)</li>
+    <li><b>새 버전</b> — <code>cp -r prompts/plr_v1.5_cot prompts/plr_v1.6_시도</code> → 문구 수정
+        (계약: unknown 금지·enum 주입 유지) → mock으로 배관 확인 (§6)</li>
+    <li><b>A/B</b> — experiment yaml에 <code>prompts: [구버전, 신버전]</code> →
+        <code>lab experiment run</code> → report 비교표에서 Δ 확인. 지면 3~4 반복 (§4, §7)</li>
+    <li><b>승격</b> — 이겼을 때만 1회: <code>skills/co-change</code> 승격 체크리스트
+        (byte-sync → 양쪽 테스트 → PROMPT_VERSION bump) → 운영 반영은 컨테이너 재시작 (§9)</li>
+  </ol>
+  ②까지는 mock으로 GPU 없이 연습 가능 — 실측(§7)만 GPU가 필요합니다.
+</div>
+
 <h2><span class="n">0</span> 설치 확인 — 테스트가 전부 도는지</h2>
 <pre><code>cd ~/plr-prompt-lab
 python3 -m pytest tests/ -q</code></pre>
