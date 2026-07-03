@@ -37,7 +37,11 @@ ATTR = {
 def _psql(sql: str) -> str:
     cont = os.environ.get("IR_DB_CONTAINER", "ziosummary-database")
     user = os.environ.get("IR_DB_USER", "ziovision")
-    pw = os.environ.get("IR_DB_PASS", "CHANGE_ME_DB_PASS")
+    pw = os.environ.get("IR_DB_PASS")
+    if not pw:
+        raise SystemExit(
+            "IR_DB_PASS env var required (DB password — no default; see .env.example)."
+        )
     db = os.environ.get("IR_DB_NAME", "ziosummary_management")
     out = subprocess.run(
         ["docker", "exec", "-e", f"PGPASSWORD={pw}", cont,
