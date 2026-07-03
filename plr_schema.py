@@ -1,15 +1,20 @@
-"""PLR (Person/Vehicle attribute extraction) JSON schema + enum catalog.
+"""PLR(사람/차량 속성 추출) 도메인 어휘의 로더 + 파생물 생성기.
 
-The Gemma backend produces JSON conforming to these schemas. The same enums
-are used by:
-  - plr_prompts.py  (prompt construction)
-  - template_caption.py  (deterministic caption generation)
-  - query_parser.py  (Korean → English enum normalization)
-  - scoring.py  (slot matching + coarse-group bonus)
+이 모듈 자체는 데이터를 갖지 않는다 — 어휘의 단일 원천은 schema/vocab.yaml이고,
+여기서는 그것을 로드해 세 종류의 파생물을 만든다:
 
-Everything is in English internally (per the design's "internal language unified
-to English" decision); Korean enters/exits only at the query parser and the
-caption_ko/caption_en outputs.
+  1. 모듈 상수  : COLOR_ENUM, GENDER_ENUM … (tuple — 순서 보존, 불변)
+  2. 조회 함수  : color_group(), lower_shape_of() … (그룹/매핑 역참조)
+  3. JSON 스키마: PERSON_SCHEMA / VEHICLE_SCHEMA (모델 출력의 검증 규격)
+
+같은 로드 결과를 4개의 소비자가 본다 — 어휘를 바꾸면 넷이 함께 움직인다:
+  - plr_prompts.py      : 프롬프트에 enum 선택지 주입          (모델 인풋)
+  - plr_parse.py        : 응답을 enum으로 강제 정규화           (모델 아웃풋)
+  - scoring.py (core/ir): 검색 하드게이트의 그룹 매칭
+  - template_caption.py / DB (core/ir): 캡션 생성·저장 계약
+
+내부 언어는 전부 영어("internal language unified to English" 설계 결정).
+한국어는 쿼리 파서 입구와 caption_ko 출구에서만 나타난다.
 """
 
 from __future__ import annotations
@@ -17,12 +22,14 @@ from __future__ import annotations
 from typing import Any, Final
 
 # ---------------------------------------------------------------------------
-# Declarative vocabulary — schema/vocab.yaml is the SINGLE SOURCE of the
-# domain enums / groups / maps; this module loads it and derives everything
-# else (module constants below, group-lookup functions, JSON validation
-# schemas). One file = one vocabulary version: prompt injection, response
-# normalisation, the search gates and the storage contract all see the same
-# loaded data.
+# 선언적 어휘 로드 — schema/vocab.yaml이 도메인 enum/그룹/매핑의 단일 원천.
+# import 시점에 한 번 읽어 아래의 모든 상수·함수·스키마를 파생시킨다.
+# "파일 하나 = 어휘 버전 하나": vocab.yaml을 고치면 프롬프트 주입과 파서
+# 정규화가 자동으로 함께 바뀐다 (한쪽만 바뀌는 반쪽 실험이 구조적으로 불가능).
+# vocab.yaml 세 섹션의 발동 시점:
+#   enums  → 추출 시점 (프롬프트 선택지 + 저장되는 라벨 값 자체)
+#   groups → 검색 시점 (무엇과 무엇이 같은 것으로 매칭되나)
+#   maps   → 읽기 시점 (저장된 fine 라벨에서 coarse 축을 파생)
 # ---------------------------------------------------------------------------
 from pathlib import Path as _Path
 
@@ -34,21 +41,29 @@ with open(_VOCAB_PATH, encoding="utf-8") as _fh:
 
 
 def _enum(key: str) -> tuple[str, ...]:
+    """vocab.yaml enums.<key> → 불변 tuple. 순서가 보존되므로 프롬프트에
+    주입되는 선택지의 나열 순서도 vocab.yaml이 결정한다."""
     return tuple(_VOCAB["enums"][key])
 
 
 def _vgroup(key: str) -> dict[str, tuple[str, ...]]:
+    """vocab.yaml groups.<key> → {그룹명: (멤버, …)}. 검색 게이트/소프트
+    점수의 "같은 것으로 칠 범위" 정의."""
     return {k: tuple(v) for k, v in _VOCAB["groups"][key].items()}
 
 
 def _vmap(key: str) -> dict[str, str]:
+    """vocab.yaml maps.<key> → {fine 라벨: coarse 값}. 저장된 행을 읽는
+    시점에 새 축을 파생시키는 1:1 번역표 (재인덱싱 회피 장치)."""
     return dict(_VOCAB["maps"][key])
 
 
 
 # =====================================================================
-# Color enum (shared by upper/lower clothing, equipment, vehicle)
+# 색상 — 상의/하의/장비/차량이 공유하는 단일 색 어휘
 # =====================================================================
+# COLOR_ENUM은 프롬프트의 {colors} 자리에 주입되고(인풋), 파서가 모델 답을
+# 이 목록으로 강제 정규화한다(아웃풋 — enum 밖 답은 gray 폴백).
 
 COLOR_ENUM: Final[tuple[str, ...]] = _enum("color")
 
@@ -56,27 +71,30 @@ COLOR_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("color_group")
 
 
 def color_group(label: str) -> str:
-    """Map a color label to its coarse group: dark | light | vivid | neutral | unknown."""
+    """색 라벨 → 코스(coarse) 그룹. 소비자: ① scoring의 소프트 부분점수
+    (통과 후보 순위에서 "비슷한 색" 가점) ② query_parser의 청바지→blue
+    패밀리 확장 ③ 캡션 생성. 하드게이트에는 쓰지 않는다 — 그건 아래
+    color_hard_group의 몫 (dark 밴드가 갈색·국방색까지 묶어서 너무 넓음)."""
     for grp, members in COLOR_GROUP.items():
         if label in members:
             return grp
     return "unknown"
 
 
-# Fine perceptual grouping for EXACT-intent colour HARD gates ("검은색 차",
-# "검은 옷"). Deliberately tighter than the coarse COLOR_GROUP, which lumps every
-# dark hue (black + dark_gray + dark_brown + dark_green + military_olive) into one
-# "dark" band. That coarse band is correct for brightness queries ("어두운 차")
-# and soft-score bonuses, but wrong for a specific colour: a user asking for a
-# "검은색 차" does not want brown / green / 국방색 cars. Here black groups only
-# with dark_gray (achromatic dark); each chromatic dark stays with its own hue.
-# Used ONLY by passes_hard_filter's colour slots — color_group() is unchanged.
+# 정확-색-의도("검은색 차")의 하드게이트 전용 정밀 그룹.
+# 코스 COLOR_GROUP은 dark 밴드에 black+dark_gray+dark_brown+dark_green+
+# military_olive를 전부 묶는데, 그건 밝기 쿼리("어두운 차")와 소프트 가점에는
+# 맞아도 특정 색 검색에는 틀리다 — "검은색 차"를 찾는 사용자는 갈색/녹색/
+# 국방색 차를 원하지 않는다 (실측: coarse 밴드로 게이트하니 "빨간 옷" 통과의
+# 83%가 빨강 아님 → 2026-06 5차 재설계에서 분리). 여기서 black은 무채색
+# dark_gray하고만 묶이고, 유채색 dark들은 각자 hue에 남는다.
+# 소비자는 passes_hard_filter의 색 슬롯뿐 — color_group()은 별개로 유지.
 COLOR_HARD_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("color_hard_group")
 
 
 def color_hard_group(label: str) -> str:
-    """Fine colour group for hard gating. Falls back to the label itself so an
-    unlisted colour only ever matches itself (never a broad band)."""
+    """하드게이트용 정밀 색 그룹 조회. 미등록 색은 라벨 자신을 반환 —
+    넓은 밴드에 흡수되지 않고 자기 자신하고만 매칭되게(안전한 기본값)."""
     for grp, members in COLOR_HARD_GROUP.items():
         if label in members:
             return grp
@@ -84,8 +102,10 @@ def color_hard_group(label: str) -> str:
 
 
 # =====================================================================
-# Person attributes
+# 사람(person) 속성 어휘
 # =====================================================================
+# GENDER/AGE는 프롬프트에 리터럴(<male|female>)로 박히고, 파서의
+# _scores_dict가 이 enum으로 selected 값을 검증한다.
 
 GENDER_ENUM: Final[tuple[str, ...]] = _enum("gender")
 AGE_GROUP_ENUM: Final[tuple[str, ...]] = _enum("age_group")
@@ -98,6 +118,8 @@ UPPER_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("upper_type_group"
 
 
 def upper_type_group(label: str) -> str:
+    """상의 fine 타입 → 그룹(아우터 vs 상의). 하드게이트는 fine 타입(coat vs
+    jacket — CCTV로 구분 불안정)이 아니라 이 그룹 수준에서 걸러진다."""
     for grp, members in UPPER_TYPE_GROUP.items():
         if label in members:
             return grp
@@ -110,6 +132,8 @@ LOWER_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("lower_type_group"
 
 
 def lower_type_group(label: str) -> str:
+    """하의 fine 타입 → 그룹. (하드게이트의 실제 축은 아래 lower_shape —
+    옷감 구분(jeans vs slacks)은 CCTV에서 불가 판정, 2026-06.)"""
     for grp, members in LOWER_TYPE_GROUP.items():
         if label in members:
             return grp
@@ -117,12 +141,13 @@ def lower_type_group(label: str) -> str:
 
 
 # ---------------------------------------------------------------------
-# Shape axis — CCTV-reliable HARD-FILTER level (redesign 2026-06).
-# `lower_type` (jeans/slacks/...) stays a fine REFINE-only label; the hard
-# gate runs on coarse SHAPE, which a small CCTV crop can actually tell apart
-# (long_pants vs shorts vs skirt length). For rows indexed before the
-# dedicated `lower_shape` field exists, shape is DERIVED from the stored
-# fine `lower_type` label at read time (no reindex needed for this axis).
+# 모양(shape) 축 — CCTV가 실제로 구분 가능한 하드필터 수준 (2026-06 재설계).
+# fine 라벨(jeans/slacks…)은 refine 전용으로 남기고, 하드게이트는 작은
+# CCTV 크롭에서도 판별되는 coarse 모양(긴바지 vs 반바지 vs 치마 길이)으로
+# 돌린다. 실측 근거: VQA가 청바지 크롭 24개 전부에서 박음질을 못 봄 —
+# 옷감 구분 불가 확정. 전용 lower_shape 필드가 생기기 전에 인덱싱된
+# 행들은 저장된 fine 라벨에서 "읽기 시점"에 모양을 파생시킨다(아래 map —
+# 이 축에 재인덱싱이 필요 없었던 이유).
 # ---------------------------------------------------------------------
 
 LOWER_SHAPE_ENUM: Final[tuple[str, ...]] = _enum("lower_shape")
@@ -132,8 +157,9 @@ LOWER_TYPE_TO_SHAPE: Final[dict[str, str]] = _vmap("lower_type_to_shape")
 
 
 def lower_shape_of(lower_type_label: str | None) -> str:
-    """Coarse lower shape for the hard gate, derived from a fine lower_type
-    label. Returns 'lower_unknown' for missing/unrecognised labels."""
+    """fine 하의 라벨 → 하드게이트용 coarse 모양 (jeans→long_pants 등).
+    없거나 미등록이면 'lower_unknown' — 게이트는 이를 wildcard-pass 처리
+    (구버전 행 보호)."""
     if not lower_type_label:
         return "lower_unknown"
     return LOWER_TYPE_TO_SHAPE.get(lower_type_label, "lower_unknown")
@@ -145,10 +171,10 @@ UPPER_SLEEVE_ENUM: Final[tuple[str, ...]] = _enum("upper_sleeve")
 
 
 def upper_outer_of(upper_type_label: str | None) -> str:
-    """Read-time derivation of the outer-layer group from a fine upper_type
-    label: returns 'upper_outerwear' when the visible top IS outerwear, else
-    'none'. (Pre-redesign rows carry a single upper_type; the dedicated
-    `upper_outer` extracted field supersedes this once reindexed.)"""
+    """fine 상의 라벨 → 아우터 여부의 읽기-시점 파생. 보이는 상의가
+    아우터면 'upper_outerwear', 아니면 'none'. (재설계 이전 행은 upper_type
+    하나만 갖고 있어 이 파생으로 커버; 전용 추출 필드가 재인덱싱되면
+    그쪽이 우선.)"""
     if not upper_type_label:
         return "none"
     return "upper_outerwear" if upper_type_group(upper_type_label) == "upper_outerwear" else "none"
@@ -166,6 +192,8 @@ EQUIPMENT_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("equipment_typ
 
 
 def equipment_type_group(label: str) -> str:
+    """장비 라벨 → 그룹(bag/weapon…). 사용자가 "가방"이라고만 써도 백팩/
+    숄더백/핸드백/크로스백 전부가 매칭되게 하는 확장의 근거."""
     for grp, members in EQUIPMENT_TYPE_GROUP.items():
         if label in members:
             return grp
@@ -175,19 +203,20 @@ STATIC_ACTION_ENUM: Final[tuple[str, ...]] = _enum("static_action")
 
 
 # =====================================================================
-# Vehicle attributes
+# 차량(vehicle) 속성 어휘
 # =====================================================================
 
 VEHICLE_TYPE_ENUM: Final[tuple[str, ...]] = _enum("vehicle_type")
-# v0.8 had ~30 Korean/foreign model names (sonata/grandeur/bmw/...).
-# Production re-index showed Gemma E4B identified only 2/214 cars as
-# "bmw" and 0 for everything else, so the model labels added prompt
-# tokens without improving recall. Dropped for v0.9.
+# v0.8에는 차종 모델명 ~30개(sonata/grandeur/bmw/…)가 있었으나, 운영
+# 재인덱싱 실측에서 Gemma E4B가 214대 중 2대만 "bmw"로 식별(나머지 0) —
+# 프롬프트 토큰만 낭비하고 recall 개선이 없어 v0.9에서 제거. ("측정 없이
+# 어휘를 늘리지 않는다"의 대표 사례.)
 
 VEHICLE_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("vehicle_type_group")
 
 
 def vehicle_type_group(label: str) -> str:
+    """차종 라벨 → 그룹 (예: 이륜차 계열 묶음)."""
     for grp, members in VEHICLE_TYPE_GROUP.items():
         if label in members:
             return grp
@@ -198,23 +227,28 @@ def vehicle_type_group(label: str) -> str:
 # Military judgment (prompt-native, plr_v1.4_cot)
 # =====================================================================
 
-# Gemma judges military/civilian directly from camouflage / field uniform /
-# load-bearing gear cues (person) or camo paint / military body type / insignia
-# (vehicle), instead of inferring it post-hoc from a single olive colour. The
-# parser pins the output to these three values; indexing._attach_military_flags
-# turns "military" into is_soldier / is_military (with olive kept as a fallback).
+# Gemma가 위장무늬/전투복/군장(사람), 위장도색/군용차형/부대마크(차량)
+# 단서에서 military/civilian을 직접 판정한다 — 예전처럼 국방색 하나로
+# 사후 추론하지 않음(plr_v1.4_cot에서 프롬프트-네이티브화). 파서가 출력을
+# 이 enum으로 고정하고, _attach_military_flags가 "military"를
+# is_soldier/is_military 스칼라로 변환한다(국방색 규칙은 recall 폴백으로 병존).
 MILITARY_ENUM: Final[tuple[str, ...]] = _enum("military")
 
 
 # =====================================================================
-# JSON Schema (jsonschema-compatible) for Person/Vehicle PLR output
+# JSON 스키마 — 모델 출력(파싱 후)의 최종 검증 규격
 # =====================================================================
+# 파서(plr_parse)가 만든 plr_json이 이 스키마를 통과해야 저장된다.
+# 실패 시 스키마-재시도 1회 → 그래도 실패면 DLQ (indexing 쪽 오류 처리).
+# enum 필드들이 위의 상수에서 파생되므로 vocab.yaml 변경이 검증 규격까지
+# 자동으로 따라온다.
 
 PROMPT_VERSION: Final[str] = "plr_v0.4"
 
 
 def _topk_array_schema(label_enum: tuple[str, ...]) -> dict[str, Any]:
-    """Helper: array of {label: enum, score: 0..1}."""
+    """{label: enum값, score: 0~1} 항목 배열의 스키마 생성 헬퍼.
+    색/타입처럼 상위 후보 여러 개(top-k)를 받는 필드에 공용."""
     return {
         "type": "array",
         # minItems=0 — production data has frequent "color unknown" cases (low-res
@@ -432,9 +466,11 @@ class SchemaValidationError(ValueError):
 
 
 def validate_plr(data: dict[str, Any]) -> None:
-    """Validate a PLR JSON dict. Raises SchemaValidationError on failure.
+    """파싱된 PLR dict를 스키마 검증. 실패 시 SchemaValidationError.
 
-    Uses jsonschema if available, falls back to a minimal structural check.
+    jsonschema 패키지가 있으면 정식 검증, 없으면 최소 구조 확인으로 완화.
+    호출부(indexing의 _plr_with_schema_retry)가 이 예외를 잡아 재시도 1회를
+    돌린다 — 여기서 raise하는 것이 곧 "스키마-재시도 트리거"다.
     """
     obj_type = data.get("object_type")
     if obj_type == "person":
@@ -462,7 +498,7 @@ def validate_plr(data: dict[str, Any]) -> None:
 
 
 def is_valid_plr(data: dict[str, Any]) -> bool:
-    """Return True if the dict validates as a PLR JSON (person or vehicle)."""
+    """validate_plr의 불리언 래퍼 (예외 대신 True/False)."""
     try:
         validate_plr(data)
         return True
