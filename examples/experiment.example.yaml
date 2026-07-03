@@ -13,7 +13,7 @@
 # --- Axes (all required except attributes, ledger) ---
 
 datasets:
-  - ./../demo_dataset         # lab demo가 만든 mock 데이터셋 (즉시 실행 가능; 실측은 eval/golden/gender 등으로 교체)
+  - ../datasets/demo         # lab demo가 만든 mock 데이터셋 (즉시 실행 가능; 실측은 eval/golden/gender 등으로 교체)
   # - ./datasets/vehicle_v1   # add more dataset dirs to sweep
 
 models:

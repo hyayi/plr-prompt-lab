@@ -53,12 +53,12 @@
 <h2><span class="n">0</span> 설치 확인 — 테스트가 전부 도는지</h2>
 <pre><code>cd ~/plr-prompt-lab
 python3 -m pytest tests/ -q</code></pre>
-<div class="expect">기대 결과: <code>92 passed, 4 xfailed</code> — GPU·DB·Redis 없이 전부 통과해야 정상.</div>
+<div class="expect">기대 결과: <code>97 passed, 4 xfailed</code> — GPU·DB·Redis 없이 전부 통과해야 정상.</div>
 
 <h2><span class="n">1</span> demo — 전체 루프를 3초에 체험 (mock 모델)</h2>
-<pre><code>python3 lab.py demo --keep    <span class="c"># --keep: 생성물(demo_dataset/)을 지우지 않고 남김</span></code></pre>
+<pre><code>python3 lab.py demo --keep    <span class="c"># --keep: 생성물(datasets/demo/)을 지우지 않고 남김</span></code></pre>
 <div class="expect">기대 결과: 합성 데이터셋 생성 → mock 재채점 2회 → 평가 → 두 버전의 Δ 출력.
-<code>demo_dataset/</code>에 crops/·labels.jsonl·predictions.jsonl·raw_responses.jsonl·ledger.jsonl·manifest.yaml이 남습니다.</div>
+<code>datasets/demo/</code>에 crops/·labels.jsonl·predictions.jsonl·raw_responses.jsonl·ledger.jsonl·manifest.yaml이 남습니다.</div>
 <div class="card">
   <b>MockModel이란</b>: GPU 없이 미리 정해진 PLR YAML을 돌려주는 결정적 가짜 모델.
   파이프라인 배관(재채점→파싱→평가→리포트)을 모델 없이 검증하는 용도이며,
@@ -66,12 +66,12 @@ python3 -m pytest tests/ -q</code></pre>
 </div>
 
 <h2><span class="n">2</span> gallery — 크롭을 눈으로 검수</h2>
-<pre><code>python3 lab.py gallery --dataset demo_dataset
-<span class="out">[gallery] written: demo_dataset/gallery.html</span></code></pre>
+<pre><code>python3 lab.py gallery --dataset datasets/demo
+<span class="out">[gallery] written: datasets/demo/gallery.html</span></code></pre>
 <div class="expect">브라우저로 열면: 오답 우선 정렬, CORRECT/WRONG 배지, margin·quality 표시, 클래스 필터.</div>
 
 <h2><span class="n">3</span> report — ledger를 비교표·히트맵으로</h2>
-<pre><code>python3 lab.py report --ledger demo_dataset/ledger.jsonl --out report.html
+<pre><code>python3 lab.py report --ledger datasets/demo/ledger.jsonl --out report.html
 <span class="out">[report] wrote report.html (2 record(s), …)</span></code></pre>
 <div class="expect">전 실험 비교표·추이·confusion. 실험군 간 비교는 <code>--compare 다른ledger.jsonl</code>.</div>
 
@@ -86,13 +86,13 @@ yaml 안의 상대경로는 <b>yaml 파일 기준</b>으로 해석됩니다. 종
 </div>
 
 <h2><span class="n">5</span> 내 데이터셋 만들기 — 다속성 라벨</h2>
-<pre><code>cp -r examples/dataset_template my_test            <span class="c"># ① 템플릿 복사 (다속성 예제)</span>
+<pre><code>cp -r examples/dataset_template datasets/my_test            <span class="c"># ① 템플릿 복사 (다속성 예제)</span>
 <span class="c"># ② crops/&lt;obj_id&gt;.jpg 채우고 manifest.yaml의 attributes: 맵 선언</span>
 <span class="c"># ③ labels.jsonl — 크롭당 한 줄, 속성별 정답을 dict로:</span>
 <span class="c">#    {"obj_id":"M3","labels":{"gender":"male","helmet":"helmet"}}</span>
-python3 lab.py validate-dataset --dataset my_test  <span class="c"># ④ 형식 검증 (fail-loud)</span>
-python3 lab.py run  -A gender -X plr_v1.5_cot --dataset my_test   <span class="c"># ⑤ 모델 1회 (mock 가능)</span>
-python3 lab.py eval -A all --dataset my_test       <span class="c"># ⑥ 선언된 전 속성 한 번에 채점 ★</span></code></pre>
+python3 lab.py validate-dataset --dataset datasets/my_test  <span class="c"># ④ 형식 검증 (fail-loud)</span>
+python3 lab.py run  -A gender -X plr_v1.5_cot --dataset datasets/my_test   <span class="c"># ⑤ 모델 1회 (mock 가능)</span>
+python3 lab.py eval -A all --dataset datasets/my_test       <span class="c"># ⑥ 선언된 전 속성 한 번에 채점 ★</span></code></pre>
 <div class="card" style="--c:var(--green)">
   <b>모델 호출은 크롭당 1회</b> — run이 <code>attributes.jsonl</code>에 전체 plr_json을
   저장하고, <code>eval -A all</code>이 속성별 예측을 <code>pred_path</code>로 재추출해

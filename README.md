@@ -185,12 +185,12 @@ python3 lab.py demo
 
 Runs a complete mock eval cycle with **no GPU, no database, no model download**:
 
-1. Builds a 5-crop synthetic dataset in `demo_dataset/` (tiny JPEGs + labels).
+1. Builds a 5-crop synthetic dataset in `datasets/demo/` (tiny JPEGs + labels).
 2. Calls `re_score()` twice with a built-in `MockModel` — v1 predicts female
    (accuracy 1.0), v2 predicts male (accuracy 0.0).
 3. Runs `run_eval()` for each version and prints accuracy + Δ.
 4. Prints a walkthrough of what happened and pointers to next steps.
-5. Cleans up `demo_dataset/` on exit (pass `--keep` to retain it).
+5. Cleans up `datasets/demo/` on exit (pass `--keep` to retain it).
 
 Use `lab demo` to verify a fresh install is wired correctly, or to demonstrate
 the loop to a new team member before provisioning GPU + labels.

@@ -186,12 +186,12 @@ python3 lab.py demo
 
 **GPU·데이터베이스·모델 다운로드 없이** 전체 mock 평가 사이클을 실행합니다:
 
-1. `demo_dataset/`에 5-크롭 합성 데이터셋 생성 (작은 JPEG + 라벨).
+1. `datasets/demo/`에 5-크롭 합성 데이터셋 생성 (작은 JPEG + 라벨).
 2. 내장 `MockModel`로 `re_score()`를 두 번 호출 — v1은 female 예측(accuracy 1.0),
    v2는 male 예측(accuracy 0.0).
 3. 버전별로 `run_eval()`을 돌리고 accuracy + Δ 출력.
 4. 무슨 일이 일어났는지와 다음 단계 안내 출력.
-5. 종료 시 `demo_dataset/` 정리 (`--keep`으로 유지 가능).
+5. 종료 시 `datasets/demo/` 정리 (`--keep`으로 유지 가능).
 
 새로 설치한 환경이 제대로 배선됐는지 확인하거나, GPU + 라벨 준비 전에 팀원에게
 루프를 시연할 때 사용하세요.

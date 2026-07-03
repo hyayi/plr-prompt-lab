@@ -495,7 +495,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="GPU-free onboarding: run a full mock cycle on a synthetic dataset.",
     )
     dm.add_argument("--keep", action="store_true",
-                    help="Keep demo_dataset/ directory after the run (default: removed).")
+                    help="Keep datasets/demo/ directory after the run (default: removed).")
 
     # -- experiment --
     exp = sub.add_parser(

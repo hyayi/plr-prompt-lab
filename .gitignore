@@ -21,3 +21,9 @@ eval/golden/search/search_results.jsonl
 
 # oh-my-claudecode session state
 .omc/
+
+# User/experiment datasets (crops are private CCTV data — never commit)
+datasets/
+
+# Generated report artifacts
+report.html

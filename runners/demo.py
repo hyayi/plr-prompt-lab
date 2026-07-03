@@ -1,6 +1,6 @@
 """demo — GPU-free onboarding module for `lab demo`.
 
-Builds a tiny synthetic dataset in ./demo_dataset/, runs re_score with a
+Builds a tiny synthetic dataset in ./datasets/demo/, runs re_score with a
 MockModel, evaluates accuracy, and prints a walkthrough of what happened.
 No GPU, no DB, no Redis required.
 
@@ -143,7 +143,7 @@ def run_demo(lab_root: Path, keep_dir: bool = False) -> int:
     """Run the full GPU-free demo cycle. Returns exit code (0 on success)."""
     from runners import re_score as rs
 
-    demo_dir = lab_root / "demo_dataset"
+    demo_dir = lab_root / "datasets" / "demo"
 
     print("=" * 65)
     print("  lab demo — GPU-free PLR prompt-lab onboarding")
@@ -207,7 +207,7 @@ def run_demo(lab_root: Path, keep_dir: bool = False) -> int:
     print("=" * 65)
     print("  Demo complete — what just happened:")
     print()
-    print("  1. A synthetic dataset was built in demo_dataset/")
+    print("  1. A synthetic dataset was built in datasets/demo/")
     print("     (crops + labels.jsonl + predictions.jsonl + manifest.yaml)")
     print("  2. re_score() was called twice with a MockModel (no GPU).")
     print("     In real use: 'lab run --attribute gender --version X'")
