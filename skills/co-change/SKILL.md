@@ -7,19 +7,32 @@ PLR 표면(프롬프트·어휘·파서·스키마·전처리)의 **무엇이든
 이 스킬이 존재하는 이유는 아래 "사고 사례" 3건 — 전부 "같이 고쳐야 하는
 것을 사람 기억에 맡겨서" 생긴 조용한 드리프트였다.
 
-## 0. 공통 절차 (모든 표면 변경에 무조건 적용)
+## 0. 공통 절차 — 두 단계로 나뉜다
 
-parity 표면 파일(`prompts/**`, `schema/vocab.yaml`, `plr_prompts.py`,
-`plr_parse.py`, `plr_core.py`(build_messages 1곳 의도적 분기), `plr_schema.py`,
-`preprocess.py`)을 건드렸다면:
+**개발/실험 단계 (lab만 있으면 됨 — core/ir 불필요):**
 
-1. **lab ↔ core/ir 바이트 동기화** — 수정한 파일을 반대쪽 저장소에 그대로
-   복사하고 `diff`로 byte-equal 확인 (`lab port`가 같은 표면을 대조한다).
-2. **양쪽 테스트 스위트** — lab: `python3 -m pytest tests/ -q`,
-   core/ir: `/home/ziovision/deploy_2026/core/ir/.venv/bin/python -m pytest tests/ -q`.
+1. lab 안에서 자유롭게 수정·실험한다 (새 프롬프트는 새 버전 디렉터리,
+   knob 조합은 `configs/<exp>.yaml`).
+2. lab 테스트만 돌린다: `python3 -m pytest tests/ -q`.
+3. lab에 커밋. **core/ir 동기화는 이 단계에서 하지 않는다** — 실험 중 표면은
+   의도적으로 core/ir과 달라진 상태이고, 그게 정상이다 (`lab port`의 diff와
+   SEED stale 경고는 "달라져 있음"의 가시화이지 오류가 아니다).
+
+**승격/최종 반영 단계 (core/ir 보유자만, 실험 승자가 확정된 뒤 1회):**
+
+1. **lab → core/ir 바이트 동기화** — 승격 대상 표면 파일(`prompts/**`,
+   `schema/vocab.yaml`, `plr_prompts.py`, `plr_parse.py`,
+   `plr_core.py`(build_messages 1곳 의도적 분기), `plr_schema.py`,
+   `preprocess.py`)을 복사하고 `diff`로 byte-equal 확인.
+2. **양쪽 테스트 스위트** — lab + core/ir
+   (`/home/ziovision/deploy_2026/core/ir/.venv/bin/python -m pytest tests/ -q`).
 3. **양쪽 커밋** (push는 명시 요청 시에만).
 4. 운영 반영은 컨테이너 재시작(=배포)이며 별도 결정 사항 — 파일 수정만으로는
    실행 중인 프로세스에 영향 없음.
+
+아래 매트릭스의 동행 수정 항목 중 core/ir 쪽 파일(query_parser·scoring·
+indexing 등)을 지목하는 것들도 마찬가지로 **승격 단계의 체크리스트**다 —
+개발 단계에서는 "승격 시 필요한 목록"으로 기록만 해 둔다.
 
 ## 변경 유형 → 동행 수정 매트릭스
 
