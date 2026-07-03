@@ -87,7 +87,7 @@ def build_synthetic_dataset(demo_dir: Path) -> Path:
         created: "2026-07-02"
         source_note: "synthetic demo dataset — {len(_OBJ_IDS)} dummy person crops"
         model: "mock_v1"
-        prompt: "prompts/plr_v1.4_cot.yaml"
+        prompt: "prompts/plr_v1.5_cot/"
     """)
     (demo_dir / "manifest.yaml").write_text(manifest_text, encoding="utf-8")
 
