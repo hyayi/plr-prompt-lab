@@ -298,7 +298,7 @@ Once `validate-dataset` passes (exit 0), you can proceed to the GPU step:
 
 ```bash
 # Stop the live ir service first (it holds the GPU)
-python3 lab.py run --attribute gender --version plr_v1.4_cot --dataset my_dataset/
+python3 lab.py run --version plr_v1.4_cot --dataset my_dataset/   # -A 생략 = manifest 첫 속성
 ```
 
 Then evaluate:

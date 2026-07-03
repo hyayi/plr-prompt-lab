@@ -95,7 +95,7 @@ build-golden  ──►  label  ──►  run  ──►  eval  ──►  port
 │     → <dataset>/labels.jsonl                                        │
 │                                                                     │
 │  3. run  (GPU step)                                                 │
-│     lab run --attribute gender --version plr_v1.4_cot               │
+│     lab run --version plr_v1.4_cot               │
 │              --dataset <dataset>                                    │
 │     → <dataset>/predictions.jsonl  (overwritten)                    │
 │     → <dataset>/attributes.jsonl                                    │
@@ -133,7 +133,7 @@ python3 lab.py build-golden --video <vd_...> --attribute gender [--dataset <dir>
 python3 lab.py label [--dataset <dir>] --female-in-male M3,M7 --male-in-female F2
 
 # Re-score with Gemma (GPU step)
-python3 lab.py run --attribute gender --version plr_v1.4_cot [--dataset <dir>]
+python3 lab.py run --version plr_v1.4_cot --dataset <dir> [-A <attr>]
 
 # Evaluate PLR attribute
 python3 lab.py eval --attribute gender --version plr_v1.4_cot [--dataset <dir>]
@@ -247,7 +247,7 @@ which downloads and loads a 4B GGUF model into VRAM.
    ```bash
    # Stop ir before running lab
    cd /home/ziovision/ziomilitary/engine && docker-compose stop imageretrieval
-   python3 lab.py run --attribute gender --version plr_v1.4_cot
+   python3 lab.py run --version plr_v1.4_cot --dataset <데이터셋>
    # Restart ir when done
    docker-compose start imageretrieval
    ```

@@ -96,7 +96,7 @@ build-golden  ──►  label  ──►  run  ──►  eval  ──►  port
 │     → <dataset>/labels.jsonl                                        │
 │                                                                     │
 │  3. run  (GPU 단계)                                                  │
-│     lab run --attribute gender --version plr_v1.4_cot               │
+│     lab run --version plr_v1.4_cot               │
 │              --dataset <dataset>                                    │
 │     → <dataset>/predictions.jsonl  (덮어씀)                          │
 │     → <dataset>/attributes.jsonl                                    │
@@ -134,7 +134,7 @@ python3 lab.py build-golden --video <vd_...> --attribute gender [--dataset <dir>
 python3 lab.py label [--dataset <dir>] --female-in-male M3,M7 --male-in-female F2
 
 # Gemma로 재채점 (GPU 단계)
-python3 lab.py run --attribute gender --version plr_v1.5_cot [--dataset <dir>] [--model gemma|mock]
+python3 lab.py run --version plr_v1.5_cot --dataset <dir> [-A <attr>] [--model gemma|mock]
 
 # PLR 속성 평가
 python3 lab.py eval --attribute gender --version plr_v1.4_cot [--dataset <dir>]
@@ -247,7 +247,7 @@ python3 lab.py demo
    ```bash
    # lab 실행 전 ir 중지
    cd /home/ziovision/ziomilitary/engine && docker-compose stop imageretrieval
-   python3 lab.py run --attribute gender --version plr_v1.4_cot
+   python3 lab.py run --version plr_v1.4_cot --dataset <데이터셋>
    # 끝나면 ir 재시작
    docker-compose start imageretrieval
    ```

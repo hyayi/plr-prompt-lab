@@ -210,11 +210,27 @@ def _cmd_run(args: argparse.Namespace) -> int:
     core/ir / cctv-eval).
     """
     from runners import re_score as rs
-    from evalkit.dataset import resolve_dataset_dir
+    from evalkit.dataset import declared_attributes, resolve_dataset_dir
     from registry import get_model
 
     model_name = getattr(args, "model", "gemma")
-    attribute = args.attribute
+    # -A는 선택: 모델 호출은 속성과 무관(전체 plr_json이 attributes.jsonl에
+    # 저장)하고, 크롭별 프롬프트는 labels.jsonl의 object_type이 정한다.
+    # 생략 시 manifest 선언 속성의 첫 번째가 predictions.jsonl 기본 추출 뷰.
+    attribute = getattr(args, "attribute", None)
+    if not attribute:
+        if not getattr(args, "dataset", None):
+            print("[run] --attribute 생략 시 --dataset이 필요합니다 "
+                  "(manifest에서 기본 속성을 읽음)", file=sys.stderr)
+            return 2
+        declared = declared_attributes(args.dataset)
+        if not declared:
+            print(f"[run] {args.dataset}: manifest에 attributes:/attribute 선언이 "
+                  f"없습니다 — -A로 속성을 지정하세요", file=sys.stderr)
+            return 2
+        attribute = declared[0]
+        print(f"[run] --attribute 생략 → manifest 첫 속성 '{attribute}' 사용 "
+              f"(추출 뷰만 결정; 전체 속성은 attributes.jsonl에 저장됨)")
     ds_dir = resolve_dataset_dir(_LAB_ROOT, attribute, getattr(args, "dataset", None))
 
     # get_model('mock') is GPU-free; 'gemma' constructs LabGemmaModel (weights
@@ -442,8 +458,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     ru.add_argument("--version", "-X", required=True,
                     help="PLR version string (e.g. plr_v1.4_cot)")
-    ru.add_argument("--attribute", "-A", required=True,
-                    help="PLR attribute to re-score")
+    ru.add_argument("--attribute", "-A", default=None,
+                    help="predictions.jsonl extraction view (optional — "
+                         "defaults to the dataset manifest's first declared "
+                         "attribute; the model call itself is attribute-"
+                         "independent and stores the full plr_json)")
     ru.add_argument("--dataset", default=None,
                     help="dataset dir (default: eval/golden/<attribute>)")
     ru.add_argument("--model", default="gemma",
