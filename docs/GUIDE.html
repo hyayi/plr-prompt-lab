@@ -53,7 +53,7 @@
 <h2><span class="n">0</span> 설치 확인 — 테스트가 전부 도는지</h2>
 <pre><code>cd ~/plr-prompt-lab
 python3 -m pytest tests/ -q</code></pre>
-<div class="expect">기대 결과: <code>97 passed, 4 xfailed</code> — GPU·DB·Redis 없이 전부 통과해야 정상.</div>
+<div class="expect">기대 결과: <code>99 passed, 4 xfailed</code> — GPU·DB·Redis 없이 전부 통과해야 정상.</div>
 
 <h2><span class="n">1</span> demo — 전체 루프를 3초에 체험 (mock 모델)</h2>
 <pre><code>python3 lab.py demo --keep    <span class="c"># --keep: 생성물(datasets/demo/)을 지우지 않고 남김</span></code></pre>
@@ -92,7 +92,7 @@ yaml 안의 상대경로는 <b>yaml 파일 기준</b>으로 해석됩니다. 종
 <span class="c">#    {"obj_id":"M3","labels":{"gender":"male","helmet":"helmet"}}</span>
 python3 lab.py validate-dataset --dataset datasets/my_test  <span class="c"># ④ 형식 검증 (fail-loud)</span>
 python3 lab.py run -X plr_v1.5_cot --dataset datasets/my_test              <span class="c"># ⑤ 모델 1회 — -A 불필요 (mock 가능)</span>
-python3 lab.py eval -A all --dataset datasets/my_test       <span class="c"># ⑥ 선언된 전 속성 한 번에 채점 ★</span></code></pre>
+python3 lab.py eval -A all --dataset datasets/my_test       <span class="c"># ⑥ 라벨 있는 전 속성 한 번에 채점 ★</span></code></pre>
 <div class="card" style="--c:var(--green)">
   <b>모델 호출은 크롭당 1회</b> — run이 <code>attributes.jsonl</code>에 전체 plr_json을
   저장하고, <code>eval -A all</code>이 속성별 예측을 <code>pred_path</code>로 재추출해

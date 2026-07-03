@@ -168,6 +168,27 @@ def load_object_types(dataset_dir: str | Path) -> dict[str, str]:
     return out
 
 
+def labeled_attributes(dataset_dir: str | Path) -> list[str]:
+    """labels.jsonl의 다속성 행들에 실제로 등장하는 속성 키 목록 (등장 순서).
+
+    legacy 단일 label 행은 특정 속성에 묶이지 않으므로 여기 집계되지 않는다
+    — 그런 데이터셋은 manifest의 attribute 선언이 기준.
+    """
+    path = Path(dataset_dir) / "labels.jsonl"
+    seen: dict[str, None] = {}
+    if not path.exists():
+        return []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            multi = json.loads(line).get("labels")
+            if isinstance(multi, dict):
+                for k in multi:
+                    seen.setdefault(str(k))
+    return list(seen)
+
+
 def declared_attributes(dataset_dir: str | Path) -> list[str]:
     """manifest가 선언한 평가 속성 목록 — `lab eval --attribute all`의 순회 대상.
 

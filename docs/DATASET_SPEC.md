@@ -92,8 +92,8 @@ The `attribute` value governs which label vocabulary is enforced by
 
 같은 크롭셋에 여러 속성의 정답을 함께 라벨할 때는 단일 `attribute:` 대신
 속성별 스펙 맵을 선언한다. 모델 호출은 크롭당 1회뿐이고(`attributes.jsonl`에
-전체 plr_json 저장), `lab eval --attribute all -D <dir>`이 선언된 모든 속성을
-한 번에 채점한다 — 속성별 예측은 `attributes.jsonl`에서 `pred_path`로
+전체 plr_json 저장), `lab eval --attribute all -D <dir>`이 라벨이 실제로 달린 속성 전부를
+한 번에 채점한다 (선언만 되고 라벨이 없는 속성은 skip+안내) — 속성별 예측은 `attributes.jsonl`에서 `pred_path`로
 재추출되므로 GPU 재실행이 없다.
 
 ```yaml

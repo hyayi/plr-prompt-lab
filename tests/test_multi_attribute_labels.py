@@ -152,6 +152,27 @@ def test_validate_multi_attribute(tmp_path: Path) -> None:
     assert validate_dataset(bad, verbose=False) is False
 
 
+def test_eval_all_skips_declared_but_unlabeled(tmp_path: Path) -> None:
+    """`eval -A all`의 기준은 "라벨이 실제로 있는 속성": manifest에 선언만 되고
+    라벨이 없는 속성은 실패가 아니라 skip+안내여야 한다 (exit 0)."""
+    import subprocess
+
+    ds = _make_multi_dataset(tmp_path / "ds")
+    mp = ds / "manifest.yaml"
+    mp.write_text(mp.read_text(encoding="utf-8") + "  military: {}\n", encoding="utf-8")
+
+    ledger = tmp_path / "ledger.jsonl"
+    result = subprocess.run(
+        [sys.executable, str(_LAB_ROOT / "lab.py"), "eval", "-A", "all",
+         "--dataset", str(ds), "--version", "skip_t", "--ledger", str(ledger)],
+        capture_output=True, text=True, cwd=str(_LAB_ROOT),
+    )
+    assert result.returncode == 0, f"skip은 실패가 아니어야 한다:\n{result.stderr}"
+    assert "skip: military" in result.stdout
+    evaluated = {json.loads(l)["attribute"] for l in open(ledger, encoding="utf-8")}
+    assert evaluated == {"gender", "helmet"}
+
+
 class _HintAwareModel:
     """받은 프롬프트가 person용인지 vehicle용인지에 따라 다른 YAML을 반환하고,
     어떤 종류를 받았는지 기록한다 — 크롭별 힌트 라우팅의 검증 장치."""

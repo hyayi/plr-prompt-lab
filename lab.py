@@ -265,18 +265,37 @@ def _cmd_eval(args: argparse.Namespace) -> int:
     re_mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
     spec.loader.exec_module(re_mod)  # type: ignore[union-attr]
 
-    # --attribute all → manifest 선언 속성 전부 순회, "a,b" → 나열 순회.
-    # 모델 재실행 없음: 각 속성 예측은 attributes.jsonl(전체 plr_json 캐시)에서
-    # run_eval이 재추출한다 — 라벨 1회 + 모델 1회로 전 속성 평가.
+    # --attribute all → "라벨이 실제로 있는 속성" 전부 순회, "a,b" → 나열 순회.
+    # 기준: manifest 선언 ∩ 라벨 등장 (선언됐는데 라벨이 없으면 실패가 아니라
+    # skip+안내; 선언이 아예 없으면 라벨 키에서 직접 도출). 모델 재실행 없음:
+    # 각 속성 예측은 attributes.jsonl(전체 plr_json 캐시)에서 재추출된다.
     requested = str(args.attribute)
     if requested == "all":
         if not getattr(args, "dataset", None):
             print("[eval] --attribute all requires --dataset", file=sys.stderr)
             return 2
-        attributes = declared_attributes(args.dataset)
+        from evalkit.dataset import labeled_attributes
+        declared = declared_attributes(args.dataset)
+        labeled = labeled_attributes(args.dataset)
+        if declared and labeled:
+            attributes = [a for a in declared if a in labeled]
+            skipped = [a for a in declared if a not in labeled]
+            if skipped:
+                print(f"[eval] 라벨 없음 → skip: {', '.join(skipped)} "
+                      f"(manifest에는 선언됨 — labels.jsonl에 키가 등장하면 자동 포함)")
+            undeclared = [a for a in labeled if a not in declared]
+            if undeclared:
+                print(f"[eval] WARNING: 라벨에는 있는데 manifest 미선언: "
+                      f"{', '.join(undeclared)} — validate-dataset가 잡는 상태입니다",
+                      file=sys.stderr)
+        elif declared:          # legacy 단일 label 행뿐 → 선언 기준
+            attributes = declared
+        else:                   # manifest 선언 없음 → 라벨 키 기준
+            attributes = labeled
         if not attributes:
-            print(f"[eval] {args.dataset}: manifest.yaml에 attributes:/attribute "
-                  f"선언이 없어 'all'을 해석할 수 없습니다", file=sys.stderr)
+            print(f"[eval] {args.dataset}: 평가할 속성을 찾지 못했습니다 "
+                  f"(manifest attributes:/attribute 선언도, 다속성 라벨 키도 없음)",
+                  file=sys.stderr)
             return 2
     else:
         attributes = [a.strip() for a in requested.split(",") if a.strip()]
@@ -475,8 +494,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     ev.add_argument("--attribute", "-A", required=True,
                     help="PLR attribute (gender | vehicle_type | military | "
-                         "custom), comma list, or 'all' (= manifest-declared "
-                         "attributes; requires --dataset)")
+                         "custom), comma list, or 'all' (= every declared attribute "
+                         "that actually has labels; requires --dataset)")
     ev.add_argument("--model", default="gemma",
                     help="registry model name recorded in the ledger (default: gemma)")
     ev.add_argument("--version", default="plr_v1.5_cot",
