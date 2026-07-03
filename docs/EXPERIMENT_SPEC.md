@@ -26,7 +26,7 @@ reasons:    ["on", "off"]                  # IR_PLR_REASON axis (on | off), plr 
 
 | Field        | Type           | Required | Description |
 |-------------|----------------|----------|-------------|
-| `datasets`  | list[str]      | yes      | Paths to dataset directories. Each must contain `crops/`, `labels.jsonl`, and `predictions.jsonl`. |
+| `datasets`  | list[str]      | yes      | Paths to dataset directories. Each must contain `crops/`, `labels.jsonl`, and `predictions.jsonl`. Relative paths are resolved relative to the experiment YAML file (same as `ledger`). |
 | `models`    | list[str]      | yes      | Registry model names. `mock` is GPU-free; `gemma` requires weights. Unknown names raise an error before any cell runs. |
 | `prompts`   | list[str]      | yes      | Prompt version tags. Passed as `--version` to `run_eval`. |
 | `pipelines` | list[str]      | yes      | `plr` (attribute extraction). The search pipeline was removed (2026-07). Unknown names raise an error before any cell runs. |

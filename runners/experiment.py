@@ -351,6 +351,11 @@ def run_experiment(
     Path(ledger_path).parent.mkdir(parents=True, exist_ok=True)
 
     cells = enumerate_cells(cfg)
+    # Dataset paths resolve relative to the yaml's directory, same as the
+    # ledger above (the spec/example promise "relative to this file").
+    for cell in cells:
+        if not os.path.isabs(cell.dataset):
+            cell.dataset = str((path.parent / cell.dataset).resolve())
     n_total = len(cells)
     print(f"[experiment] {n_total} cells to run (from {path})", flush=True)
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>plr-prompt-lab — 사용 가이드</title>
+<title>plr-prompt-lab — 실습 가이드 (인수인계)</title>
 <style>
   :root{--bg:#0b1120;--panel:#111a2e;--panel2:#16213b;--line:#263452;--text:#dbe4f5;
         --muted:#8fa1c0;--acc:#38bdf8;--amber:#fbbf24;--green:#34d399;--pink:#f472b6;--orange:#fb923c}
@@ -24,7 +24,7 @@
   pre{background:var(--panel);border:1px solid var(--line);border-radius:12px;
       padding:14px 16px;font-size:12.5px;overflow-x:auto;line-height:1.55}
   pre code{background:none;padding:0}
-  pre .c{color:#5b6f96} pre b{color:#e8f2ff}
+  pre .c{color:#5b6f96} pre b{color:#e8f2ff} pre .out{color:#34d399}
   table{border-collapse:collapse;font-size:13px;margin:10px 0}
   th,td{border:1px solid var(--line);padding:6px 12px;text-align:left}
   th{background:var(--panel2);color:#e8f2ff}
@@ -33,6 +33,7 @@
         border-radius:12px;padding:12px 16px;margin:10px 0;font-size:13.5px}
   .card b{color:#e8f2ff}
   .warn{--c:#f87171}
+  .expect{color:var(--green);font-size:12.5px;margin:-4px 0 14px 4px}
   a{color:var(--acc)}
   .muted{color:var(--muted);font-size:12.5px}
   footer{margin-top:56px;color:#5b6f96;font-size:12px;text-align:center}
@@ -41,88 +42,141 @@
 <body>
 <main>
 
-<h1><span class="repo">plr-prompt-lab</span> — 사용 가이드</h1>
+<h1><span class="repo">plr-prompt-lab</span> — 실습 가이드 (인수인계)</h1>
 <div class="sub">
-  <b>PLR(객체 속성 추출) 프롬프트를 측정하며 개선</b>하는 독립 실험 도구 — PLR 전용.
-  GPU·DB·Redis 없이 mock 경로가 전부 동작하고, 실측만 GPU가 필요합니다.
-  구조 시각화는 <a href="STRUCTURE.html">STRUCTURE.html</a> 참고.
-  <span class="muted">(2026-07-02 · plr_v1.5_cot 강제커밋 · 검색 파이프라인 제거됨)</span>
+  <b>PLR(객체 속성 추출) 프롬프트를 측정하며 개선</b>하는 독립 실험 도구.
+  아래를 <b>순서대로 그대로 복붙</b>하면 모든 기능을 GPU 없이 체험합니다 —
+  §7(실측)만 GPU가 필요합니다. 구조 시각화는 <a href="STRUCTURE.html">STRUCTURE.html</a>.
+  <span class="muted">(2026-07-03 · plr_v1.5_cot 강제커밋 · 모든 명령 실행 검증됨)</span>
 </div>
 
-<h2><span class="n">1</span> 30초 시작 — GPU 없이 전체 루프 체험</h2>
-<pre><code>python3 lab.py demo          <span class="c"># mock 모델로 run→eval→Δ 전체 사이클</span>
-python3 -m pytest tests/ -q  <span class="c"># 90 passed 확인</span></code></pre>
+<h2><span class="n">0</span> 설치 확인 — 테스트가 전부 도는지</h2>
+<pre><code>cd ~/plr-prompt-lab
+python3 -m pytest tests/ -q</code></pre>
+<div class="expect">기대 결과: <code>92 passed, 4 xfailed</code> — GPU·DB·Redis 없이 전부 통과해야 정상.</div>
 
-<h2><span class="n">2</span> 실험 사이클</h2>
-<pre><code>데이터셋 준비 ──► lab run ──► lab eval ──► lab report / lab gallery
- (템플릿+라벨)    (GPU 1회/크롭)  (지표+ledger)   (비교표·confusion / 크롭 시각화)
-                                                      │
-              lab port ◄── prompts/&lt;신버전&gt;.yaml ◄── /improve-prompt 스킬
-              (core/ir 반납)                          (근거 있는 개선안)</code></pre>
-
-<h2><span class="n">3</span> 명령어</h2>
-<table>
-<tr><th>명령</th><th>역할</th></tr>
-<tr><td><code>lab demo</code></td><td>GPU-free 온보딩 (mock 전체 사이클)</td></tr>
-<tr><td><code>lab build-golden --video V --attribute A</code></td><td>운영 비디오에서 골든셋 크롭 생성 (운영자 단계)</td></tr>
-<tr><td><code>lab label --dataset D --female-in-male M3,M7 --unknown M9</code></td><td>사람 라벨 (판별 불가는 unknown → 채점 제외·별도 집계)</td></tr>
-<tr><td><code>lab validate-dataset --dataset D</code></td><td>데이터셋 형식 검증 (fail-loud)</td></tr>
-<tr><td><code>lab run --attribute A --version V --dataset D [--model gemma|mock]</code></td><td>재채점 — 크롭당 모델 1회, margin·quality 기록</td></tr>
-<tr><td><code>lab eval --attribute A --dataset D</code></td><td>acc·recall·precision·F1·confusion·bias·pred_unknown + margin/quality 캘리브레이션 + ledger Δ</td></tr>
-<tr><td><code>lab experiment run exp.yaml</code></td><td>교차곱 매트릭스 (datasets×models×prompts×attributes×formats×reasons)</td></tr>
-<tr><td><code>lab report [--compare LEDGER_B]</code></td><td>자체완결 HTML — 전체 실험 비교표·추이·히트맵·confusion (+실험군 간 비교)</td></tr>
-<tr><td><code>lab gallery --dataset D</code></td><td>크롭-라벨 시각화 HTML — 오답 우선, CORRECT/WRONG 배지, margin/quality</td></tr>
-<tr><td><code>lab port [--apply]</code></td><td>lab ↔ core/ir 프롬프트 표면 diff / 반납</td></tr>
-</table>
-
-<h2><span class="n">4</span> 프롬프트 — 단일 소스 (yaml)</h2>
-<div class="card" style="--c:var(--orange)">
-  <b>기본(--version 없음)</b> = <code>prompts/&lt;현재버전&gt;.yaml</code>을 plr_prompts가 로드
-  (현재 <b>plr_v1.5_cot 강제커밋</b>). <b>yaml 편집 = 프롬프트 변경</b> — 상수는 제거됨(단일 소스).
-  <b>버전 지정</b> = <code>lab run --version V</code>가 <code>prompts/V.yaml</code>(또는 <code>configs/V.yaml</code> 조합)을 로드.
-  새 버전은 <b>yaml만 추가</b>, 채택 시 <code>PROMPT_VERSION_YAML_COT</code> bump가 승격의 전부 → <code>lab port</code>.
+<h2><span class="n">1</span> demo — 전체 루프를 3초에 체험 (mock 모델)</h2>
+<pre><code>python3 lab.py demo --keep    <span class="c"># --keep: 생성물(demo_dataset/)을 지우지 않고 남김</span></code></pre>
+<div class="expect">기대 결과: 합성 데이터셋 생성 → mock 재채점 2회 → 평가 → 두 버전의 Δ 출력.
+<code>demo_dataset/</code>에 crops/·labels.jsonl·predictions.jsonl·raw_responses.jsonl·ledger.jsonl·manifest.yaml이 남습니다.</div>
+<div class="card">
+  <b>MockModel이란</b>: GPU 없이 미리 정해진 PLR YAML을 돌려주는 결정적 가짜 모델.
+  파이프라인 배관(재채점→파싱→평가→리포트)을 모델 없이 검증하는 용도이며,
+  <b>프롬프트 품질과는 무관</b>합니다 — 품질 측정은 §7의 실측으로.
 </div>
 
-<h2><span class="n">5</span> 데이터셋 — 구조는 고정, 라벨은 자유</h2>
-<pre><code>my_dataset/
-    manifest.yaml    <span class="c"># attribute·labels·pred_path 선언 (examples/dataset_template/ 복사)</span>
-    labels.jsonl     <span class="c"># {"obj_id", "label"} — 판별 불가는 "unknown"</span>
-    crops/&lt;obj_id&gt;.jpg</code></pre>
+<h2><span class="n">2</span> gallery — 크롭을 눈으로 검수</h2>
+<pre><code>python3 lab.py gallery --dataset demo_dataset
+<span class="out">[gallery] written: demo_dataset/gallery.html</span></code></pre>
+<div class="expect">브라우저로 열면: 오답 우선 정렬, CORRECT/WRONG 배지, margin·quality 표시, 클래스 필터.</div>
+
+<h2><span class="n">3</span> report — ledger를 비교표·히트맵으로</h2>
+<pre><code>python3 lab.py report --ledger demo_dataset/ledger.jsonl --out report.html
+<span class="out">[report] wrote report.html (2 record(s), …)</span></code></pre>
+<div class="expect">전 실험 비교표·추이·confusion. 실험군 간 비교는 <code>--compare 다른ledger.jsonl</code>.</div>
+
+<h2><span class="n">4</span> experiment — 조합 매트릭스 한 방에</h2>
+<pre><code>python3 lab.py experiment run examples/experiment.example.yaml
+<span class="out">[experiment] total=2  ok=2  failed=0</span></code></pre>
+<div class="expect">datasets × models × prompts × attributes 교차곱을 셀 단위로 실행하고 ledger에 적재.
+yaml 안의 상대경로는 <b>yaml 파일 기준</b>으로 해석됩니다. 종료코드 0=전부 성공 / 2=전부 실패.</div>
+<div class="card">
+  예제 yaml을 열어 축을 바꿔보세요: <code>models: [mock]</code>→<code>[gemma]</code>가 실측 전환,
+  <code>prompts:</code>에 버전을 추가하면 A/B가 됩니다. 스펙: <code>docs/EXPERIMENT_SPEC.md</code>
+</div>
+
+<h2><span class="n">5</span> 내 데이터셋 만들기</h2>
+<pre><code>cp -r examples/dataset_template my_helmet_test     <span class="c"># ① 템플릿 복사</span>
+<span class="c"># ② crops/&lt;obj_id&gt;.jpg 채우고 manifest.yaml의 attribute/labels/pred_path 선언</span>
+python3 lab.py validate-dataset --dataset my_helmet_test   <span class="c"># ③ 형식 검증 (fail-loud)</span>
+<span class="c"># ④ 사람 라벨: 오분류 obj_id만 나열하면 labels.jsonl 생성</span>
+python3 lab.py label --dataset my_helmet_test --female-in-male M3,M7 --unknown M9</code></pre>
 <div class="card" style="--c:var(--green)">
+  <b>gender / vehicle_type / military는 내장 프리셋</b>(manifest 선언 불필요).
   커스텀 속성은 manifest에 <code>labels: [helmet, no_helmet]</code> +
   <code>pred_path: attributes.equipment[0].type</code>처럼 선언하면 validate/run/eval이 그대로 동작.
-  <b>gender / vehicle_type / military는 내장 프리셋</b>(선언 불필요)이자 참고 예시.
-  상세: <code>docs/DATASET_SPEC.md</code>
+  판별 불가 크롭은 <code>unknown</code> — 채점에서 제외되고 별도 집계됩니다.
+  상세: <code>docs/DATASET_SPEC.md</code>, 스킬: <code>skills/prepare-dataset/SKILL.md</code>
 </div>
 
-<h2><span class="n">6</span> 개선 루프 — /improve-prompt 스킬</h2>
-<div class="card" style="--c:var(--pink)">
-  <b>분석자 → 제안자 → 비판자 ⇄ 수정자 → 판단자</b> (최대 3라운드).
-  분석자는 오답 크롭을 <b>이미지로 직접 열람</b>하고 패턴별 obj_id를 명명;
-  모든 제안은 <b>본 샘플 + 수치 근거</b> 필수; 판단자 합격 기준(측정 가능한 예상효과 등)을
-  통과해야 <code>prompts/&lt;신버전&gt;.yaml</code> 초안이 나옵니다.
-  상세: <code>skills/improve-prompt/SKILL.md</code>
+<h2><span class="n">6</span> 프롬프트 새 버전 만들기 — 버전 = 디렉터리</h2>
+<pre><code>prompts/plr_v1.5_cot/          <span class="c"># 운영 기본 버전 (기능별 파일 5개가 한 세트)</span>
+    person.yaml                <span class="c"># system + user_cot(운영) + user_plain + commit_enums</span>
+    vehicle.yaml  query_parser.yaml  vqa.yaml  retry.yaml
+
+cp -r prompts/plr_v1.5_cot prompts/plr_v1.6_test   <span class="c"># ① 복사해서 새 버전 (이름 ≤16자!)</span>
+<span class="c"># ② person.yaml의 문구를 수정 — {colors} 같은 주입 자리는 절대 지우지 말 것</span>
+python3 lab.py run --attribute gender --version plr_v1.6_test --dataset my_ds --model mock  <span class="c"># ③ 배관 확인</span></code></pre>
+<div class="card" style="--c:var(--orange)">
+  <b>지켜야 할 계약</b>(위반 시 테스트가 빨간불): unknown을 선택지로 제시 금지(저신뢰는
+  margins로) · enum은 <code>{colors}</code> 자리에 자동 주입(손글씨 금지) · 출력 형식은 파서와
+  한 몸(슬롯 추가 시 <code>skills/co-change</code>의 매트릭스 따라 동행 수정).
+  전체 계약: <code>skills/author-prompt/SKILL.md</code>.
+  샘플링 등 knob 조합 실험은 <code>configs/example.yaml</code> 복사 →
+  <code>lab run --version &lt;config명&gt;</code>.
 </div>
 
-<h2><span class="n">7</span> 실측(GPU) 전제조건</h2>
+<h2><span class="n">7</span> 실측 (여기부터 GPU)</h2>
+<pre><code><span class="c"># 운영 ir 컨테이너가 GPU 점유 중 — 관리자와 협의 후 중지하고:</span>
+python3 lab.py run  --attribute gender --version plr_v1.5_cot --dataset eval/golden/gender  <span class="c"># --model gemma가 기본</span>
+python3 lab.py eval --attribute gender --dataset eval/golden/gender
+<span class="c"># 준비된 A/B (v1.4 vs v1.5 강제커밋 — labels.jsonl 라벨 완료가 전제):</span>
+python3 lab.py experiment run examples/gender_ab_v14_vs_v15.yaml</code></pre>
+<div class="expect">run은 크롭당 모델 1회 — predictions.jsonl(예측·margin·quality)과 raw_responses.jsonl(모델
+원문·입출력 토큰 수)을 남깁니다. eval은 acc/recall/precision/F1/confusion/bias +
+margin·quality 캘리브레이션을 ledger에 적재.</div>
 <div class="card warn">
-  운영 <code>ir</code> 컨테이너가 GPU/VRAM을 점유 중 — <b>중지 후 실행하거나 오프피크에</b>:
-  <code>docker-compose stop imageretrieval</code> → <code>lab run --model gemma …</code> → <code>start</code>.
-  모델 준비는 <code>docs/INSTALL.md</code>.
+  <b>주의</b> ① 실 CCTV 크롭은 사적 데이터 — <b>git에 커밋 금지</b> (eval/golden/*/crops는 .gitignore 확인).
+  ② 운영 <code>ziosummary-ir</code> 컨테이너 재시작은 <b>배포 행위</b>(프롬프트 버전 교체+재인덱싱 유발) —
+  임의로 하지 말 것. ③ GPU 사용 후 ir 컨테이너 재기동 여부는 관리자 결정.
 </div>
 
-<h2><span class="n">8</span> 문서 지도</h2>
+<h2><span class="n">8</span> 개선 루프 — 스킬과 함께</h2>
+<div class="card" style="--c:var(--pink)">
+  오답이 보이면 <code>skills/improve-prompt/SKILL.md</code>:
+  <b>분석자 → 제안자 → 비판자 ⇄ 수정자 → 판단자</b>(최대 3라운드).
+  분석자는 오답 크롭을 <b>이미지로 직접 열람</b>, 모든 제안은 본 obj_id + 수치 근거 필수.
+  산출물 = <code>prompts/&lt;신버전&gt;/</code> 초안 + 검증용 experiment yaml → §4로 측정 → §3으로 비교.
+</div>
+
+<h2><span class="n">9</span> 승격/반납 — 이겼을 때만, 한 번만</h2>
+<pre><code>python3 lab.py port            <span class="c"># lab ↔ core/ir 표면 diff (읽기 전용 — 개발 중 diff가 있는 건 정상)</span></code></pre>
+<div class="card">
+  <b>개발 중에는 core/ir 없이 lab만으로 완결</b>됩니다. 실험 승자가 확정되면 core/ir 보유자가
+  <code>skills/co-change/SKILL.md</code>의 <b>승격 단계 체크리스트</b>(바이트 동기화 → 양쪽 테스트
+  → PROMPT_VERSION bump)를 1회 수행 — 그 전까지 동기화하지 마세요.
+</div>
+
+<h2><span class="n">10</span> 지도 — 명령·스킬·문서</h2>
 <table>
-<tr><td><code>README.ko.md</code> / <code>README.md</code></td><td>전체 개요 (한/영)</td></tr>
+<tr><th>명령</th><th>역할</th></tr>
+<tr><td><code>lab demo [--keep]</code></td><td>GPU-free 온보딩 (mock 전체 사이클)</td></tr>
+<tr><td><code>lab build-golden --video V --attribute A</code></td><td>운영 비디오에서 골든셋 크롭 생성 (운영자 단계)</td></tr>
+<tr><td><code>lab label --dataset D --…</code></td><td>사람 라벨 → labels.jsonl</td></tr>
+<tr><td><code>lab validate-dataset --dataset D</code></td><td>데이터셋 형식 검증</td></tr>
+<tr><td><code>lab run -A A -X V [--dataset D] [--model mock]</code></td><td>재채점 (크롭당 1회, margin·quality·raw·토큰 기록)</td></tr>
+<tr><td><code>lab eval -A A [--dataset D]</code></td><td>지표 산출 + ledger 적재</td></tr>
+<tr><td><code>lab experiment run exp.yaml [--strict]</code></td><td>조합 매트릭스 (경로는 yaml 기준)</td></tr>
+<tr><td><code>lab report [--ledger L] [--compare L2] [--out F]</code></td><td>자체완결 HTML 리포트</td></tr>
+<tr><td><code>lab gallery --dataset D [--out F]</code></td><td>크롭 시각화 HTML (오답 우선)</td></tr>
+<tr><td><code>lab port [--apply]</code></td><td>core/ir 표면 diff / 반납 (승격 시에만)</td></tr>
+</table>
+<table>
+<tr><th>스킬 (skills/)</th><th>언제</th></tr>
+<tr><td><code>author-prompt</code></td><td>새 프롬프트 버전을 만들 때 — 계약·레이아웃·승격 절차</td></tr>
+<tr><td><code>improve-prompt</code></td><td>결과 분석→근거 있는 개선안 (6역할 루프)</td></tr>
+<tr><td><code>prepare-dataset</code></td><td>골든셋 구성·라벨링 자동화</td></tr>
+<tr><td><code>co-change</code></td><td><b>표면(어휘/프롬프트/파서/스키마) 수정 전 필독</b> — 동행 수정 매트릭스</td></tr>
+</table>
+<table>
+<tr><td><code>README.ko.md</code></td><td>전체 개요</td></tr>
 <tr><td><code>docs/STRUCTURE.html</code></td><td>아키텍처 시각화</td></tr>
-<tr><td><code>docs/DATASET_SPEC.md</code></td><td>데이터셋 스키마 + 생성 절차 + generic 라벨 선언</td></tr>
-<tr><td><code>docs/EXPERIMENT_SPEC.md</code></td><td>experiment.yaml 스펙 (축·ledger·종료코드)</td></tr>
-<tr><td><code>docs/HANDOFF.md</code></td><td>외부 프롬프트 엔지니어 워크플로</td></tr>
-<tr><td><code>docs/INSTALL.md</code></td><td>GPU/Gemma 셋업</td></tr>
-<tr><td><code>SESSION_HANDOFF.md</code></td><td>세션 인수인계 (진행 상태·결정 기록)</td></tr>
+<tr><td><code>docs/DATASET_SPEC.md</code> / <code>docs/EXPERIMENT_SPEC.md</code></td><td>데이터셋·실험 yaml 스펙</td></tr>
+<tr><td><code>docs/HANDOFF.md</code> / <code>docs/INSTALL.md</code></td><td>워크플로 상세 / GPU·모델 셋업</td></tr>
+<tr><td><code>SESSION_HANDOFF.md</code></td><td>진행 상태·결정 기록 (§7.5 = 재인덱싱-후 정리 백로그)</td></tr>
 </table>
 
-<footer>plr-prompt-lab · GUIDE.html (자체완결 · 오프라인) — 갱신 2026-07-02</footer>
+<footer>plr-prompt-lab · GUIDE.html (자체완결 · 오프라인 · 모든 명령 2026-07-03 실행 검증) </footer>
 </main>
 </body>
 </html>

@@ -13,7 +13,7 @@
 # --- Axes (all required except attributes, ledger) ---
 
 datasets:
-  - ./datasets/gender_v1      # path to a dataset directory (absolute or relative to this file)
+  - ./../demo_dataset         # lab demo가 만든 mock 데이터셋 (즉시 실행 가능; 실측은 eval/golden/gender 등으로 교체)
   # - ./datasets/vehicle_v1   # add more dataset dirs to sweep
 
 models:
@@ -33,7 +33,7 @@ attributes:
 
 # --- Optional ---
 
-ledger: ./eval/ledger.jsonl   # ledger path (default: eval/ledger.jsonl relative to lab root)
+ledger: ../eval/ledger.jsonl   # ledger path (default: eval/ledger.jsonl relative to lab root)
 
 # reason 축(옵션): CoT/plain 템플릿 선택. ledger version 태그에 +reason-off로 구분.
 # (formats 축은 레거시 JSON 경로와 함께 제거됨 — YAML 단일 포맷)

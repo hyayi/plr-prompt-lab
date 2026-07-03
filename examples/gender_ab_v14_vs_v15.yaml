@@ -2,7 +2,7 @@
 # 실행: python3 lab.py experiment run examples/gender_ab_v14_vs_v15.yaml
 # 전제: eval/golden/gender/labels.jsonl 존재 (사람 라벨) + GPU 확보(ir 중지)
 datasets:
-  - ./eval/golden/gender
+  - ../eval/golden/gender
 models:
   - gemma            # 실측. GPU 미확보 상태 점검은 mock으로 먼저
 prompts:
@@ -14,4 +14,4 @@ attributes:
   - gender
 reasons:
   - "on"             # 운영 기본 (CoT)
-ledger: ./eval/ledger.jsonl
+ledger: ../eval/ledger.jsonl
