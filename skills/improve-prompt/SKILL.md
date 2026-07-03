@@ -21,6 +21,7 @@ named sample (`obj_id`) whose crop was actually viewed.
 | `lab gallery --dataset D` | crops-vs-labels HTML, **wrong-first** — the visual evidence base |
 | `<dataset>/predictions.jsonl` | per-crop pred + margin + quality |
 | `<dataset>/attributes.jsonl` | full PLR JSON per crop (per-slot analysis) |
+| `<dataset>/raw_responses.jsonl` | VERBATIM model text per crop + input/output token counts — check what the model actually said before parsing/normalisation touched it (e.g. was `gray` really answered, or coerced from an off-enum word?) |
 | `<dataset>/crops/<obj_id>.jpg` | raw crops — **Read these directly** when analysing errors |
 | `prompts/<version>.yaml` | the prompt under improvement |
 
@@ -47,6 +48,10 @@ loop indefinitely.
 - Cross-check `margin_stats`: are the errors low-margin (model knows it's
   guessing) or high-margin (confidently wrong — the dangerous kind)?
   Same for `quality_stats`.
+- For suspicious labels, read the crop's row in `raw_responses.jsonl`: the
+  stored label may be a NORMALISATION artifact (off-enum answer coerced to a
+  fallback), which points at a vocabulary fix, not a prompt-wording fix.
+  Token counts also reveal cost regressions between versions.
 - Output: pattern list, each with obj_ids, image observations, and metrics.
 
 ### 2. 제안자 (Proposer)

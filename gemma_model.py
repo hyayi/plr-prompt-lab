@@ -92,6 +92,10 @@ class LabGemmaModel:
         gen = load_backend().generate(
             image, messages, max_tokens=self.max_tokens, temperature=self.temperature
         )
+        # Keep the full GenResult so callers (re_score's raw capture) can read
+        # exact input/output token counts — the Model protocol only returns
+        # the raw string.
+        self.last_result = gen
         return gen.raw
 
 

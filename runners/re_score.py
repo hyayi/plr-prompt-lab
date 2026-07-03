@@ -45,6 +45,50 @@ def _extract_reason(attribute: str, plr_json: dict[str, Any]) -> str:
     return str(reason)
 
 
+class _RawCapture:
+    """Model wrapper that records each call's raw response + token usage.
+
+    The Model protocol returns only the raw string, so raw text and token
+    counts would otherwise be discarded inside run_plr. Wrapping here keeps
+    plr_core (parity surface) untouched. Exact token counts come from
+    LabGemmaModel.last_result (llama.cpp usage); models without it (mock)
+    fall back to a chars/4 estimate, flagged via `tokens_exact: false`.
+    """
+
+    def __init__(self, model: Any) -> None:
+        self._model = model
+        self.records: list[dict[str, Any]] = []
+
+    def __getattr__(self, name: str) -> Any:  # delegate sampling attrs etc.
+        return getattr(self._model, name)
+
+    @staticmethod
+    def _text_of(messages: list[dict[str, Any]]) -> str:
+        parts: list[str] = []
+        for m in messages:
+            c = m.get("content")
+            if isinstance(c, str):
+                parts.append(c)
+            elif isinstance(c, list):
+                parts.extend(str(ch.get("text", "")) for ch in c if isinstance(ch, dict))
+        return "\n".join(parts)
+
+    def generate(self, messages: list[dict[str, Any]], image: Any) -> str:
+        raw = self._model.generate(messages, image)
+        prompt_text = self._text_of(messages)
+        gen = getattr(self._model, "last_result", None)
+        exact = gen is not None and getattr(gen, "output_tokens", 0) > 0
+        self.records.append({
+            "prompt_chars": len(prompt_text),
+            "raw_chars": len(raw),
+            "input_tokens": int(gen.input_tokens) if exact else len(prompt_text) // 4,
+            "output_tokens": int(gen.output_tokens) if exact else len(raw) // 4,
+            "tokens_exact": bool(exact),
+            "raw": raw,
+        })
+        return raw
+
+
 # =====================================================================
 # PLR lab runner (Deliverable 1)
 # =====================================================================
@@ -172,6 +216,11 @@ def re_score(
     new_preds: list[dict[str, Any]] = []
     new_attrs: list[dict[str, Any]] = []
 
+    # Raw capture: record every model response verbatim + token usage.
+    # Written to raw_responses.jsonl (run artifact, gitignored) — evidence
+    # for improve-prompt and for token-cost analysis across versions.
+    model = _RawCapture(model)
+
     for obj_id in obj_ids:
         crop_path = crops_dir / f"{obj_id}.jpg"
         if not crop_path.exists():
@@ -235,6 +284,21 @@ def re_score(
         for row in new_attrs:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
+    # Raw responses + token usage (one row per crop, same order as obj_ids)
+    raw_path = gdir / "raw_responses.jsonl"
+    with open(raw_path, "w", encoding="utf-8") as f:
+        for oid, rec in zip(obj_ids, model.records):
+            f.write(json.dumps({"obj_id": oid, **rec}, ensure_ascii=False) + "\n")
+
+    _n = max(len(model.records), 1)
+    tokens = {
+        "exact": all(r["tokens_exact"] for r in model.records) if model.records else False,
+        "input_total": sum(r["input_tokens"] for r in model.records),
+        "output_total": sum(r["output_tokens"] for r in model.records),
+        "input_avg": round(sum(r["input_tokens"] for r in model.records) / _n, 1),
+        "output_avg": round(sum(r["output_tokens"] for r in model.records) / _n, 1),
+    }
+
     # Stamp the ledger version with the ACTUAL prompt version when a yaml-backed
     # version drove this run (so a prompt-axis comparison is labeled correctly);
     # otherwise fall back to the env-derived "format+reason" tag.
@@ -249,4 +313,6 @@ def re_score(
         "n": len(new_preds),
         "version": version,
         "gemma_repo": gemma_repo,
+        # Token usage summary (exact=False means chars/4 estimate, e.g. mock).
+        "tokens": tokens,
     }

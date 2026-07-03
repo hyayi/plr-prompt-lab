@@ -7,6 +7,10 @@ eval/golden/*/crops/
 # Per-run ledger
 ledger.jsonl
 
+# Per-run raw model responses (re_score artifact)
+raw_responses.jsonl
+eval/golden/*/raw_responses.jsonl
+
 # Python bytecode
 __pycache__/
 *.pyc

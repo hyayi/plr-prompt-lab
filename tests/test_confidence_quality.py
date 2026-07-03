@@ -138,3 +138,23 @@ def test_run_eval_tolerates_missing_signals(tmp_path: Path) -> None:
     rec = _run_eval(gdir, tmp_path / "ledger.jsonl")
     assert rec["accuracy"] == 1.0
     assert rec["margin_stats"] is None and rec["quality_stats"] is None
+
+
+def test_raw_responses_and_token_accounting(tmp_path: Path) -> None:
+    """re_score writes raw_responses.jsonl (verbatim model text + token
+    usage). Mock has no tokenizer -> chars/4 estimate flagged tokens_exact
+    False; meta carries the summary."""
+    from runners import re_score as rs
+
+    gdir = _make_dataset(tmp_path / "ds", ["r1", "r2"])
+    meta = rs.re_score("gender", _MockModel(), golden_dir=str(gdir))
+
+    rows = [json.loads(l) for l in open(gdir / "raw_responses.jsonl", encoding="utf-8")]
+    assert [r["obj_id"] for r in rows] == ["r1", "r2"]
+    for r in rows:
+        assert r["raw"].startswith("target: person"), "verbatim raw must be stored"
+        assert r["tokens_exact"] is False, "mock has no tokenizer -> estimate"
+        assert r["output_tokens"] == len(r["raw"]) // 4
+        assert r["input_tokens"] > 100, "prompt estimate should be substantial"
+    t = meta["tokens"]
+    assert t["exact"] is False and t["output_total"] == sum(r["output_tokens"] for r in rows)

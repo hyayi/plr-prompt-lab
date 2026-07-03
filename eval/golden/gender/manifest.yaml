@@ -1,0 +1,4 @@
+attribute: gender
+n: 63
+created: "2026-07-02"
+source_note: "vd 실측 골든셋 63크롭 — build-golden 산출, ~/gender_eval 리뷰 시트에서 crops 복원 (2026-07-02)"
