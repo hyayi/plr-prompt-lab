@@ -1,25 +1,22 @@
-"""Pure single-view PLR inference core.
+"""순수 single-view PLR 추론 코어 — 운영 인덱서와 lab이 공유하는 조립 지점.
 
-`run_plr(pil, qreport, model, object_type_hint) -> plr_json` is the storage-free
-PLR pipeline the live indexer and the offline lab share:
+`run_plr(pil, qreport, model, object_type_hint) -> plr_json` 이 스토리지-프리
+파이프라인의 전부다:
 
-  coarse_only  -> quality_gate.coarse_only_plr_json(...)  (skip generate)
-  otherwise    -> draw target marker -> build_plr_messages -> model.generate
-                  -> parse_plr_response -> _attach_military_flags
+  전처리(마커) → 프롬프트 조합(build_plr_messages) → model.generate 1회
+  → 파싱·정규화(parse_plr_response) → 후처리(_attach_military_flags)
 
-It depends ONLY on: plr_prompts, quality_gate, PIL, and the `Model` protocol
-(gemma_model.Model). It has ZERO direct `gemma_backend` reference — generation
-goes through `model`. The marker + military helpers live HERE (canonical home,
-pure stdlib/PIL) and `indexing.py` imports them from this module, so a bare
-`import plr_core` never transitively pulls storage / psycopg2 / redis.
+의존성은 plr_prompts / quality_gate / PIL / Model 프로토콜뿐 —
+gemma_backend 직접 참조 0 (생성은 주입된 `model`을 통해서만). 그래서
+`import plr_core`가 storage/psycopg2/redis를 절대 끌고 오지 않는다.
 
-Behavior-preserving note for the live path: `run_plr` exposes two PRIVATE
-toggles, `_pre_marked` and `_attach`. The public/lab contract is the defaults
-(`_pre_marked=False, _attach=True`) — marker drawn + flags attached, exactly as
-the spec describes. The live indexer (`indexing._run_plr_with_optional_sr`)
-already draws the marker once per object and attaches flags once post-merge, so
-it invokes `run_plr(..., _pre_marked=True, _attach=False)` to avoid double-work,
-keeping `_process_one`'s observable behavior byte-identical.
+비공개 토글 두 개(동작 보존용): `_pre_marked`(마커를 호출부가 이미 그렸음/
+그리지 않기로 함 — 운영 indexing이 객체당 1회만 그리려고, lab 실험 config의
+marker:false도 이 경로 사용) / `_attach`(military 플래그 부착을 호출부로 미룸).
+공개/lab 계약은 기본값(마커 그림 + 플래그 부착)이다.
+
+입력/출력 예) run_plr(크롭PIL, SimpleNamespace(mode="normal_plr"), model, "person")
+  → {"object_type":"person","attributes":{…}}  (plr_parse 모듈 docstring 예 참고)
 """
 
 from __future__ import annotations
@@ -48,11 +45,10 @@ _MILITARY_COLOR = "military_olive"
 
 
 def _top_color(color_topk: Any) -> str | None:
-    """Return the label of the highest-scoring entry in a color_topk array.
+    """color_topk 배열에서 최고점 라벨 1개. 없거나 깨졌으면 None (무예외).
 
-    Returns None when the array is missing, empty, or malformed — never raises.
-    The array is assumed to be already sorted descending by score (as Gemma
-    outputs it), but we take max() defensively.
+    입력/출력 예) [{"label":"black","score":0.9},{"label":"gray","score":0.1}]
+      → "black"
     """
     if not isinstance(color_topk, list) or not color_topk:
         return None
@@ -65,19 +61,18 @@ def _top_color(color_topk: Any) -> str | None:
 
 
 def _attach_military_flags(plr_json: dict[str, Any]) -> None:
-    """Populate scalar color / military-flag fields in-place on *plr_json*.
+    """plr_json에 스칼라 색/군인 플래그 필드를 제자리(in-place) 기록.
 
-    Written fields (all optional in the schema):
-      vehicle -> attributes.primary_color  (str)
-               -> attributes.is_military   (bool)
-      person  -> attributes.upper_clothing.primary_color  (str)
-               -> attributes.lower_clothing.primary_color  (str)
-               -> attributes.is_soldier                    (bool)
+    기록 필드(스키마상 전부 optional):
+      vehicle → attributes.primary_color(str) · is_military(bool)
+      person  → upper/lower_clothing.primary_color(str) · is_soldier(bool)
 
-    Defensive: never raises — silently skips any field when the source
-    color_topk is missing/empty/malformed.  Intended to be called after
-    PLR parse but before storage.upsert_row so the scalars live in
-    plr_json (JSONB) and are containment-queryable.
+    판정: 프롬프트-네이티브 military 판단 OR 국방색(military_olive) 규칙
+    (후자는 구버전 행 recall 폴백). 무예외 방어적 — 소스가 깨져 있으면
+    조용히 건너뜀. 파싱 후·저장 전에 호출되어 JSONB 포함-쿼리를 가능케 함.
+
+    입력/출력 예) person + upper 최고색 black + military=="military"
+      → attrs["is_soldier"]=True, upper_clothing["primary_color"]="black"
     """
     obj_type = plr_json.get("object_type")
     attrs = plr_json.get("attributes")
@@ -115,11 +110,9 @@ def _attach_military_flags(plr_json: dict[str, Any]) -> None:
 
 
 def _plr_generate_parse(model: Any, image: Any, msgs: list[dict[str, Any]], hint: str) -> dict[str, Any]:
-    """Shared inner core: run the model then parse the raw output.
-
-    Pure in (model output, hint). Does NOT validate — schema validation and
-    retry/DLQ orchestration stay in the caller so those semantics are unchanged.
-    """
+    """공유 최심부: 모델 1회 호출 → 원문 파싱. 검증은 하지 않는다 —
+    스키마 검증·재시도·DLQ는 호출부(indexing) 책임으로 남겨 의미 불변.
+    raw는 여기서 소비되고 버려진다 (lab은 _RawCapture 래퍼로 가로챔)."""
     from plr_prompts import parse_plr_response
 
     raw = model.generate(msgs, image)
@@ -136,26 +129,21 @@ def run_plr(
     _pre_marked: bool = False,
     _attach: bool = True,
 ) -> dict[str, Any]:
-    """Single-view PLR inference.
+    """single-view PLR 추론 1회 (크롭 → plr_json).
 
-    Args:
-      pil: the object crop (PIL.Image). When `_pre_marked` is False the target
-        marker is drawn here; when True the caller has already marked it.
-      qreport: a QualityReport. If `qreport.mode == "coarse_only"` the model is
-        skipped and a minimal coarse PLR JSON is returned.
-      model: a `gemma_model.Model` — `generate(messages, image) -> str`.
-      object_type_hint: "person" | "vehicle" prompt template hint.
-      build_messages: (lab-only) optional builder `hint -> messages` for the
-        MAIN prompt. When None (the default, and the ONLY behaviour in core/ir)
-        the module-level `plr_prompts.build_plr_messages` is used, so the output
-        is byte-identical to the live path. The lab supplies a version-specific
-        builder (e.g. FilePromptProvider(version_override=...).build_plr_messages)
-        so a single checkout can genuinely compare prompt versions. The
-        schema-retry path is intentionally left on the constants builder.
-      _pre_marked: (private) skip the marker draw when the caller already marked.
-      _attach: (private) run `_attach_military_flags` on the result when True.
+    인자:
+      pil: 객체 크롭(PIL). `_pre_marked=False`면 여기서 마커를 그린다.
+      qreport: mode=="coarse_only"면 모델을 건너뛰고 최소 JSON 반환
+        (v1.5 single-view 계약에서 게이팅은 제거 — 호출부가 normal_plr 고정).
+      model: `generate(messages, image) -> str` 프로토콜 (진짜/Mock 교체점).
+      object_type_hint: "person" | "vehicle" — 프롬프트 기능 파일 선택.
+      build_messages: (lab 전용 divergence) 버전별 빌더 주입구. None(기본,
+        core/ir의 유일 동작)이면 plr_prompts.build_plr_messages — 운영과
+        바이트 동일. lab은 FilePromptProvider(version_override=…) 빌더를
+        넣어 한 체크아웃에서 버전 비교를 가능하게 한다.
+      _pre_marked/_attach: 비공개 토글 (모듈 docstring 참고).
 
-    Returns the PLR JSON dict.
+    반환: PLR JSON dict.
     """
     import quality_gate
 

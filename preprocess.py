@@ -1,12 +1,14 @@
-"""preprocess — image pre-processing applied BEFORE the model call.
+"""preprocess — 모델 호출 "이전"에 적용되는 이미지 전처리.
 
-Part of the model's INPUT surface (like the prompt bytes and the injected
-vocabulary): changing anything here changes what the model sees, so this
-module is a parity/promotion component alongside plr_prompts / plr_schema.
+프롬프트 바이트·주입 어휘와 마찬가지로 모델 "인풋 표면"의 일부다:
+여기를 바꾸면 모델이 보는 것이 바뀌므로 plr_prompts/plr_schema와 같은
+parity/승격 대상 컴포넌트.
 
-Currently one step: the yellow target corner marker. run_plr callers can
-skip it via `_pre_marked=True` (the lab's experiment configs expose that as
-`preprocess.marker: false`).
+현재 단계는 하나 — 노란 타깃 코너 마커. run_plr 호출부가
+`_pre_marked=True`로 생략 가능 (lab 실험 config의 `preprocess.marker: false`).
+
+입력/출력 예) draw_target_marker(PIL 100×150 크롭)
+  → 같은 크기 PIL, 중앙 65% 박스 모서리에 노란 L자 획 4개가 그려진 사본
 """
 from __future__ import annotations
 
@@ -20,7 +22,10 @@ def draw_target_marker(
     line_width: int | None = None,
     arm_ratio: float = 0.20,
 ) -> Image.Image:
-    """Draw four yellow corner brackets around the centre of the crop.
+    """크롭 중앙에 노란 코너 브래킷 4개를 그린다 — 다인물 크롭에서 "누구를
+    라벨할지" 지정하는 장치 (모델 이미지 인풋의 일부).
+
+    Draw four yellow corner brackets around the centre of the crop.
 
     v1.1_cot used a full rectangle — outline closure activated an
     "enclosure" semantic (uniform / one-piece / jumpsuit hallucinations

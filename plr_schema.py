@@ -42,19 +42,28 @@ with open(_VOCAB_PATH, encoding="utf-8") as _fh:
 
 def _enum(key: str) -> tuple[str, ...]:
     """vocab.yaml enums.<key> → 불변 tuple. 순서가 보존되므로 프롬프트에
-    주입되는 선택지의 나열 순서도 vocab.yaml이 결정한다."""
+    주입되는 선택지의 나열 순서도 vocab.yaml이 결정한다.
+
+    입력/출력 예) _enum("gender") → ("male", "female")
+    """
     return tuple(_VOCAB["enums"][key])
 
 
 def _vgroup(key: str) -> dict[str, tuple[str, ...]]:
     """vocab.yaml groups.<key> → {그룹명: (멤버, …)}. 검색 게이트/소프트
-    점수의 "같은 것으로 칠 범위" 정의."""
+    점수의 "같은 것으로 칠 범위" 정의.
+
+    입력/출력 예) _vgroup("color_hard_group")["black"] → ("black", "dark_gray")
+    """
     return {k: tuple(v) for k, v in _VOCAB["groups"][key].items()}
 
 
 def _vmap(key: str) -> dict[str, str]:
     """vocab.yaml maps.<key> → {fine 라벨: coarse 값}. 저장된 행을 읽는
-    시점에 새 축을 파생시키는 1:1 번역표 (재인덱싱 회피 장치)."""
+    시점에 새 축을 파생시키는 1:1 번역표 (재인덱싱 회피 장치).
+
+    입력/출력 예) _vmap("lower_type_to_shape")["jeans"] → "long_pants"
+    """
     return dict(_VOCAB["maps"][key])
 
 
@@ -74,7 +83,10 @@ def color_group(label: str) -> str:
     """색 라벨 → 코스(coarse) 그룹. 소비자: ① scoring의 소프트 부분점수
     (통과 후보 순위에서 "비슷한 색" 가점) ② query_parser의 청바지→blue
     패밀리 확장 ③ 캡션 생성. 하드게이트에는 쓰지 않는다 — 그건 아래
-    color_hard_group의 몫 (dark 밴드가 갈색·국방색까지 묶어서 너무 넓음)."""
+    color_hard_group의 몫 (dark 밴드가 갈색·국방색까지 묶어서 너무 넓음).
+
+    입력/출력 예) color_group("black") → "dark" · color_group("red") → "vivid"
+    """
     for grp, members in COLOR_GROUP.items():
         if label in members:
             return grp
@@ -94,7 +106,11 @@ COLOR_HARD_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("color_hard_group"
 
 def color_hard_group(label: str) -> str:
     """하드게이트용 정밀 색 그룹 조회. 미등록 색은 라벨 자신을 반환 —
-    넓은 밴드에 흡수되지 않고 자기 자신하고만 매칭되게(안전한 기본값)."""
+    넓은 밴드에 흡수되지 않고 자기 자신하고만 매칭되게(안전한 기본값).
+
+    입력/출력 예) color_hard_group("dark_gray") → "black" (무채색 dark 등가류)
+                 color_hard_group("crimson")   → "crimson" (미등록 → 자기 자신)
+    """
     for grp, members in COLOR_HARD_GROUP.items():
         if label in members:
             return grp
@@ -119,7 +135,11 @@ UPPER_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("upper_type_group"
 
 def upper_type_group(label: str) -> str:
     """상의 fine 타입 → 그룹(아우터 vs 상의). 하드게이트는 fine 타입(coat vs
-    jacket — CCTV로 구분 불안정)이 아니라 이 그룹 수준에서 걸러진다."""
+    jacket — CCTV로 구분 불안정)이 아니라 이 그룹 수준에서 걸러진다.
+
+    입력/출력 예) upper_type_group("coat") → "upper_outerwear"
+                 upper_type_group("tshirt") → "upper_top"
+    """
     for grp, members in UPPER_TYPE_GROUP.items():
         if label in members:
             return grp
@@ -133,7 +153,10 @@ LOWER_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("lower_type_group"
 
 def lower_type_group(label: str) -> str:
     """하의 fine 타입 → 그룹. (하드게이트의 실제 축은 아래 lower_shape —
-    옷감 구분(jeans vs slacks)은 CCTV에서 불가 판정, 2026-06.)"""
+    옷감 구분(jeans vs slacks)은 CCTV에서 불가 판정, 2026-06.)
+
+    입력/출력 예) lower_type_group("jeans") → "pants_like"
+    """
     for grp, members in LOWER_TYPE_GROUP.items():
         if label in members:
             return grp
@@ -157,9 +180,13 @@ LOWER_TYPE_TO_SHAPE: Final[dict[str, str]] = _vmap("lower_type_to_shape")
 
 
 def lower_shape_of(lower_type_label: str | None) -> str:
-    """fine 하의 라벨 → 하드게이트용 coarse 모양 (jeans→long_pants 등).
+    """fine 하의 라벨 → 하드게이트용 coarse 모양.
     없거나 미등록이면 'lower_unknown' — 게이트는 이를 wildcard-pass 처리
-    (구버전 행 보호)."""
+    (구버전 행 보호).
+
+    입력/출력 예) lower_shape_of("jeans") → "long_pants"
+                 lower_shape_of(None)    → "lower_unknown"
+    """
     if not lower_type_label:
         return "lower_unknown"
     return LOWER_TYPE_TO_SHAPE.get(lower_type_label, "lower_unknown")
@@ -171,10 +198,13 @@ UPPER_SLEEVE_ENUM: Final[tuple[str, ...]] = _enum("upper_sleeve")
 
 
 def upper_outer_of(upper_type_label: str | None) -> str:
-    """fine 상의 라벨 → 아우터 여부의 읽기-시점 파생. 보이는 상의가
-    아우터면 'upper_outerwear', 아니면 'none'. (재설계 이전 행은 upper_type
-    하나만 갖고 있어 이 파생으로 커버; 전용 추출 필드가 재인덱싱되면
-    그쪽이 우선.)"""
+    """fine 상의 라벨 → 아우터 여부의 읽기-시점 파생. (재설계 이전 행은
+    upper_type 하나만 갖고 있어 이 파생으로 커버; 전용 추출 필드가
+    재인덱싱되면 그쪽이 우선.)
+
+    입력/출력 예) upper_outer_of("coat")   → "upper_outerwear"
+                 upper_outer_of("tshirt") → "none"
+    """
     if not upper_type_label:
         return "none"
     return "upper_outerwear" if upper_type_group(upper_type_label) == "upper_outerwear" else "none"
@@ -193,7 +223,10 @@ EQUIPMENT_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("equipment_typ
 
 def equipment_type_group(label: str) -> str:
     """장비 라벨 → 그룹(bag/weapon…). 사용자가 "가방"이라고만 써도 백팩/
-    숄더백/핸드백/크로스백 전부가 매칭되게 하는 확장의 근거."""
+    숄더백/핸드백/크로스백 전부가 매칭되게 하는 확장의 근거.
+
+    입력/출력 예) equipment_type_group("backpack") → "bag"
+    """
     for grp, members in EQUIPMENT_TYPE_GROUP.items():
         if label in members:
             return grp
@@ -216,7 +249,10 @@ VEHICLE_TYPE_GROUP: Final[dict[str, tuple[str, ...]]] = _vgroup("vehicle_type_gr
 
 
 def vehicle_type_group(label: str) -> str:
-    """차종 라벨 → 그룹 (예: 이륜차 계열 묶음)."""
+    """차종 라벨 → 그룹.
+
+    입력/출력 예) vehicle_type_group("motorcycle") → "two_wheel"
+    """
     for grp, members in VEHICLE_TYPE_GROUP.items():
         if label in members:
             return grp

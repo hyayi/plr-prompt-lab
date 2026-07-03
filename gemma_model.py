@@ -1,4 +1,15 @@
-"""Model interface for PLR inference — decouples the pure PLR core from the
+"""PLR 추론의 Model 인터페이스 — 순수 코어를 구체 백엔드에서 분리하는 교체점.
+
+핵심은 프로토콜 하나다: `generate(messages, image) -> str`.
+run_plr은 이것만 요구하므로 진짜(GPU Gemma)와 가짜(Mock)가 자유로 바뀐다:
+  LabGemmaModel — lab의 직접 호출용 (스케줄러 없음, 지연 로드, 샘플링
+                  파라미터는 실험 config가 속성으로 주입; last_result에
+                  토큰 수 보존 → raw 캡처가 읽음)
+  MockModel     — 준비된 PLR YAML을 그대로 반환하는 결정적 대역
+                  (demo·테스트 89개의 GPU-free 기반)
+
+(아래 원문 설명 계속)
+Model interface for PLR inference — decouples the pure PLR core from the
 concrete Gemma backend + scheduler wiring.
 
 This module is intentionally dependency-light: it imports ONLY `scheduler`

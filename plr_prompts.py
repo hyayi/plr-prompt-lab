@@ -1,18 +1,25 @@
-"""plr_prompts — PLR prompt ASSEMBLY only (composition layer).
+"""plr_prompts — PLR 프롬프트의 "조합"만 담당하는 계층 (프롬프트 텍스트 0줄).
 
-Prompt TEXT lives in yaml, one file per function, one directory per version:
+프롬프트 원문은 전부 yaml에 산다 — 기능별 파일 1개, 버전별 디렉터리 1개:
 
     prompts/<PROMPT_VERSION_YAML_COT>/
-        person.yaml         # system + user_cot + user_plain
+        person.yaml         # system + user_cot(운영 기본) + user_plain
         vehicle.yaml        # system + user
-        query_parser.yaml   # search query parser (core/ir search only)
-        vqa.yaml            # search VQA re-rank system prompt
-        retry.yaml          # schema-failure retry template
+        query_parser.yaml   # 검색 쿼리 파서 (core/ir 검색 전용 — lab 미사용)
+        vqa.yaml            # 검색 VQA 재랭크 system (user는 동적 조립)
+        retry.yaml          # 스키마 실패 재시도 템플릿
 
-This module only LOADS those files and COMPOSES messages (enum injection via
-plr_schema/vocab, CoT toggle, dynamic VQA clauses). Response parsing lives in
-plr_parse.py (re-exported here for backward compatibility). The legacy JSON
-prompt path (v0.4) was removed 2026-07 — YAML is the only wire format.
+이 모듈은 그 파일들을 로드해서 메시지로 조합만 한다:
+  yaml 템플릿 + vocab enum 주입(_commit_enum 필터) + CoT 토글 → messages
+응답 파싱은 plr_parse.py로 분리됐고 여기서 re-export만 한다(하위호환).
+레거시 JSON 경로(v0.4)는 2026-07 제거 — YAML이 유일한 wire format.
+
+입력/출력 예)
+  build_plr_messages("person")
+  → [{"role":"system","content":"Extract visual attributes…"},
+     {"role":"user","content":[{"type":"image"},
+                               {"type":"text","text":"Image: person crop…"}]}]
+  (이미지는 gemma_backend.generate(pil, messages)가 첨부)
 """
 
 from __future__ import annotations
@@ -107,22 +114,32 @@ _P_RETRY = _load_function(PROMPT_VERSION_YAML_COT, "retry")
 
 
 def _commit_enum(values) -> tuple[str, ...]:
-    """Enum values as offered to the model — the `*unknown*` escape hatches are
-    excluded (plr_v1.5_cot forced-commit contract). The full enums in
-    plr_schema KEEP their unknown members: they are still needed to read
-    pre-v1.5 indexed rows and as defensive normalisation targets."""
+    """모델에게 "제시되는" enum — `*unknown*` 도피처를 제외한다
+    (plr_v1.5_cot 강제커밋 계약). plr_schema의 전체 enum은 unknown 멤버를
+    유지한다: v1.5 이전 인덱스 행 판독 + 방어적 정규화 대상으로 여전히 필요.
+
+    입력/출력 예) _commit_enum(("long","short","unknown")) → ("long","short")
+    """
     return tuple(v for v in values if "unknown" not in v)
 
 
 def _plr_with_reason() -> bool:
-    """CoT toggle: gender_reason / age_reason lines before the labels.
-    Via IR_PLR_REASON=on (off by default — extra tokens cost ~35% latency)."""
+    """CoT 토글 — IR_PLR_REASON=on이면 라벨보다 먼저 gender_reason/age_reason
+    근거 줄을 요구하는 user_cot 템플릿 사용 (기본 off — 토큰 ~35% 추가).
+    reason-before-label이 14크롭 리뷰에서 1/14→13/14를 만든 CoT 핵심."""
     import os
     v = os.environ.get("IR_PLR_REASON", "off").strip().lower()
     return v in {"on", "true", "1", "yes"}
 
 
 def plr_yaml_user_prompt_person(with_reason: bool = False) -> str:
+    """person.yaml 템플릿의 {colors} 등 자리에 vocab enum(커밋 필터 적용)을
+    주입해 최종 user 프롬프트 문자열을 만든다.
+
+    입력/출력 예) plr_yaml_user_prompt_person(True)
+      → "Image: person crop. The TARGET subject is highlighted…" (68줄 문자열,
+         '- color: black, dark_gray, …' 주입 완료 상태)
+    """
     template = _P_PERSON["user_cot"] if with_reason else _P_PERSON["user_plain"]
     return template.rstrip("\n").format(
         colors=", ".join(_commit_enum(COLOR_ENUM)),
@@ -143,10 +160,11 @@ def plr_yaml_user_prompt_vehicle() -> str:
 
 
 def build_plr_messages(object_hint: str = "person") -> list[dict[str, Any]]:
-    """Build chat messages for one PLR call (YAML wire format).
+    """PLR 1회 호출용 chat messages 조합 (YAML wire format).
 
-    object_hint: 'person' or 'vehicle' — selects the function file.
-    The image is appended by gemma_backend.generate(pil, messages).
+    object_hint: 'person' | 'vehicle' — 어느 기능 파일을 쓸지 선택.
+    이미지는 여기서 넣지 않는다 — gemma_backend.generate(pil, messages)가
+    {"type":"image"} 자리에 첨부. 출력 shape은 모듈 docstring의 예 참고.
     """
     if object_hint == "vehicle":
         sys_text = _P_VEHICLE["system"].rstrip("\n")
@@ -169,14 +187,18 @@ def build_plr_messages(object_hint: str = "person") -> list[dict[str, Any]]:
 def build_freeform_vqa_messages(
     residue: list[dict[str, Any]] | list[str] | str,
 ) -> list[dict[str, Any]]:
-    """Build chat messages for a single yes/no VQA call (search re-rank —
-    core/ir only). The system prompt comes from vqa.yaml; the user question
-    is composed dynamically from the residue items.
+    """검색 VQA 재랭크용 yes/no 질문 1회분 조합 (core/ir 검색 전용 — lab 미사용).
+    system은 vqa.yaml에서, user 질문은 residue 항목들로 동적 조립.
 
-    Residue item fields: subject / attribute_ko / attribute_en / is_negative
-    (qp_v0.5 {subject, attribute} and legacy bare strings are upgraded).
-    Output contract: max_tokens=4, temperature=0.0; anything but a clear
-    "no" is treated as "yes" (recall-preferring).
+    residue 항목: subject / attribute_ko / attribute_en / is_negative
+    (구형 {subject, attribute}·bare 문자열도 승격 수용).
+    출력 계약: max_tokens=4, temperature=0.0; 명확한 "no"가 아니면 전부
+    "yes" 취급 (recall 우선).
+
+    입력/출력 예) [{"subject":"bag","attribute_ko":"호피무늬",
+                   "attribute_en":"leopard print","is_negative":False}]
+      → user: "Does this image satisfy ALL of the following: the bag clearly
+         shows leopard print (Korean: "호피무늬")? Answer yes or no."
     """
     pos_clauses: list[str] = []
     neg_clauses: list[str] = []
@@ -236,8 +258,9 @@ def build_freeform_vqa_messages(
 def build_plr_retry_messages(
     object_hint: str, original_response: str, error_reason: str
 ) -> list[dict[str, Any]]:
-    """Retry messages when the first PLR response fails parse/schema —
-    template from retry.yaml, appended to the base messages."""
+    """첫 응답이 파싱/스키마 실패했을 때의 재시도 메시지 — retry.yaml 템플릿에
+    실패 사유와 원문(500자 절단)을 채워 기본 메시지 뒤에 덧붙인다.
+    (오류 처리용 1회 — 정상 흐름의 "크롭당 1회 호출" 계약과 별개.)"""
     retry_text = _P_RETRY["user"].rstrip("\n").format(
         error_reason=error_reason,
         original_response=original_response[:500],

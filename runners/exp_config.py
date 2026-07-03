@@ -1,4 +1,12 @@
-"""exp_config — an EXPERIMENT PARAMETER CONFIG: prompt × input knobs.
+"""exp_config — 실험 파라미터 config: 프롬프트 버전 × 인풋 knob의 "조합" 파일.
+
+한 줄 요약: configs/<이름>.yaml이 prompts/<버전>을 "참조"하고 knob(enum 축소·
+마커·샘플링)을 얹는다 — 같은 프롬프트 × N조합 = 파일 N개, 템플릿 복사 0.
+`lab run --version <이름>`이 해석하고 ledger에 그 이름이 찍힌다.
+enum 오버라이드는 축소(subset)만 허용 — 파서가 어휘를 강제하므로 확장은
+schema/vocab.yaml 편집이 정식 경로 (아래 _validate_enum_overrides 참고).
+
+(원문) an EXPERIMENT PARAMETER CONFIG: prompt × input knobs.
 
 `prompts/<V>.yaml` is a pure PROMPT version (templates only).
 `configs/<name>.yaml` COMPOSES an experiment by referencing each component,

@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Golden-set eval for any PLR attribute (loop-engineering C2/C3).
+"""골든셋 채점기 — predictions.jsonl × labels.jsonl 조인 → 지표 + ledger.
+
+산출 지표: accuracy · 클래스별 recall/precision/F1(+macro) · confusion ·
+bias(예: female→male 오분류율) · pred_unknown(강제커밋 준수도) ·
+margin/quality split(오답이 저신뢰/저품질에 몰리는가 = 캘리브레이션).
+라벨 정책: label=="unknown"(사람도 판별 불가)은 채점에서 제외하고
+n_label_unknown으로 별도 보고 — 강제커밋 모델에 채점 불가 크롭으로
+벌점을 주지 않기 위함. 이전 버전과의 Δ를 출력하고 ledger에 append.
+
+(원문) Golden-set eval for any PLR attribute (loop-engineering C2/C3).
 
 Joins stored model predictions (predictions.jsonl) with human ground-truth
 (labels.jsonl) for one attribute (gender / vehicle_type / military / ...),
@@ -42,7 +51,15 @@ def _prompt_hash() -> str:
 def _signal_stats(
     vals: dict, eval_ids: list, is_correct: dict, threshold: float,
 ) -> dict | None:
-    """Accuracy split by a per-crop signal (model margin or crop quality).
+    """크롭별 신호(margin/quality) 구간별 accuracy — 캘리브레이션 검증.
+    오답이 저신호 구간에 몰리면 신호가 유효(런타임 필터로 활용 가능),
+    high/low accuracy가 같으면 노이즈.
+
+    입력/출력 예) margin {a:0.9(정답),b:0.2(오답)}, threshold 0.7
+      → {"high":{"n":1,"accuracy":1.0}, "low":{"n":1,"accuracy":0.0},
+         "mean_correct":0.9, "mean_wrong":0.2, …}
+
+    (원문) Accuracy split by a per-crop signal (model margin or crop quality).
 
     plr_v1.5_cot replaced the unknown escape hatch with "commit + margin",
     so eval must verify the signal is informative: if low-margin /

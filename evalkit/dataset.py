@@ -1,4 +1,11 @@
-"""Dataset — a selectable golden-set directory for the PLR lab.
+"""Dataset — 선택 가능한 골든셋 디렉터리 래퍼 + 속성 스펙 리졸버.
+
+구조는 고정(crops/+labels.jsonl+manifest.yaml), 라벨 집합은 작성자의 것:
+manifest가 labels/pred_path/margin_path/bias_pair/object_type_hint를
+선언하면 커스텀 속성이 그대로 동작하고, gender/vehicle_type/military는
+내장 프리셋(PRESET_SPECS — 선언 불필요한 참고 예시)이다.
+
+(원문) a selectable golden-set directory for the PLR lab.
 
 A dataset directory is a self-describing bundle of the files the eval cycle
 already uses, so the existing ``eval/golden/<attribute>/`` layout is itself a
@@ -158,10 +165,12 @@ PRESET_SPECS: dict[str, dict[str, Any]] = {
 
 
 def resolve_json_path(data: Any, dotted: str) -> Any:
-    """Resolve a dotted path with optional [idx] segments against nested
-    dicts/lists: "attributes.equipment[0].type" -> data["attributes"]
-    ["equipment"][0]["type"]. Returns None on any missing step (defensive:
-    model output may omit fields)."""
+    """점표기+[인덱스] 경로를 중첩 dict/list에 적용 — manifest pred_path의 해석기.
+    누락 단계는 None (모델 출력이 필드를 빼먹어도 무예외).
+
+    입력/출력 예) resolve_json_path(plr_json, "attributes.equipment[0].type")
+      → "helmet"   /   없는 경로 → None
+    """
     cur = data
     for raw in dotted.split("."):
         seg = raw

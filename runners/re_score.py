@@ -1,9 +1,14 @@
-"""Lab runner: re-score a golden attribute set with a mock or real model.
+"""lab 러너 — 골든셋을 (mock 또는 실제) 모델로 재채점하는 크롭 루프.
 
-Besides predictions.jsonl, re_score also writes `attributes.jsonl` (one line
-per obj_id: {"obj_id": ..., "plr_json": {...}}) — the full PLR output per
-crop. It is the raw material for per-slot analysis (e.g. unknown-rate,
-margin distributions) beyond the single evaluated attribute.
+크롭마다: quality 스코어 측정(게이팅 아님) → run_plr 1회 → 스펙 기반
+pred/margin 추출 → 기록. 산출물 3형제:
+  predictions.jsonl   {"obj_id","pred","reason","margin","quality"} — 채점 뷰
+  attributes.jsonl    {"obj_id","plr_json"}  — 전체 슬롯 (per-slot 분석 원료)
+  raw_responses.jsonl {"obj_id","raw",토큰수} — 모델 원문 + 비용 (증거/비용분석)
+
+(원문 설명)
+Besides predictions.jsonl, re_score also writes `attributes.jsonl` — the full
+PLR output per crop, raw material for per-slot analysis.
 
 No DB / redis / gemma_backend is imported at module level. The only heavy
 dependency at import time is PIL. The model is injected by the caller
@@ -35,8 +40,9 @@ from PIL import Image
 
 
 def _extract_reason(attribute: str, plr_json: dict[str, Any]) -> str:
-    """Human-readable evidence cue for the prediction. Only the gender preset
-    prompt emits one (gender_reason); other attributes return ""."""
+    """예측의 근거 문구 추출 — gender 프리셋만 프롬프트가 gender_reason을
+    emit하므로 그 외 속성은 "".
+    예) → "broad shoulders, dark hair" """
     if attribute != "gender":
         return ""
     reason = ((plr_json.get("attributes") or {}).get("gender_scores") or {}).get("reason") or ""
@@ -46,7 +52,12 @@ def _extract_reason(attribute: str, plr_json: dict[str, Any]) -> str:
 
 
 class _RawCapture:
-    """Model wrapper that records each call's raw response + token usage.
+    """모델 래퍼 — 호출마다 원문 응답 + 토큰 사용량을 기록하는 스파이.
+    (Model 프로토콜이 str만 반환해 raw가 run_plr 안에서 버려지므로, parity
+    파일(plr_core)을 건드리지 않고 여기서 가로챈다. 정확 토큰 수는
+    LabGemmaModel.last_result에서; 없으면(mock) chars/4 추정 + exact=false 표기.)
+
+    Model wrapper that records each call's raw response + token usage.
 
     The Model protocol returns only the raw string, so raw text and token
     counts would otherwise be discarded inside run_plr. Wrapping here keeps

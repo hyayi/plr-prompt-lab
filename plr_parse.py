@@ -1,9 +1,16 @@
-"""plr_parse — PLR response parsing + normalisation (split from plr_prompts).
+"""plr_parse — PLR 응답 파싱 + 정규화 (plr_prompts에서 분리된 "아웃풋 절반").
 
-Turns the model's raw output (YAML primary; JSON for the legacy path and the
-query-parser responses) back into the strict plr_schema shape. Every slot is
-normalised onto the schema vocabulary — this file is the OUTPUT half of the
-input/output parity surface (plr_prompts builds the input).
+모델이 뱉은 자유 텍스트(주 포맷 YAML; JSON은 검색 쿼리파서 응답용)를
+plr_schema 형태의 구조화 dict로 되돌린다. 모든 슬롯이 schema 어휘로 강제
+정규화된다 — 그래서 이 파일이 인풋/아웃풋 parity 표면의 아웃풋 쪽이다
+(인풋 쪽은 plr_prompts).
+
+입력/출력 예)
+  parse_plr_response("target: person\ngender: female\nupper:\n  color: crimson…")
+  → {"object_type":"person","attributes":{
+       "gender_scores":{"selected":"female","decision_margin":0.85,…},
+       "upper_clothing":{"color_topk":[{"label":"gray",…}], …},  ← crimson→gray 강제
+       …}}
 """
 
 from __future__ import annotations
@@ -75,9 +82,9 @@ def _extract_json_block(text: str) -> str:
 
 
 def parse_plr_json(raw: str) -> dict[str, Any]:
-    """Parse a (possibly slightly malformed) JSON string into a dict.
-
-    Raises ValueError if parsing ultimately fails.
+    """(다소 깨진) JSON 문자열 → dict. 마크다운 펜스/앞머리 프로즈/트레일링
+    콤마를 관용 처리. 현재 소비자는 core/ir 검색 쿼리파서의 응답(JSON).
+    최종 실패 시 ValueError (→ 호출부 재시도/폴백 트리거).
     """
     if not raw:
         raise ValueError("empty response")
@@ -134,11 +141,14 @@ def _trim_to_yaml(raw: str) -> str:
 def _scores_dict(
     enum: tuple[str, ...], selected: str, margin: float, default: str
 ) -> dict[str, Any]:
-    """Build the *_scores shape that scoring.py expects, from a single
-    selected label + a margin. We assign 1.0 to the selected enum value,
-    0.0 to the others — scoring already weights by `decision_margin` to
-    soften low-confidence rows, so the distribution itself is just a
-    placeholder."""
+    """선택 라벨 1개 + margin → scoring이 기대하는 *_scores dict.
+    선택값에 1.0, 나머지에 0.0을 부여 — 분포 자체는 플레이스홀더고
+    저신뢰 완화는 decision_margin이 담당한다.
+
+    입력/출력 예) _scores_dict(("male","female"), "male", 0.9, "female")
+      → {"male":1.0, "female":0.0, "selected":"male", "decision_margin":0.9}
+    enum 밖 selected는 default로 강제 (이것이 "확장은 config로 불가"의 근거).
+    """
     sel = (selected or "").strip().lower()
     if sel not in {e.lower() for e in enum}:
         sel = default
@@ -154,24 +164,27 @@ def _topk_one(label: str, fallback: str) -> list[dict[str, Any]]:
 
 
 def _norm_sleeve(value: str) -> str:
-    """Coerce the new upper.sleeve field to {long|short|unknown}."""
+    """upper.sleeve 값을 {long|short|unknown}으로 강제.
+    예) "LONG "→"long", "rolled-up"→"unknown" (미등록→unknown 방어)."""
     s = (value or "").strip().lower()
     return s if s in {"long", "short"} else "unknown"
 
 
 def _norm_military(value: str) -> str:
-    """Coerce the plr_v1.4_cot `military` field to {military|civilian|unknown}.
-    Defaults to 'unknown' when absent or out of enum (defensive)."""
+    """military 값을 MILITARY_ENUM으로 강제. 없거나 enum 밖이면 'unknown'
+    (방어적 — v1.5 프롬프트는 unknown을 요구하지 않지만 파서는 관용)."""
     s = (value or "").strip().lower()
     return s if s in {m.lower() for m in MILITARY_ENUM} else "unknown"
 
 
 def parse_plr_yaml(raw: str, hint: str = "person") -> dict[str, Any]:
-    """Parse a YAML-formatted PLR response into the same dict shape that
-    plr_schema.PLR_PERSON_SCHEMA / PLR_VEHICLE_SCHEMA + scoring.py and
-    template_caption.py expect. Falls back to a flat key:value parser
-    if PyYAML errors out, then to defaults — never raises for content,
-    only for an empty string."""
+    """YAML 형식 PLR 응답 → PERSON/VEHICLE_SCHEMA 형태의 dict.
+
+    관용 계층 3단: ① 정상 YAML 파싱 → ② PyYAML 실패 시 "key: value" 평면
+    라인 파서(모델이 들여쓰기를 잃어도 회수) → ③ 필드 누락 시 default.
+    내용 때문에 raise하지 않는다 — 빈 문자열만 예외.
+    내부 g()/g_margin()이 중첩·평면·점표기("upper.color") 표기를 모두 수용.
+    """
     if not raw or not raw.strip():
         raise ValueError("empty response")
 
@@ -331,7 +344,8 @@ def parse_plr_yaml(raw: str, hint: str = "person") -> dict[str, Any]:
 def parse_plr_response(
     raw: str, hint: str = "person", *, fmt: str | None = None
 ) -> dict[str, Any]:
-    """Dispatch to the right parser based on IR_PLR_FORMAT (or override)."""
+    """파서 진입점 — run_plr이 크롭마다 호출. 기본 YAML 파서로 보내고,
+    fmt="json" 명시 시에만 JSON 파서 (레거시 응답 판독용)."""
     import os
     chosen = (fmt or os.environ.get("IR_PLR_FORMAT", "yaml")).strip().lower()
     if chosen == "yaml":
@@ -375,12 +389,13 @@ _TOPK_FALLBACKS: dict[str, list[dict[str, Any]]] = {
 def _coerce_topk_labels(
     arr: list[Any], enum: set[str], fallback: str
 ) -> list[dict[str, Any]]:
-    """Coerce each topk entry's label to be inside enum, otherwise to fallback.
+    """topk 배열의 각 label을 enum 안으로 강제 — enum 밖이면 fallback으로 교체.
 
-    Gemma routinely emits a topk array shaped correctly (label + score) but with
-    `'unknown'` or a near-synonym that isn't in the strict enum. Without this
-    step every such row drops into the DLQ even though the surrounding fields
-    are usable.
+    Gemma가 shape은 맞는데 유사어를 넣는 일이 흔해서, 이 단계가 없으면
+    주변 필드가 멀쩡한 행이 통째로 DLQ에 빠진다.
+
+    입력/출력 예) [{"label":"crimson","score":0.9}], color_set, "gray"
+      → [{"label":"gray","score":0.9}]   ← "config enum 확장 불가"의 실측 근거
     """
     out = []
     for item in arr:
@@ -394,7 +409,11 @@ def _coerce_topk_labels(
 
 
 def _normalize_plr_json(data: dict[str, Any]) -> dict[str, Any]:
-    """Coerce common Gemma deviations into the strict schema."""
+    """파싱 직후·검증 직전의 최종 정규화 — Gemma의 흔한 일탈을 스키마 안으로.
+    ① object_type 유사어(car→vehicle, pedestrian→person)
+    ② *_scores.selected의 'unknown' → 슬롯별 폴백
+    ③ 비거나 enum 밖인 *_topk → 플레이스홀더/강제 교체
+    ④ military 3값 강제 ⑤ equipment type 밖 값 → other_equipment"""
     if not isinstance(data, dict):
         return data
 

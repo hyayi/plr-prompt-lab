@@ -1,4 +1,12 @@
-"""provenance — stable content hashes of the active prompt surface.
+"""provenance — "이 실험 결과는 정확히 이 인풋 상태에서 나왔다"의 보증 장치.
+
+prompt_hash(): 인풋 표면 전체(prompts/**·schema/*.yaml·configs/*.yaml·
+plr_prompts/plr_parse/plr_core/plr_schema/preprocess.py)의 sha256 접두 —
+ledger의 모든 기록에 찍혀서, knob 하나만 바꿔도 다른 해시가 남는다.
+read_seed_hash()/warn_stale_seed(): SEED.md의 core/ir 기준 해시로
+"lab 측정이 어느 운영 시점 기준인지"를 추적 (다르면 stale 경고).
+
+(원문) stable content hashes of the active prompt surface.
 
 The "prompt surface" is the same true-surface set that ``lab port`` diffs
 against core/ir: prompts/*.yaml + schema/*.yaml (declarative vocabulary) +
