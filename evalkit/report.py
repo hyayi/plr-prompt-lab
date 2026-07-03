@@ -42,8 +42,6 @@ _SVG_NS = "http://www.w3.org/2000/svg"
 # Section marker ids (also used as anchors and asserted by tests).
 SECTION_HEADER = "section-header"
 SECTION_TREND = "section-trend"
-SECTION_MATRIX = "section-matrix"
-SECTION_PROMPT_CHANGE = "section-prompt-change"
 
 
 # =====================================================================
@@ -265,8 +263,8 @@ def _build_summary_table(records: list[dict], title: str = "전체 실험 비교
         return ""
     out = [_CMP_CSS, f"<h2>{html.escape(title)}</h2>",
            '<table class="cmp"><tr><th>attribute</th><th>version</th><th>model</th>'
-           '<th>dataset</th><th>n</th><th>accuracy</th><th>macro F1</th>'
-           '<th>bias</th><th>pred unknown</th></tr>']
+           '<th>pipeline</th><th>dataset</th><th>n</th><th>accuracy</th><th>macro F1</th>'
+           '<th>bias</th><th>pred unknown</th><th>prompt</th><th>date</th></tr>']
 
     def _m(r, k):
         v = r.get(k)
@@ -282,12 +280,15 @@ def _build_summary_table(records: list[dict], title: str = "전체 실험 비교
             f"<td>{html.escape(str(r.get('attribute') or ''))}</td>"
             f"<td>{html.escape(str(r.get('version') or ''))}</td>"
             f"<td>{html.escape(str(r.get('model') or ''))}</td>"
+            f"<td>{html.escape(str(r.get('pipeline') or ''))}</td>"
             f"<td>{html.escape(ds)}</td>"
             f"<td>{r.get('n') if r.get('n') is not None else r.get('n_queries', '')}</td>"
             f"<td>{_m(r, 'accuracy')}</td>"
             f"<td>{_m(r, 'macro_f1')}</td>"
             f"<td>{_fmt(bias['rate']) if isinstance(bias.get('rate'), (int, float)) else '&mdash;'}</td>"
             f"<td>{_fmt(pu['rate']) if isinstance(pu.get('rate'), (int, float)) else '&mdash;'}</td>"
+            f"<td>{html.escape(str(r.get('prompt_hash') or '')[:8]) or '&mdash;'}</td>"
+            f"<td>{html.escape(str(r.get('date') or '')[:10]) or '&mdash;'}</td>"
             "</tr>")
     out.append("</table>")
     return "\n".join(out)
@@ -416,158 +417,6 @@ def _build_trends(records: list[dict]) -> str:
     )
 
 
-def _build_matrix(records: list[dict]) -> str:
-    """model × prompt(version) heatmap of the primary metric.
-
-    Averages the metric when multiple records share a (model, version) cell.
-    """
-    cells: dict[tuple[str, str], list[float]] = {}
-    for r in records:
-        m = _primary_metric(r)
-        if m is None:
-            continue
-        model, _pipeline = _combo(r)
-        version = str(r.get("version", "unknown"))
-        cells.setdefault((model, version), []).append(m)
-
-    if not cells:
-        return (
-            f'<section id="{SECTION_MATRIX}">'
-            f"<h2>Model × Prompt Matrix</h2>"
-            f'<p class="empty">No metric data for a matrix.</p>'
-            f"</section>"
-        )
-
-    models = sorted({m for m, _v in cells})
-    versions = sorted({v for _m, v in cells})
-
-    head = "".join(f"<th>{html.escape(v)}</th>" for v in versions)
-    body_rows: list[str] = []
-    for model in models:
-        tds: list[str] = []
-        for v in versions:
-            vals = cells.get((model, v))
-            if not vals:
-                tds.append('<td class="cell blank">&nbsp;</td>')
-                continue
-            avg = sum(vals) / len(vals)
-            color = _heat_color(avg)
-            tds.append(
-                f'<td class="cell" style="background-color:{color}" '
-                f'title="{html.escape(model)} / {html.escape(v)}: {avg:.4f}">'
-                f"{avg:.3f}</td>"
-            )
-        body_rows.append(
-            f"<tr><th>{html.escape(model)}</th>{''.join(tds)}</tr>"
-        )
-
-    table = (
-        f'<table class="matrix"><thead><tr><th>model \\ prompt</th>{head}</tr>'
-        f"</thead><tbody>{''.join(body_rows)}</tbody></table>"
-    )
-    legend = (
-        '<div class="heat-legend">'
-        '<span>low</span>'
-        f'<span class="swatch" style="background:{_heat_color(0.0)}"></span>'
-        f'<span class="swatch" style="background:{_heat_color(0.5)}"></span>'
-        f'<span class="swatch" style="background:{_heat_color(1.0)}"></span>'
-        '<span>high</span></div>'
-    )
-    return (
-        f'<section id="{SECTION_MATRIX}">'
-        f"<h2>Model × Prompt Matrix</h2>"
-        f"<p>Metric: accuracy (plr) / recall@k (search), averaged per cell. "
-        f"Blank = no record.</p>"
-        f"{legend}{table}"
-        f"</section>"
-    )
-
-
-def _build_prompt_change(records: list[dict]) -> str:
-    """For consecutive same-attribute records where prompt_hash/version changed,
-    show the metric Δ alongside the transition (which change → which delta)."""
-    by_attr: dict[str, list[dict]] = {}
-    for r in records:
-        by_attr.setdefault(r.get("attribute", "unknown"), []).append(r)
-
-    rows: list[str] = []
-    for attr in sorted(by_attr):
-        recs = sorted(
-            by_attr[attr],
-            key=lambda r: (str(r.get("date", "")), str(r.get("version", ""))),
-        )
-        for prev, cur in zip(recs, recs[1:]):
-            prev_hash = str(prev.get("prompt_hash", "") or "")
-            cur_hash = str(cur.get("prompt_hash", "") or "")
-            prev_ver = str(prev.get("version", "") or "?")
-            cur_ver = str(cur.get("version", "") or "?")
-            hash_changed = prev_hash != cur_hash and (prev_hash or cur_hash)
-            ver_changed = prev_ver != cur_ver
-            if not (hash_changed or ver_changed):
-                continue  # nothing changed on the prompt surface
-
-            pm, cm = _primary_metric(prev), _primary_metric(cur)
-            if pm is not None and cm is not None:
-                delta = cm - pm
-                delta_cls = (
-                    "up" if delta > 0 else "down" if delta < 0 else "flat"
-                )
-                delta_str = f"{delta:+.4f}"
-                metric_str = f"{pm:.4f} → {cm:.4f}"
-            else:
-                delta_cls = "flat"
-                delta_str = "n/a"
-                metric_str = "n/a"
-
-            # Bias Δ (when both records carry a bias rate).
-            pb, cb = _bias_rate(prev), _bias_rate(cur)
-            bias_str = f"{cb - pb:+.4f}" if pb is not None and cb is not None else "—"
-
-            def _short(h: str) -> str:
-                return h[:8] if h else "—"
-
-            change_kind = []
-            if ver_changed:
-                change_kind.append(f"{html.escape(prev_ver)}→{html.escape(cur_ver)}")
-            if hash_changed:
-                change_kind.append(
-                    f"hash {_short(prev_hash)}→{_short(cur_hash)}"
-                )
-            change_desc = " ; ".join(change_kind)
-
-            rows.append(
-                f"<tr>"
-                f"<td>{html.escape(attr)}</td>"
-                f"<td>{change_desc}</td>"
-                f'<td>{html.escape(metric_str)}</td>'
-                f'<td class="delta {delta_cls}">{delta_str}</td>'
-                f"<td>{bias_str}</td>"
-                f"</tr>"
-            )
-
-    if not rows:
-        inner = '<p class="empty">No prompt changes recorded.</p>'
-    else:
-        inner = (
-            '<table class="prompt-change">'
-            "<thead><tr>"
-            "<th>attribute</th><th>prompt change</th>"
-            "<th>metric</th><th>Δ metric</th><th>Δ bias</th>"
-            "</tr></thead><tbody>"
-            + "".join(rows)
-            + "</tbody></table>"
-        )
-    return (
-        f'<section id="{SECTION_PROMPT_CHANGE}">'
-        f"<h2>Prompt Change → Metric Δ</h2>"
-        f"<p>Consecutive records (per attribute) whose version or prompt_hash "
-        f"changed, with the resulting metric delta. Only ledger-derived "
-        f"transitions are shown.</p>"
-        f"{inner}"
-        f"</section>"
-    )
-
-
 # =====================================================================
 # CSS (inlined — no external stylesheet)
 # =====================================================================
@@ -625,11 +474,6 @@ def render_html(records: list[dict], compare_ledger: str | None = None) -> str:
             f"empty. Run an eval to populate it.</p></section>"
             f'<section id="{SECTION_TREND}"><h2>Performance Trends</h2>'
             f'<p class="empty">No trend data available.</p></section>'
-            f'<section id="{SECTION_MATRIX}"><h2>Model × Prompt Matrix</h2>'
-            f'<p class="empty">No metric data for a matrix.</p></section>'
-            f'<section id="{SECTION_PROMPT_CHANGE}">'
-            f"<h2>Prompt Change → Metric Δ</h2>"
-            f'<p class="empty">No prompt changes recorded.</p></section>'
         )
     else:
         body = (
@@ -639,9 +483,7 @@ def render_html(records: list[dict], compare_ledger: str | None = None) -> str:
                                     title=f"비교 대상 실험군 — {compare_ledger}")
                if compare_ledger else "")
             + _build_trends(records)
-            + _build_matrix(records)
             + _build_confusions(records)
-            + _build_prompt_change(records)
         )
 
     return (

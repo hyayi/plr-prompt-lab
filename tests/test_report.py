@@ -141,12 +141,13 @@ def test_build_report_creates_self_contained_html(tmp_path: Path) -> None:
     # --- key sections present by marker id ---
     assert 'id="section-header"' in text
     assert 'id="section-trend"' in text
-    assert 'id="section-matrix"' in text
-    assert 'id="section-prompt-change"' in text
+    # matrix/prompt-change 섹션은 2026-07-03 의도적으로 제거됨 (부재를 고정)
+    assert 'id="section-matrix"' not in text
+    assert 'id="section-prompt-change"' not in text
     # Human-readable markers too.
     assert "Performance Trends" in text
-    assert "Matrix" in text
-    assert "Prompt Change" in text
+    assert "Matrix" not in text  # 섹션 제거됨
+    assert "Prompt Change" not in text
 
     # --- charts are inline SVG (computed in Python) ---
     assert "<svg" in text and "<polyline" in text, "expected inline SVG charts"
@@ -157,10 +158,7 @@ def test_build_report_creates_self_contained_html(tmp_path: Path) -> None:
     # search recall value embedded (matrix cell rounds to 3 dp).
     assert "0.750" in text or "0.75" in text, "search recall not embedded"
 
-    # --- prompt-change transitions derived from the ledger ---
-    # gender v0.4 -> v1.3 delta = 0.84 - 0.72 = +0.12
-    assert "+0.1200" in text, "prompt-change Δ (+0.1200) not derived"
-    # version transition label present
+    # prompt-change 섹션 제거(2026-07-03) — 버전들은 요약표에 남는다
     assert "plr_v0.4" in text and "plr_v1.3_cot" in text
 
     # --- legacy record grouped under model 'unknown' in the matrix ---
@@ -185,7 +183,7 @@ def test_lab_report_cli_wiring(tmp_path: Path) -> None:
     assert exit_code == 0
     assert out.exists()
     text = out.read_text(encoding="utf-8")
-    assert 'id="section-matrix"' in text
+    assert 'id="section-matrix"' not in text
     assert not _http_refs_excluding_svg_ns(text)
 
 
@@ -210,8 +208,9 @@ def test_empty_ledger_produces_no_records_html(tmp_path: Path) -> None:
     # Still self-contained, still has all section markers.
     assert not _http_refs_excluding_svg_ns(text)
     assert 'id="section-trend"' in text
-    assert 'id="section-matrix"' in text
-    assert 'id="section-prompt-change"' in text
+    # matrix/prompt-change 섹션은 2026-07-03 의도적으로 제거됨 (부재를 고정)
+    assert 'id="section-matrix"' not in text
+    assert 'id="section-prompt-change"' not in text
 
 
 def test_missing_ledger_file_does_not_crash(tmp_path: Path) -> None:

@@ -239,7 +239,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     print(f"[run] re_score attribute={attribute!r} version={args.version!r} "
           f"model={model_name!r} dataset={str(ds_dir)!r}")
     meta = rs.re_score(
-        attribute, model, golden_dir=str(ds_dir), prompt_version=args.version
+        attribute, model, golden_dir=str(ds_dir),
+        prompt_version=args.version, model_name=model_name or "gemma"
     )
     print(f"[run] re_score done: {meta}")
     return 0
@@ -256,7 +257,7 @@ def _cmd_eval(args: argparse.Namespace) -> int:
 
     from evalkit.dataset import declared_attributes, resolve_dataset_dir
 
-    model_name = getattr(args, "model", "gemma")
+    model_name = getattr(args, "model", None)
 
     spec = importlib.util.spec_from_file_location(
         "run_eval",
@@ -308,8 +309,10 @@ def _cmd_eval(args: argparse.Namespace) -> int:
         orig_argv = sys.argv
         sys.argv = ["run_eval", "--attribute", attribute,
                     "--golden", str(ds_dir),
-                    "--model", model_name, "--pipeline", "plr",
+                    "--pipeline", "plr",
                     "--dataset", str(ds_dir)]
+        if model_name:
+            sys.argv += ["--model", model_name]
         if args.version:
             sys.argv += ["--version", args.version]
         if args.ledger:
@@ -505,8 +508,9 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="PLR attribute (gender | vehicle_type | military | "
                          "custom), comma list, or 'all' (= every declared attribute "
                          "that actually has labels; requires --dataset)")
-    ev.add_argument("--model", default="gemma",
-                    help="registry model name recorded in the ledger (default: gemma)")
+    ev.add_argument("--model", default=None,
+                    help="registry model name for the ledger (default: the model "
+                         "stamp re_score wrote into predictions.jsonl)")
     ev.add_argument("--version", default="plr_v1.5_cot",
                     help="PLR version tag")
     ev.add_argument("--ledger", default=None, help="ledger.jsonl path override")

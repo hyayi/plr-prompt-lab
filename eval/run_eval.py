@@ -123,8 +123,9 @@ def main() -> None:
                     help="path to core/ir repo (for stale-seed warning)")
     # Experiment-combination keys (P2-1). Optional/back-compat: default to the
     # historical (gemma + plr) combination; --dataset defaults to --golden.
-    ap.add_argument("--model", default="gemma",
-                    help="registry model name that produced predictions (default: gemma)")
+    ap.add_argument("--model", default=None,
+                    help="registry model name that produced predictions "
+                         "(default: the model stamp in predictions.jsonl)")
     ap.add_argument("--pipeline", default="plr",
                     help="pipeline name (default: plr)")
     ap.add_argument("--dataset", default=None,
@@ -157,6 +158,11 @@ def main() -> None:
     # 행의 attribute 스탬프가 요청 속성과 다르거나 파일이 없으면,
     # attributes.jsonl(크롭당 plr_json 전체 캐시)에서 pred/margin을 재추출한다
     # — 모델 1회 실행으로 라벨된 모든 속성을 평가할 수 있는 근거.
+    # 모델 이름: 명시 플래그 > re_score가 행에 남긴 스탬프 > "unspecified".
+    # (과거엔 기본값 "gemma"가 mock 실행에도 그대로 찍혔다 — 눈먼 스탬프 금지.)
+    model_stamps = {r.get("model") for r in pred_rows.values() if r.get("model")}
+    resolved_model = args.model or (sorted(model_stamps)[0] if model_stamps else "unspecified")
+
     stamped = {r.get("attribute") for r in pred_rows.values() if r.get("attribute")}
     if (not pred_rows) or (stamped and args.attribute not in stamped):
         if not os.path.exists(attrs_path):
@@ -329,7 +335,7 @@ def main() -> None:
         "gemma_repo": gemma_repo,
         # ---- Experiment-combination keys (P2-1) ----
         "dataset": args.dataset or gdir,
-        "model": args.model,
+        "model": resolved_model,
         "pipeline": args.pipeline,
         "prompt_hash": _prompt_hash(),
     }

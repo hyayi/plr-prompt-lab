@@ -110,6 +110,7 @@ def re_score(
     model: Any,
     golden_dir: str | None = None,
     prompt_version: str | None = None,
+    model_name: str | None = None,
 ) -> dict[str, Any]:
     """Re-score every object in the golden set for one attribute.
 
@@ -283,6 +284,9 @@ def re_score(
             # run_eval이 다른 속성 평가 시 attributes.jsonl 재추출로 전환하는 근거.
             "obj_id": obj_id, "attribute": attribute, "pred": pred,
             "reason": reason, "margin": margin, "quality": quality,
+            # model 스탬프: 어느 모델(registry 이름)의 출력인지 — run_eval이
+            # --model 미지정 시 이 값을 ledger에 쓴다 (눈먼 기본값 방지).
+            **({"model": model_name} if model_name else {}),
         })
         new_attrs.append({"obj_id": obj_id, "plr_json": plr_json})
 

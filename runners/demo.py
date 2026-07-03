@@ -166,7 +166,7 @@ def run_demo(lab_root: Path, keep_dir: bool = False) -> int:
     # ---- Version 1: MockModel predicts female (should score 1.0) ----
     print("Step 2/5  Re-score with MockModel v1 (predicts: female)")
     print("          [no GPU — MockModel returns canned PLR YAML]")
-    meta_v1 = rs.re_score("gender", MockModel(_MOCK_YAML_V1), golden_dir=str(demo_dir))
+    meta_v1 = rs.re_score("gender", MockModel(_MOCK_YAML_V1), golden_dir=str(demo_dir), model_name="mock")
     preds_v1 = _read_jsonl(demo_dir / "predictions.jsonl")
     print(f"          re_score wrote {meta_v1['n']} predictions")
     print(f"          sample: {preds_v1[0]}")
@@ -183,7 +183,7 @@ def run_demo(lab_root: Path, keep_dir: bool = False) -> int:
 
     # ---- Version 2: MockModel predicts male (should score 0.0) ----
     print("Step 4/5  Re-score with MockModel v2 (predicts: male) — to show a Δ")
-    meta_v2 = rs.re_score("gender", MockModel(_MOCK_YAML_V2), golden_dir=str(demo_dir))
+    meta_v2 = rs.re_score("gender", MockModel(_MOCK_YAML_V2), golden_dir=str(demo_dir), model_name="mock")
     preds_v2 = _read_jsonl(demo_dir / "predictions.jsonl")
     print(f"          re_score wrote {meta_v2['n']} predictions")
     print(f"          sample: {preds_v2[0]}")
