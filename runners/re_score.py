@@ -189,6 +189,10 @@ def re_score(
             "(see docs/DATASET_SPEC.md)."
         )
     object_type_hint = spec.get("object_type_hint") or "person"
+    # 사람/차량 혼합 데이터셋: labels.jsonl 행의 object_type이 크롭별 힌트
+    # (운영의 트래커 클래스 대응). 없으면 위 데이터셋 단위 힌트 폴백.
+    from evalkit.dataset import load_object_types
+    object_types = load_object_types(gdir)
 
     # Version-specific prompt wiring. Only when a real yaml-backed version is
     # requested do we build a per-version message builder; otherwise build_messages
@@ -258,7 +262,7 @@ def re_score(
             pil,
             SimpleNamespace(mode="normal_plr"),
             model,
-            object_type_hint=object_type_hint,
+            object_type_hint=object_types.get(obj_id, object_type_hint),
             build_messages=build_messages,
             _pre_marked=skip_marker,
         )

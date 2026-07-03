@@ -143,6 +143,31 @@ def load_labels(
     return out
 
 
+def load_object_types(dataset_dir: str | Path) -> dict[str, str]:
+    """labels.jsonl 행의 선택 필드 object_type → {obj_id: "person"|"vehicle"}.
+
+    사람/차량이 섞인 데이터셋의 크롭별 프롬프트 선택 근거 — 운영(core/ir)에서
+    트래커 클래스가 객체마다 힌트를 주는 것의 lab 대응물. 필드가 없는 행은
+    manifest/프리셋의 object_type_hint 폴백을 쓴다 (단일 종 데이터셋 무변경).
+
+    입력/출력 예) {"obj_id":"V1","object_type":"vehicle","labels":{...}}
+      → {"V1": "vehicle"}
+    """
+    path = Path(dataset_dir) / "labels.jsonl"
+    out: dict[str, str] = {}
+    if not path.exists():
+        return out
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            rec = json.loads(line)
+            oid, ot = rec.get("obj_id"), rec.get("object_type")
+            if oid is not None and isinstance(ot, str) and ot.strip():
+                out[str(oid)] = ot.strip().lower()
+    return out
+
+
 def declared_attributes(dataset_dir: str | Path) -> list[str]:
     """manifest가 선언한 평가 속성 목록 — `lab eval --attribute all`의 순회 대상.
 

@@ -146,6 +146,23 @@ One JSON object per line (UTF-8, no trailing comma). Blank lines are ignored.
 - manifest `attributes:`에 선언되지 않은 속성 키는 `validate-dataset`이
   **error**로 잡는다 (오타가 조용히 평가에서 빠지는 사고 방지).
 
+### Mixed person/vehicle datasets (`"object_type"` per row)
+
+사람과 차량 크롭이 한 데이터셋에 섞여 있으면, 행마다 `object_type`을 적어
+**크롭별로 어느 프롬프트(person/vehicle)를 쓸지** 지정한다 — 운영에서
+트래커 클래스가 객체마다 힌트를 주는 것의 lab 대응물이다:
+
+```json
+{"obj_id": "p1", "object_type": "person",  "labels": {"gender": "female"}}
+{"obj_id": "v1", "object_type": "vehicle", "labels": {"vehicle_type": "sedan"}}
+```
+
+- 허용값은 `person` | `vehicle` (그 외는 validation error).
+- 필드가 없는 행은 manifest/프리셋의 `object_type_hint` 폴백(데이터셋 단위) —
+  단일 종 데이터셋은 아무것도 바꿀 필요 없다.
+- 속성 라벨은 해당 종의 크롭에만 달면 된다: 위 예에서 v1에 gender 키가
+  없으므로 gender 평가에서 자연 제외된다.
+
 **`label: unknown` policy (forced-commit, plr_v1.5_cot)**: label a crop
 `unknown` ONLY when a human cannot decide the attribute from the crop
 (occlusion / extreme quality). Such crops are **excluded from

@@ -152,6 +152,63 @@ def test_validate_multi_attribute(tmp_path: Path) -> None:
     assert validate_dataset(bad, verbose=False) is False
 
 
+class _HintAwareModel:
+    """받은 프롬프트가 person용인지 vehicle용인지에 따라 다른 YAML을 반환하고,
+    어떤 종류를 받았는지 기록한다 — 크롭별 힌트 라우팅의 검증 장치."""
+
+    def __init__(self) -> None:
+        self.seen: list[str] = []
+
+    def generate(self, messages, image):  # noqa: ARG002
+        user_text = " ".join(
+            c.get("text", "") for m in messages
+            for c in (m["content"] if isinstance(m["content"], list) else [])
+        )
+        if "gender" in user_text:
+            self.seen.append("person")
+            return ("target: person\ngender: female\nage: adult\noutfit: two_piece\n"
+                    "upper:\n  color: black\n  type: jacket\n"
+                    "lower:\n  color: black\n  type: pants\naction: standing\n"
+                    "military: civilian\nmargins: {gender: 0.9}")
+        self.seen.append("vehicle")
+        return ("target: vehicle\nvehicle_type: sedan\ncolor: white\n"
+                "state: parked\nmilitary: civilian\nmargins: {vehicle_type: 0.9}")
+
+
+def test_mixed_dataset_routes_prompt_per_crop(tmp_path: Path) -> None:
+    """labels.jsonl 행의 object_type이 크롭별 person/vehicle 프롬프트를
+    결정해야 한다 (데이터셋 단위 힌트 일괄 적용이면 이 테스트가 죽는다)."""
+    from PIL import Image
+
+    from runners import re_score as rs
+
+    ds = tmp_path / "mixed"
+    (ds / "crops").mkdir(parents=True)
+    for oid in ("p1", "v1"):
+        Image.new("RGB", (100, 150), (120, 120, 120)).save(str(ds / "crops" / f"{oid}.jpg"))
+    (ds / "manifest.yaml").write_text(
+        "n: 2\ncreated: '2026-07-03'\nsource_note: test\n"
+        "attributes:\n  gender: {}\n  vehicle_type: {}\n",
+        encoding="utf-8",
+    )
+    _write_jsonl(ds / "labels.jsonl", [
+        {"obj_id": "p1", "object_type": "person", "labels": {"gender": "female"}},
+        {"obj_id": "v1", "object_type": "vehicle", "labels": {"vehicle_type": "sedan"}},
+    ])
+
+    model = _HintAwareModel()
+    # attribute=gender → 데이터셋 단위 힌트는 person이지만, v1 행의
+    # object_type=vehicle이 크롭 단위로 이겨야 한다.
+    rs.re_score("gender", model, golden_dir=str(ds))
+
+    assert sorted(model.seen) == ["person", "vehicle"], (
+        f"두 크롭이 서로 다른 프롬프트를 받아야 하는데: {model.seen}"
+    )
+    attrs = {json.loads(l)["obj_id"]: json.loads(l)["plr_json"]["object_type"]
+             for l in open(ds / "attributes.jsonl", encoding="utf-8")}
+    assert attrs == {"p1": "person", "v1": "vehicle"}
+
+
 def test_gallery_requires_attribute_when_ambiguous(tmp_path: Path) -> None:
     from evalkit.gallery import build_gallery
 

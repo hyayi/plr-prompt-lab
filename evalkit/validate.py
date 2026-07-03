@@ -168,6 +168,14 @@ def _check_labels(
                 line_errors += 1
                 continue
 
+            ot = rec.get("object_type")
+            if ot is not None and str(ot).strip().lower() not in ("person", "vehicle"):
+                report.error(
+                    f"labels.jsonl line {lineno}: object_type={ot!r} must be "
+                    f"'person' or 'vehicle' (per-crop prompt hint for mixed datasets)"
+                )
+                line_errors += 1
+
             multi = rec.get("labels")
             if isinstance(multi, dict):
                 if "obj_id" not in rec:
