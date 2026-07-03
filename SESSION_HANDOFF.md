@@ -129,6 +129,7 @@ python3 lab.py port --core-ir /home/ziovision/ziomilitary/core/ir   # read-only 
 - **`lab gallery --dataset D`**: 크롭-라벨 시각화 자체완결 HTML — base64 썸네일, pred vs label, CORRECT/WRONG 배지, margin/quality, **오답 우선·저margin 우선** 정렬, 클래스 필터.
 - **`lab report --compare LEDGER_B`**: 실험군 요약표 나란히 비교.
 - **`skills/improve-prompt/SKILL.md`**: 분석자→제안자→비판자→수정자→(반복)→판단자 6역할 루프(최대 3라운드, 판단자 합격 기준 명시). 근거 규칙: 모든 제안은 실제로 본 크롭 obj_id + 이미지 관찰 + 수치 인용 필수. 산출물 = 분석 리포트 + prompts/<신버전>.yaml 초안 + 측정가능한 예상효과 + 검증 experiment yaml.
+- **`skills/co-change/SKILL.md`**: 동행 수정 지침 — 표면(어휘/프롬프트/파서/스키마/전처리) 중 하나를 바꿀 때 같이 바꿔야 하는 것들의 매트릭스 + 공통 절차(byte-sync·양쪽 테스트·커밋) + 자동 가드 목록. **모든 표면 수정 전에 먼저 열 것** (sleeveless 유실·ca1a922가 존재 이유).
 - 테스트 83+α passed.
 
 ### 신뢰·품질 스코어 평가 활용 (2026-07-02)
