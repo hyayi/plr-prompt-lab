@@ -45,6 +45,25 @@ def test_surface_bundle_matches_surface_relpaths_and_hash(tmp_path: Path) -> Non
     assert prompt_hash(tmp_path) == prompt_hash(_LAB_ROOT)
 
 
+def test_connection_refused_gives_friendly_error(monkeypatch) -> None:
+    """서버가 안 떠 있을 때(URLError) raw 트레이스백 대신 원인 안내 SystemExit."""
+    import urllib.error
+    import urllib.request
+
+    import pytest
+
+    from runners import client as C
+
+    def _boom(*a, **k):
+        raise urllib.error.URLError("Connection refused")
+
+    monkeypatch.setattr(urllib.request, "urlopen", _boom)
+    with pytest.raises(SystemExit, match="서버 연결 실패"):
+        C._post("http://127.0.0.1:9/api/datasets", b"", "text/plain", "")
+    with pytest.raises(SystemExit, match="서버 연결 실패"):
+        C._get("http://127.0.0.1:9/api/runs/x", "")
+
+
 def test_multipart_body_parseable(tmp_path: Path) -> None:
     body, ctype = multipart_body({"a": "1"}, {"f": ("x.bin", b"BYTES", "application/octet-stream")})
     boundary = ctype.split("boundary=")[1]

@@ -40,6 +40,16 @@ def multipart_body(fields: dict[str, str],
     return out.getvalue(), f"multipart/form-data; boundary={boundary}"
 
 
+def _conn_refused_exit(url: str, exc: Exception) -> SystemExit:
+    """연결 실패(URLError)를 친절한 SystemExit으로 — raw 트레이스백 대신 원인 안내."""
+    return SystemExit(
+        f"서버 연결 실패: {url}\n"
+        f"  → 평가 서버가 떠 있는지, EVAL_SERVER_URL/--server 값이 맞는지 확인하세요.\n"
+        f"     (서버 기동: ~/plr-eval-server 에서 uvicorn ... --port 8890;  "
+        f"확인: curl <url>/health)\n"
+        f"  원인: {getattr(exc, 'reason', exc)}")
+
+
 def _post(url: str, body: bytes, content_type: str, token: str,
           method: str = "POST") -> dict:
     req = urllib.request.Request(url, data=body, method=method)
@@ -52,6 +62,8 @@ def _post(url: str, body: bytes, content_type: str, token: str,
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", errors="replace")
         raise SystemExit(f"server {e.code}: {detail}")
+    except urllib.error.URLError as e:
+        raise _conn_refused_exit(url, e)
 
 
 def targz_dir(src: Path, arcname: str) -> bytes:
@@ -111,8 +123,13 @@ def _get(url: str, token: str) -> bytes:
     req = urllib.request.Request(url, method="GET")
     if token:
         req.add_header("X-Auth-Token", token)
-    with urllib.request.urlopen(req) as resp:
-        return resp.read()
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return resp.read()
+    except urllib.error.HTTPError:
+        raise  # pull_artifacts가 부분 pull 보고를 위해 직접 처리
+    except urllib.error.URLError as e:
+        raise _conn_refused_exit(url, e)
 
 
 def pull_artifacts(server: str, run_id: str, out_dir: Path, token: str) -> list[str]:
