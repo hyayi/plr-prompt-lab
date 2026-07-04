@@ -154,6 +154,49 @@ def test_submit_pull_all_or_nothing(tmp_path: Path, monkeypatch) -> None:
         assert client.get("/api/runs/nope/report.html").status_code == 404
 
 
+def test_server_trusts_client_plr_validation(tmp_path: Path, monkeypatch) -> None:
+    """P2-1: 서버는 plr_json 시맨틱을 재검증하지 않는다(클라이언트 re_score 신뢰).
+    plr_schema.validate_plr 로는 부정이지만 구조가 온전한 attributes.jsonl 은 201 로
+    ingest 되고, 빈 파일은 여전히 422 로 거부된다."""
+    monkeypatch.setenv("EVAL_SERVER_DATA", str(tmp_path / "data"))
+    monkeypatch.setenv("EVAL_SERVER_TOKEN", "sekrit")
+    from server.app import app
+    from runners.client import build_surface_bundle, multipart_body, targz_dir
+
+    # validate_plr 이 거부하는 thin plr_json (age_group_scores 등 필수 누락)이지만
+    # obj_id+plr_json 구조는 온전 — 예전엔 서버가 422, 이제는 통과해야.
+    import plr_schema
+    thin = {"object_type": "person", "attributes": {"gender_scores": {"selected": "male"}}}
+    with pytest.raises(Exception):
+        plr_schema.validate_plr(thin)  # 전제: 이 plr_json 은 스키마 부정
+
+    local = _make_local_run(tmp_path / "local" / "trust_ds")
+    (local / "attributes.jsonl").write_text(
+        json.dumps({"obj_id": "a", "plr_json": thin}, ensure_ascii=False) + "\n"
+        + json.dumps({"obj_id": "b", "plr_json": thin}, ensure_ascii=False) + "\n")
+    bundle = build_surface_bundle(_LAB_ROOT)
+
+    def _files(attr_bytes: bytes) -> dict:
+        return {"attributes": ("attributes.jsonl", attr_bytes, "application/json"),
+                "surface": ("surface.tgz", bundle, "application/gzip"),
+                "provenance": ("run_provenance.json",
+                               (local / "run_provenance.json").read_bytes(), "application/json")}
+
+    with TestClient(app) as client:
+        _post_multipart(client, "/api/datasets", {"name": "trust_ds"},
+                        {"archive": ("d.tgz", targz_dir(local, "trust_ds"), "application/gzip")})
+        # ① 스키마-부정·구조-온전 → 201 ingest (서버 재검증 없음)
+        body, ctype = multipart_body({"dataset": "trust_ds", "version_label": "tv1"},
+                                     _files((local / "attributes.jsonl").read_bytes()))
+        r = client.post("/api/runs", content=body, headers=TOKEN | {"Content-Type": ctype})
+        assert r.status_code == 201, f"서버가 클라이언트 검증을 신뢰해야 함: {r.status_code} {r.text}"
+        # ② 빈 attributes.jsonl → 여전히 422 (구조 가드는 유지)
+        body, ctype = multipart_body({"dataset": "trust_ds", "version_label": "tv2"},
+                                     _files(b""))
+        r = client.post("/api/runs", content=body, headers=TOKEN | {"Content-Type": ctype})
+        assert r.status_code == 422, f"빈 파일은 거부돼야 함: {r.status_code}"
+
+
 def test_pull_artifacts_roundtrip_and_partial_cleanup(tmp_path: Path, monkeypatch) -> None:
     """pull_artifacts 자체의 all-or-nothing 계약(라우트가 아니라 클라이언트 로직):
     ① 3종 전부 성공 → out_dir에 착지  ② 중간 실패 → SystemExit + temp/out_dir 잔재 0."""

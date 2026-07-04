@@ -134,9 +134,11 @@ def test_hash_mismatch_flagged_not_rejected(client, dataset, tmp_path: Path) -> 
     assert r.json()["hash_verified"] is False
 
 
-def test_invalid_plr_json_rejected(client, dataset, tmp_path: Path) -> None:
+def test_structurally_broken_attributes_rejected(client, dataset, tmp_path: Path) -> None:
+    """P2-1: 서버는 plr_json *시맨틱*은 재검증하지 않지만(클라이언트 신뢰), 채점에
+    필요한 *구조*(obj_id+plr_json 키)는 지킨다. plr_json 키가 없는 행은 422."""
     bundle, _ = _make_bundle(tmp_path / "bundle-bad")
-    bad = json.dumps({"obj_id": "a", "plr_json": {"object_type": "person"}}).encode()
+    bad = json.dumps({"obj_id": "a", "object_type": "person"}).encode()  # plr_json 키 누락
     r = client.post("/api/runs", headers=TOKEN,
                     data={"dataset": "runs_ds", "version_label": "bad"},
                     files={"attributes": ("attributes.jsonl", bad, "application/json"),

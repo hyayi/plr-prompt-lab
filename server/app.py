@@ -239,10 +239,14 @@ async def correct_labels(
 from server.storage import new_run_id, read_json, surface_hash as _surface_hash  # noqa: E402
 
 
-def _validate_attributes_jsonl(path) -> int:
-    """행별 plr_json을 스키마 검증 — 형식 부정 차단. 행 수 반환."""
-    from plr_schema import validate_plr
+def _require_nonempty_attributes_jsonl(path) -> int:
+    """attributes.jsonl 구조 가드 — 각 행이 obj_id+plr_json 을 가진 JSON 인지만
+    확인하고 빈 파일을 거부. 행 수 반환.
 
+    plr_json 의 *시맨틱* 검증(스키마/어휘)은 클라이언트 re_score 가 쓰기 전에
+    plr_schema.validate_plr 로 fail-loud 수행한다(RE-003) — 서버는 그 검증을
+    신뢰하고 재검증하지 않는다(SPEC:41). 따라서 여기서 plr_schema 를 import 하지
+    않으며, 서버는 채점에 필요한 형식(파싱 가능·키 존재·비어있지 않음)만 본다."""
     n = 0
     with open(path, encoding="utf-8") as f:
         for lineno, line in enumerate(f, start=1):
@@ -250,7 +254,8 @@ def _validate_attributes_jsonl(path) -> int:
                 continue
             try:
                 rec = json.loads(line)
-                validate_plr(rec["plr_json"])
+                if "obj_id" not in rec or "plr_json" not in rec:
+                    raise KeyError("obj_id/plr_json 필드 누락")
             except Exception as exc:  # noqa: BLE001 — 첫 위반 지점을 그대로 보고
                 raise HTTPException(
                     422, f"attributes.jsonl line {lineno}: {exc}")
@@ -288,7 +293,7 @@ async def submit_run(
             await _save_upload(provenance, run_dir / "run_provenance.json")
             prov = read_json(run_dir / "run_provenance.json") or {}
 
-        _validate_attributes_jsonl(run_dir / "attributes.jsonl")
+        _require_nonempty_attributes_jsonl(run_dir / "attributes.jsonl")
 
         # 2) 표면 번들 해제 + 해시 재계산·대조 (run 시점 지문 vs 업로드 번들).
         #    업로드된 py는 저장·열람·diff 전용 — 여기서든 어디서든 절대
