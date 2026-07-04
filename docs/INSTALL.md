@@ -84,7 +84,9 @@ export IR_GEMMA_MAIN_FILE=gemma-4-E4B-it-Q4_0.gguf
 
 ```bash
 python3 lab.py run  -X plr_v1.5_cot --dataset datasets/my_test
-python3 lab.py eval -A all --dataset datasets/my_test   # gallery/report 자동 생성
+python3 lab.py dataset-push --dataset datasets/my_test  # 데이터셋을 평가 서버에 등록 (최초 1회)
+python3 lab.py submit --dataset my_test --run-dir datasets/my_test -X plr_v1.5_cot --pull
+# 서버 채점 → metrics.json + report.html + gallery.html → datasets/my_test/pulled/ 로 회수
 ```
 
 ---

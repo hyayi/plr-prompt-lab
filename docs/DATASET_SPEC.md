@@ -1,6 +1,6 @@
 # PLR Prompt Lab — 데이터셋 디렉터리 명세
 
-`lab validate-dataset` / `lab run` / `lab eval`이 요구하는 데이터셋
+`lab validate-dataset` / `lab run` / `lab submit`이 요구하는 데이터셋
 디렉터리 구조와 파일 스키마의 정의 문서다.
 
 기존 `eval/golden/<attribute>/` 디렉터리들 자체가 유효한 데이터셋이다 —
@@ -47,11 +47,11 @@ PLR 3속성(gender / vehicle_type / military)은 내장 프리셋 — 선언 없
 2. manifest — `examples/dataset_template/manifest.yaml` 복사 후 수정
 3. labels — `labels.jsonl` 직접 작성 또는 `lab label --dataset D ...`
    (사람도 판별 불가한 크롭 → `unknown`: 채점 제외, 별도 집계)
-4. `lab validate-dataset --dataset D` → 5. `lab run` → `lab eval`
-   (gallery.html/report.html 자동 생성 — 눈 검수는 gallery)
+4. `lab validate-dataset --dataset D` → 5. `lab run` → 6. `lab submit --pull`
+   (서버 채점 → pulled/gallery.html · pulled/report.html 반환 — 눈 검수는 gallery)
 
-`predictions.jsonl`과 `attributes.jsonl`은 `lab run`이 쓰고 `lab eval`이
-읽는다. (`queries.jsonl` 검색 데이터셋 종류는 2026-07 제거 — lab은
+`predictions.jsonl`과 `attributes.jsonl`은 `lab run`이 쓰고, `lab submit` 시
+서버가 읽어 채점한다. (`queries.jsonl` 검색 데이터셋 종류는 2026-07 제거 — lab은
 PLR 전용.)
 
 ---
@@ -90,10 +90,9 @@ prompt: "prompts/plr_v1.5_cot/"  # 프롬프트 경로 (기록용)
 
 같은 크롭셋에 여러 속성의 정답을 함께 라벨할 때는 단일 `attribute:` 대신
 속성별 스펙 맵을 선언한다. 모델 호출은 크롭당 1회뿐이고(`attributes.jsonl`에
-전체 plr_json 저장), `lab eval --attribute all -D <dir>`이 라벨이 실제로
-달린 속성 전부를 한 번에 채점한다 (선언만 되고 라벨이 없는 속성은
-skip+안내) — 속성별 예측은 `attributes.jsonl`에서 `pred_path`로
-재추출되므로 GPU 재실행이 없다.
+전체 plr_json 저장), `lab submit` 시 서버가 라벨이 실제로 달린 속성 전부를
+한 번에 채점한다 (선언만 되고 라벨이 없는 속성은 skip+안내) — 속성별 예측은
+`attributes.jsonl`에서 `pred_path`로 재추출되므로 GPU 재실행이 없다.
 
 ```yaml
 n: 150
@@ -164,10 +163,10 @@ attributes:
 
 **`label: unknown` 정책 (강제커밋, plr_v1.5_cot)**: 크롭에서 사람도 그
 속성을 판별할 수 없을 때(가림/극단적 저품질)**만** `unknown`으로 라벨한다.
-그런 크롭은 `lab eval`의 **accuracy/recall/bias/confusion에서 제외**된다 —
+그런 크롭은 서버 채점의 **accuracy/recall/bias/confusion에서 제외**된다 —
 강제커밋 프롬프트에서 모델은 어쨌든 답해야 하고, 그 답을 채점할 정답이
 없기 때문이다. `n_label_unknown`으로 별도 보고되고, 모델 자신의 unknown
-응답률은 `pred_unknown`으로 ledger에 추적된다.
+응답률은 `pred_unknown`으로 서버 metrics.json에 추적된다.
 지정은 `lab label --unknown <타일 id들>`.
 
 ---
@@ -216,20 +215,20 @@ construction_vehicle, vehicle_unknown
 {"obj_id": "1003", "attribute": "gender", "pred": "male", "reason": "broad shoulders", "margin": 0.8, "quality": 0.71}
 ```
 
-- `attribute` — 이 행이 어느 속성의 추출물인지 스탬프. `lab eval`이 다른
-  속성을 채점할 때 `attributes.jsonl` 재추출로 전환하는 근거.
+- `attribute` — 이 행이 어느 속성의 추출물인지 스탬프. 서버 채점 시 다른
+  속성을 평가할 때 `attributes.jsonl` 재추출로 전환하는 근거.
 - `margin` — 평가 속성에 대한 모델의 결정 확신도 (프롬프트의 `margins`
   블록에서; margin을 emit하지 않는 속성은 `null`). 강제커밋 체제에서
   제거된 `unknown` 도피처의 대체물.
 - `quality` — 크롭 품질 점수 [0,1] (quality_gate — **측정 전용**, 모델
   호출을 게이트하지 않는다).
 
-`lab eval`은 두 신호로 accuracy를 분할해(`margin_stats`/`quality_stats`)
+서버 채점은 두 신호로 accuracy를 분할해(`margin_stats`/`quality_stats`)
 오답이 저신호 구간에 몰리는지 검증한다. 두 필드는 옵션 — 없는 구파일도
 평가된다.
 
 이 파일이 `re_score`가 처리할 obj_id 집합의 씨앗이다. `lab run`이
-덮어쓰고 `lab eval`이 읽는다.
+덮어쓰고 `lab submit` 시 서버가 읽는다.
 
 ---
 

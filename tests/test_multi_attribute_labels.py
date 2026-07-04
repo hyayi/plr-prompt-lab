@@ -82,12 +82,6 @@ def _make_multi_dataset(base: Path) -> Path:
     return base
 
 
-def _run_eval(golden: Path, ledger: Path, attribute: str) -> dict:
-    """run_eval CLI 제거 후 score() 직접호출 (ledger 인자는 하위호환 무시)."""
-    from tests.scoring_helper import score_record
-    return score_record(golden, attribute)
-
-
 def test_load_labels_both_shapes(tmp_path: Path) -> None:
     _write_jsonl(tmp_path / "labels.jsonl", [
         {"obj_id": "x", "label": "male"},                       # legacy 단일
@@ -108,22 +102,6 @@ def test_declared_attributes_and_spec(tmp_path: Path) -> None:
     assert list(spec["labels"]) == ["helmet", "no_helmet"]
     # 프리셋 속성은 맵의 빈 dict로도 프리셋 스펙 유지
     assert attribute_spec(ds, "gender")["pred_path"] == "attributes.gender_scores.selected"
-
-
-def test_eval_second_attribute_extracts_from_attributes_jsonl(tmp_path: Path) -> None:
-    """predictions.jsonl은 gender 추출물뿐이지만 helmet 평가가 성립해야 한다
-    (모델 재실행 없이 attributes.jsonl 재추출)."""
-    ds = _make_multi_dataset(tmp_path / "ds")
-    ledger = tmp_path / "ledger.jsonl"
-
-    g = _run_eval(ds, ledger, "gender")
-    assert g["n"] == 2, "gender 미라벨 크롭 c는 조인에서 자연 제외"
-    assert g["accuracy"] == 1.0
-
-    h = _run_eval(ds, ledger, "helmet")
-    assert h["n"] == 3
-    # a,c: helmet 적중 / b: equipment 없음 → pred unknown → no_helmet 오답
-    assert h["accuracy"] == pytest.approx(2 / 3, abs=1e-4)
 
 
 def test_validate_multi_attribute(tmp_path: Path) -> None:
@@ -211,27 +189,3 @@ def test_mixed_dataset_routes_prompt_per_crop(tmp_path: Path) -> None:
     attrs = {json.loads(l)["obj_id"]: json.loads(l)["plr_json"]["object_type"]
              for l in open(ds / "attributes.jsonl", encoding="utf-8")}
     assert attrs == {"p1": "person", "v1": "vehicle"}
-
-
-def test_gallery_multi_attribute_tags_and_filters(tmp_path: Path) -> None:
-    """다속성 데이터셋의 gallery 기본값: 라벨된 속성 전부를 카드마다 태그로
-    그리고, 속성 체크박스 + AND/OR 오답 필터가 들어가야 한다."""
-    from evalkit.gallery import build_gallery
-
-    ds = _make_multi_dataset(tmp_path / "ds")
-
-    out = build_gallery(ds)  # -A 없이 → gender+helmet 둘 다
-    html = Path(out).read_text(encoding="utf-8")
-    assert "gender:" in html and "helmet:" in html, "속성별 태그가 있어야"
-    # 필터 기계: 속성 체크박스 + AND/OR 토글 + data-wrong 카드 속성
-    assert 'class="aflt" value="gender"' in html
-    assert 'class="aflt" value="helmet"' in html
-    assert "setMode('and'" in html and "setMode('or'" in html
-    assert 'data-wrong="' in html
-    # b는 equipment 없음 → helmet pred unknown → helmet 오답 카드가 존재
-    assert 'data-wrong="helmet"' in html
-
-    # 쉼표/단일 선택도 동작: helmet만 고르면 단일 모드(배지)로
-    out1 = build_gallery(ds, out_path=tmp_path / "g1.html", attribute="helmet")
-    html1 = Path(out1).read_text(encoding="utf-8")
-    assert "WRONG" in html1 and "CORRECT" in html1, "helmet 재추출 예측으로 배지가 그려져야"

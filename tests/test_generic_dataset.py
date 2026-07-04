@@ -82,9 +82,9 @@ def test_resolve_json_path() -> None:
     assert resolve_json_path(data, "attributes.nope.x") is None
 
 
-def test_custom_attribute_re_score_and_eval(tmp_path: Path) -> None:
-    """helmet dataset: re_score extracts pred via manifest pred_path, and
-    run_eval scores it with the manifest bias_pair."""
+def test_custom_attribute_re_score_extracts_pred(tmp_path: Path) -> None:
+    """helmet dataset: 클라이언트 re_score 가 manifest pred_path 로 예측을 추출해
+    predictions.jsonl 에 쓴다 (채점은 서버 레포 소관 — 여기선 추출만 검증)."""
     from runners import re_score as rs
 
     gdir = _make_helmet_dataset(tmp_path / "ds", ["h1", "h2"])
@@ -92,13 +92,6 @@ def test_custom_attribute_re_score_and_eval(tmp_path: Path) -> None:
 
     rows = [json.loads(l) for l in open(gdir / "predictions.jsonl", encoding="utf-8")]
     assert all(r["pred"] == "helmet" for r in rows), rows
-
-    from tests.scoring_helper import score_record
-    rec = score_record(gdir, "helmet")
-    # h1 labeled helmet (correct), h2 labeled no_helmet (model said helmet -> wrong)
-    assert rec["accuracy"] == 0.5
-    # manifest bias_pair: true no_helmet mistaken as helmet -> rate 1.0
-    assert rec["bias"] == {"pair": "no_helmet->helmet", "rate": 1.0, "count": "1/1"}
 
 
 def test_custom_attribute_without_pred_path_fails_loud(tmp_path: Path) -> None:

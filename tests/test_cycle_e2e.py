@@ -131,61 +131,39 @@ def _make_plr_golden_dir(tmp_path: Path, obj_ids: list[str]) -> Path:
     return gdir
 
 
-def _run_eval_for(gdir: Path, version: str, ledger_path: Path) -> dict:
-    """run_eval CLI 제거 후 score() 직접호출 (gender 지표 dict 반환)."""
-    from tests.scoring_helper import score_record
-    return score_record(gdir, "gender")
-
-    return buf.getvalue()
-
-
 # =====================================================================
-# Deliverable 2A — A-cycle: 2-version Δ
+# Deliverable 2A — A-cycle: 2-version client run (채점/Δ는 서버 레포 소관)
 # =====================================================================
 
 
-def test_a_cycle_two_versions_delta(tmp_path: Path) -> None:
-    """Full A-cycle with two mock versions; second run emits a Δ line.
+def test_a_cycle_two_versions_reproduce_predictions(tmp_path: Path) -> None:
+    """클라이언트 A-cycle: 두 mock 버전이 서로 다른 예측을 attributes/predictions
+    에 재현한다. 채점·Δ·리더보드는 별도 평가 서버 레포 소관(범위 밖) — 여기선
+    re_score 가 버전별로 올바른 예측을 쓰는지(클라이언트 계약)만 검증한다.
 
-    Ground truth: all 3 crops are female.
-    v1 MockModel: predicts female → accuracy = 1.0
-    v2 MockModel: predicts male   → accuracy = 0.0
-    Second run_eval must print 'Δ vs mock_v1' and the ledger has 2 records.
+    v1 MockModel → 전부 female, v2 MockModel → 전부 male.
     """
     from runners import re_score as rs
 
     obj_ids = ["e2e_a", "e2e_b", "e2e_c"]
     gdir = _make_plr_golden_dir(tmp_path, obj_ids)
-    ledger_path = tmp_path / "ledger.jsonl"
 
     # --- version 1: MockModel returns female ---
     meta_v1 = rs.re_score("gender", MockModel(_MOCK_YAML_V1_ALL_FEMALE), golden_dir=str(gdir))
     assert meta_v1["attribute"] == "gender"
     assert meta_v1["n"] == 3
-
-    # Verify predictions were written as female
     preds_v1 = _read_jsonl(gdir / "predictions.jsonl")
     assert all(r["pred"] == "female" for r in preds_v1), (
         f"v1: expected all female preds, got {[r['pred'] for r in preds_v1]}"
     )
 
-    rec_v1 = _run_eval_for(gdir, "mock_v1", ledger_path)
-    # All 3 correct (all female, all labeled female) → accuracy 1.0
-    assert rec_v1["accuracy"] == pytest.approx(1.0, abs=1e-4)
-
-    # --- version 2: MockModel returns male → all wrong ---
+    # --- version 2: MockModel returns male → predictions flip ---
     meta_v2 = rs.re_score("gender", MockModel(_MOCK_YAML_V2_ALL_MALE), golden_dir=str(gdir))
     assert meta_v2["n"] == 3
-
     preds_v2 = _read_jsonl(gdir / "predictions.jsonl")
     assert all(r["pred"] == "male" for r in preds_v2), (
         f"v2: expected all male preds, got {[r['pred'] for r in preds_v2]}"
     )
-
-    rec_v2 = _run_eval_for(gdir, "mock_v2", ledger_path)
-    # All 3 wrong (all male, labeled female) → accuracy 0.0
-    assert rec_v2["accuracy"] == pytest.approx(0.0, abs=1e-4)
-    # Δ(1.0→0.0)는 삭제된 ledger/CLI 기능 — 서버 리더보드가 대체(범위 밖).
 
 
 # =====================================================================

@@ -209,8 +209,8 @@
     <div class="chips">
       <span class="chip hl" style="--c: var(--cli)"><b>lab.py</b></span>
       <span class="chip">build-golden</span><span class="chip">label</span><span class="chip">validate-dataset</span>
-      <span class="chip">run</span><span class="chip">eval</span><span class="chip">experiment run</span>
-      <span class="chip">report</span><span class="chip">port</span><span class="chip">demo</span>
+      <span class="chip">run</span><span class="chip">submit</span><span class="chip">dataset-push</span>
+      <span class="chip">port</span><span class="chip">demo</span>
     </div>
   </div>
 
@@ -235,11 +235,11 @@
       </div>
     </div>
     <div class="card band" style="--c: var(--eval)">
-      <div class="t"><span class="dot"></span>평가 (eval 단계) → 추이 → 리포트</div>
+      <div class="t"><span class="dot"></span>제출 (submit 단계) → 별도 평가 서버 레포</div>
       <div class="chips">
-        <span class="chip">eval/run_eval.py <b>(accuracy·bias·pred_unknown)</b></span>
-        <span class="chip hl" style="--c: var(--eval)"><b>eval/ledger.jsonl</b> (append-only)</span>
-        <span class="chip">evalkit/report.py → <b>report.html</b></span>
+        <span class="chip">runners/client.py → <b>lab submit --pull</b></span>
+        <span class="chip hl" style="--c: var(--eval)"><b>~/plr-eval-server</b> (별도 레포)</span>
+        <span class="chip">서버: 채점·리더보드·report/gallery 렌더·버전관리</span>
       </div>
     </div>
   </div>
@@ -313,7 +313,7 @@
     <div class="down">▼</div>
     <div class="node data" style="--c: var(--infra)"><b>predictions.jsonl</b> + <b>attributes.jsonl</b> <span class="d">attributes는 search 후보로 재사용 ↘</span></div>
     <div class="down">▼</div>
-    <div class="node" style="--c: var(--eval)"><b>eval/run_eval.py</b> <span class="d">accuracy · recall(class) · bias · confusion</span></div>
+    <div class="node" style="--c: var(--eval)"><b>lab submit --pull</b> → <b>~/plr-eval-server</b> <span class="d">서버가 accuracy · recall(class) · bias · confusion 채점</span></div>
   </div>
 
   <!-- search: removed -->
@@ -339,8 +339,8 @@
 <div class="down lbl"><span>▼</span><span class="txt">PLR 파이프라인 꼬리</span></div>
 
 <div class="merge">
-  <b>eval/ledger.jsonl</b> <span style="color:var(--muted)">(조합키: dataset · model · pipeline · prompt_hash · version)</span>
-  &nbsp;⟶&nbsp; <b>report.py</b> ⟶ <b>report.html</b> <span style="color:var(--muted)">(추이 · 모델×프롬프트 히트맵 · 프롬프트변화→Δ)</span>
+  <b>~/plr-eval-server</b> <span style="color:var(--muted)">(별도 레포 — runs/metrics 이력, 조합키: dataset · model · prompt_hash · version)</span>
+  &nbsp;⟶&nbsp; <b>report/gallery 렌더</b> <span style="color:var(--muted)">(리더보드 · 추이 · lab submit --pull로 회수)</span>
 </div>
 </section>
 
@@ -398,7 +398,7 @@
 <div class="badges">
   <span class="badge"><span class="k">TEST</span><code>tests/test_prompt_surface_parity.py</code> — 상수 ↔ yaml 자동 parity 게이트 (+ query_parser 블록)</span>
   <span class="badge"><span class="k">DIFF</span><code>lab port</code> — lab ↔ core/ir 표면 diff (읽기전용, --apply는 사람)</span>
-  <span class="badge"><span class="k">HASH</span><code>provenance.prompt_hash</code> — ledger에 프롬프트 상태 각인</span>
+  <span class="badge"><span class="k">HASH</span><code>provenance.prompt_hash</code> — 서버 metrics/run 메타에 프롬프트 상태 각인</span>
 </div>
 </section>
 
