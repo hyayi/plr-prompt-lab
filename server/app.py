@@ -298,10 +298,11 @@ async def submit_run(
         except ExtractError as exc:
             raise HTTPException(400, f"surface bundle rejected: {exc}")
         tar_path.unlink(missing_ok=True)
-        bundle_root = find_dataset_root(run_dir / "surface") or (run_dir / "surface")
+        # 번들 루트: 평평한 번들(surface_relpaths 그대로)이 표준, 단일
+        # 최상위 디렉터리로 감싼 번들도 수용.
+        bundle_root = run_dir / "surface"
         if not (bundle_root / "prompts").is_dir():
-            # 단일 최상위 디렉터리로 감싼 번들 수용
-            subs = [d for d in (run_dir / "surface").iterdir() if d.is_dir()]
+            subs = [d for d in bundle_root.iterdir() if d.is_dir()]
             if len(subs) == 1 and (subs[0] / "prompts").is_dir():
                 bundle_root = subs[0]
         recomputed = _surface_hash(bundle_root)

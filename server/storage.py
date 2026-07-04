@@ -113,6 +113,8 @@ def reconcile_and_rebuild(root: Path, conn: sqlite3.Connection) -> dict:
     meta.json 또는 metrics.json이 없는/깨진 run 디렉터리(채점 중 크래시 잔재)는
     quarantine/으로 격리한다.
     """
+    from evalkit.dataset import declared_attributes
+
     from server import db as _db
 
     rebuilt_runs, quarantined = [], []
@@ -124,7 +126,6 @@ def reconcile_and_rebuild(root: Path, conn: sqlite3.Connection) -> dict:
         manifest = ds_dir / "manifest.yaml"
         if not manifest.exists():
             continue
-        from evalkit.dataset import declared_attributes
         n_crops = len(list((ds_dir / "crops").glob("*.jpg"))) if (ds_dir / "crops").is_dir() else 0
         reg = read_json(ds_dir / "registered.json") or {}
         _db.upsert_dataset(conn, ds_dir.name,

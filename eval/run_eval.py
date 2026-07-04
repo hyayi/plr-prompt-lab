@@ -33,13 +33,7 @@ _LAB_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _LAB_ROOT not in sys.path:
     sys.path.insert(0, _LAB_ROOT)
 
-# Backward-compat re-exports — the scoring core moved to evalkit/scoring.py.
-from evalkit.scoring import (  # noqa: E402,F401
-    BIAS_PAIR,
-    ScoringError,
-    score,
-    signal_stats as _signal_stats,
-)
+from evalkit.scoring import ScoringError, score  # noqa: E402
 
 
 def _prompt_hash() -> str:

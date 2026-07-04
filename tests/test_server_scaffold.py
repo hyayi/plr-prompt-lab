@@ -70,7 +70,7 @@ def test_db_schema_and_wal(tmp_path: Path) -> None:
     assert {"datasets", "runs", "metrics", "label_audit"} <= tables
 
 
-def test_reconcile_quarantines_orphans_and_rebuilds(tmp_path: Path, monkeypatch) -> None:
+def test_reconcile_quarantines_orphans_and_rebuilds(tmp_path: Path) -> None:
     root = tmp_path
     for sub in ("datasets", "runs", "quarantine"):
         (root / sub).mkdir()
