@@ -80,7 +80,9 @@ def surface_file(run_id: str, path: str):
     root = _state()["root"]
     base = (root / "runs" / run_id / "surface").resolve()
     target = (base / path).resolve()
-    if not str(target).startswith(str(base)) or not target.is_file():
+    # is_relative_to: startswith 문자열 비교는 sibling-prefix(…/surface_evil)를
+    # 통과시키는 고전적 약점이 있다 — 경로 경계로 검사.
+    if not target.is_relative_to(base) or not target.is_file():
         raise HTTPException(404, "no such surface file")
     return target.read_text(encoding="utf-8", errors="replace")
 

@@ -147,6 +147,28 @@ def test_invalid_plr_json_rejected(client, dataset, tmp_path: Path) -> None:
                                            "all_history": True}).json()["runs"] == []
 
 
+def test_uploaded_python_is_never_executed(client, dataset, tmp_path: Path) -> None:
+    """US-006 하드 규칙의 회귀 가드: 표면 번들의 py는 저장·열람·diff 어디서도
+    실행되지 않는다 — import 부수효과(센티널 파일 생성)가 절대 일어나면 안 됨."""
+    sentinel = tmp_path / "PWNED"
+    evil_dir = tmp_path / "bundle-evil"
+    (evil_dir / "prompts" / "v").mkdir(parents=True)
+    (evil_dir / "prompts" / "v" / "person.yaml").write_text("system: x\n")
+    (evil_dir / "plr_parse.py").write_text(
+        f"open({str(sentinel)!r}, 'w').write('pwned')\n")  # import 시 즉시 실행되는 코드
+
+    r = client.post("/api/runs", headers=TOKEN,
+                    data={"dataset": "runs_ds", "version_label": "evil"},
+                    files={"attributes": ("attributes.jsonl", _attrs_bytes(), "application/json"),
+                           "surface": ("s.tgz", _targz_dir(evil_dir), "application/gzip")})
+    assert r.status_code == 201, r.text
+    run_id = r.json()["run_id"]
+    # 열람·diff 경로까지 통과시켜도 실행 없음
+    assert "pwned" in client.get(f"/r/{run_id}/surface/plr_parse.py").text
+    client.get(f"/diff?a={run_id}&b={run_id}")
+    assert not sentinel.exists(), "업로드된 py가 실행됨 — RCE 방지 규칙 위반!"
+
+
 def test_label_correction_rescores_runs(client, dataset, tmp_path: Path) -> None:
     run_id = _submit(client, tmp_path, "tv3").json()["run_id"]
     # b의 정답을 male로 정정 → 두 예측 모두 정답이 됨
