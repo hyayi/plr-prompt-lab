@@ -1,8 +1,13 @@
 """demo — GPU-free onboarding module for `lab demo`.
 
 Builds a tiny synthetic dataset in ./datasets/demo/, runs re_score with a
-MockModel, evaluates accuracy, and prints a walkthrough of what happened.
-No GPU, no DB, no Redis required.
+MockModel to produce attributes.jsonl/predictions.jsonl, and prints a
+walkthrough of what happened. No GPU, no DB, no Redis required.
+
+Scoring is NOT done locally: since RE-004 (2026-07) the lab hands off to the
+eval server — run `lab submit` (with `--pull` to fetch the rendered
+metrics/report/gallery). This demo therefore stops at the run step and points
+the user at `lab submit`.
 
 Design mirrors tests/test_cycle_e2e.py's MockModel + synthetic-fixture pattern.
 """
@@ -24,7 +29,6 @@ from typing import Any
 from gemma_model import (  # noqa: E402
     MockModel,
     MOCK_YAML_V1_ALL_FEMALE as _MOCK_YAML_V1,
-    MOCK_YAML_V2_ALL_MALE as _MOCK_YAML_V2,
 )
 
 
@@ -95,52 +99,17 @@ def build_synthetic_dataset(demo_dir: Path) -> Path:
 
 
 # =====================================================================
-# Eval helper (mirrors _run_eval_for in test_cycle_e2e.py)
-# =====================================================================
-
-def _run_eval(gdir: Path, version: str, ledger_path: Path, lab_root: Path) -> tuple[dict, str]:
-    """Run run_eval.main() and return (ledger_record, stdout_text)."""
-    import importlib.util
-    import io
-    from contextlib import redirect_stdout
-
-    spec = importlib.util.spec_from_file_location(
-        "run_eval_demo",
-        str(lab_root / "eval" / "run_eval.py"),
-    )
-    run_eval = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(run_eval)  # type: ignore[union-attr]
-
-    orig_argv = sys.argv
-    sys.argv = [
-        "run_eval",
-        "--attribute", "gender",
-        "--golden", str(gdir),
-        "--version", version,
-        "--ledger", str(ledger_path),
-        "--date", "2026-07-02T00:00:00",
-    ]
-    buf = io.StringIO()
-    try:
-        with redirect_stdout(buf):
-            run_eval.main()
-    except SystemExit:
-        pass
-    finally:
-        sys.argv = orig_argv
-
-    # Read back the ledger record just written (the last one)
-    records = _read_jsonl(ledger_path)
-    last = records[-1] if records else {}
-    return last, buf.getvalue()
-
-
-# =====================================================================
 # Main demo runner
 # =====================================================================
 
 def run_demo(lab_root: Path, keep_dir: bool = False) -> int:
-    """Run the full GPU-free demo cycle. Returns exit code (0 on success)."""
+    """Run the GPU-free demo run step. Returns exit code (0 on success).
+
+    Scoring is intentionally NOT done here — it moved to the eval server
+    (RE-004). The demo builds a synthetic dataset and re-scores it with a
+    MockModel to produce attributes.jsonl/predictions.jsonl, then points the
+    user at `lab submit` for the server-side metrics/report/gallery.
+    """
     from runners import re_score as rs
 
     demo_dir = lab_root / "datasets" / "demo"
@@ -149,7 +118,7 @@ def run_demo(lab_root: Path, keep_dir: bool = False) -> int:
     print("  lab demo — GPU-free PLR prompt-lab onboarding")
     print("=" * 65)
     print()
-    print("Step 1/5  Build synthetic dataset")
+    print("Step 1/2  Build synthetic dataset")
     print(f"          → {demo_dir}")
 
     # Clean slate if re-running
@@ -163,45 +132,14 @@ def run_demo(lab_root: Path, keep_dir: bool = False) -> int:
     print(f"          manifest.yaml: attribute=gender, n={n}")
     print()
 
-    # ---- Version 1: MockModel predicts female (should score 1.0) ----
-    print("Step 2/5  Re-score with MockModel v1 (predicts: female)")
+    # ---- MockModel re-score (predicts female) — produces run artifacts ----
+    print("Step 2/2  Re-score with MockModel (predicts: female)")
     print("          [no GPU — MockModel returns canned PLR YAML]")
-    meta_v1 = rs.re_score("gender", MockModel(_MOCK_YAML_V1), golden_dir=str(demo_dir), model_name="mock")
-    preds_v1 = _read_jsonl(demo_dir / "predictions.jsonl")
-    print(f"          re_score wrote {meta_v1['n']} predictions")
-    print(f"          sample: {preds_v1[0]}")
-    print()
-
-    ledger_path = demo_dir / "ledger.jsonl"
-
-    print("Step 3/5  Evaluate mock_v1 predictions vs ground truth")
-    rec_v1, out_v1 = _run_eval(demo_dir, "mock_v1", ledger_path, lab_root)
-    acc_v1 = rec_v1.get("accuracy", 0.0)
-    print(f"          accuracy: {acc_v1:.3f}  (all female predicted = all correct)")
-    print(f"          ledger record appended: {ledger_path.name}")
-    print()
-
-    # ---- Version 2: MockModel predicts male (should score 0.0) ----
-    print("Step 4/5  Re-score with MockModel v2 (predicts: male) — to show a Δ")
-    meta_v2 = rs.re_score("gender", MockModel(_MOCK_YAML_V2), golden_dir=str(demo_dir), model_name="mock")
-    preds_v2 = _read_jsonl(demo_dir / "predictions.jsonl")
-    print(f"          re_score wrote {meta_v2['n']} predictions")
-    print(f"          sample: {preds_v2[0]}")
-    print()
-
-    print("Step 5/5  Evaluate mock_v2 predictions vs ground truth")
-    rec_v2, out_v2 = _run_eval(demo_dir, "mock_v2", ledger_path, lab_root)
-    acc_v2 = rec_v2.get("accuracy", 0.0)
-    delta = acc_v2 - acc_v1
-    print(f"          accuracy: {acc_v2:.3f}  (all male predicted vs female labels)")
-    print(f"          Δ vs mock_v1: {delta:+.3f}")
-    print()
-
-    # Verify ledger
-    ledger_records = _read_jsonl(ledger_path)
-    print(f"          ledger now has {len(ledger_records)} records:")
-    for lr in ledger_records:
-        print(f"            version={lr['version']}  accuracy={lr['accuracy']:.3f}")
+    meta = rs.re_score("gender", MockModel(_MOCK_YAML_V1), golden_dir=str(demo_dir), model_name="mock")
+    preds = _read_jsonl(demo_dir / "predictions.jsonl")
+    print(f"          re_score wrote {meta['n']} predictions")
+    print(f"          sample: {preds[0]}")
+    print(f"          artifacts: attributes.jsonl + predictions.jsonl in {demo_dir.name}/")
     print()
 
     print("=" * 65)
@@ -209,13 +147,13 @@ def run_demo(lab_root: Path, keep_dir: bool = False) -> int:
     print()
     print("  1. A synthetic dataset was built in datasets/demo/")
     print("     (crops + labels.jsonl + predictions.jsonl + manifest.yaml)")
-    print("  2. re_score() was called twice with a MockModel (no GPU).")
+    print("  2. re_score() was called with a MockModel (no GPU), producing")
+    print("     attributes.jsonl + predictions.jsonl.")
     print("     In real use: 'lab run --attribute gender --version X'")
     print("     calls LabGemmaModel on real CCTV crops (GPU required).")
-    print("  3. run_eval() scored each version against ground truth.")
-    print("     In real use: 'lab eval --attribute gender --version X'")
-    print("  4. Two ledger records show a Δ between versions —")
-    print("     this is the signal you iterate on when editing prompts.")
+    print()
+    print("  채점은 로컬이 아니라 평가 서버에서 이뤄집니다:")
+    print("  - 'lab submit'으로 서버에 제출하세요 (--pull로 지표/리포트/갤러리 회수).")
     print()
     print("  Next steps:")
     print("  - Read HANDOFF.md for the full prompt-engineer workflow.")

@@ -107,19 +107,17 @@ class Pipeline:
                     ``--pipeline plr`` == ``--mode attr``, ``--pipeline search``
                     == ``--mode search``.
       run_fn      : callable that performs the "run" step (re-score / retrieve).
-      eval_fn     : callable that performs the "eval" step (score + ledger).
 
-    ``run_fn`` / ``eval_fn`` are thin, lazily-bound accessors (they import their
-    target module on call) so importing ``registry`` stays GPU/DB-free.  The
-    P2-2 experiment runner dispatches uniformly over these; lab run/eval use
-    ``eval_mode`` + ``run_fn`` to route.
+    Scoring moved to the eval server (RE-004, 2026-07): the lab no longer has a
+    local eval step, so ``Pipeline`` carries no ``eval_fn``.  ``run_fn`` is a
+    thin, lazily-bound accessor (it imports its target module on call) so
+    importing ``registry`` stays GPU/DB-free.  lab run uses ``run_fn`` to route.
     """
 
     name: str
     description: str
     eval_mode: str
     run_fn: Callable[..., Any]
-    eval_fn: Callable[..., Any]
 
 
 def _plr_run(*args: Any, **kwargs: Any) -> Any:
@@ -128,29 +126,15 @@ def _plr_run(*args: Any, **kwargs: Any) -> Any:
     return re_score(*args, **kwargs)
 
 
-def _plr_eval(*args: Any, **kwargs: Any) -> Any:
-    import importlib.util
-    import os as _os
-
-    spec = importlib.util.spec_from_file_location(
-        "run_eval",
-        _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "eval", "run_eval.py"),
-    )
-    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    return mod.main(*args, **kwargs)
-
-
 # The lab is PLR-only (2026-07): the text-search pipeline was removed — the
 # lab optimizes the PLR prompt; search evaluation lives in core/ir (and the
 # cctv-eval oracle skill), where the full stack (embedding + VQA) exists.
 PIPELINES: dict[str, Pipeline] = {
     "plr": Pipeline(
         name="plr",
-        description="attribute extraction: re_score → run_eval",
+        description="attribute extraction: re_score (scoring on eval server)",
         eval_mode="attr",
         run_fn=_plr_run,
-        eval_fn=_plr_eval,
     ),
 }
 

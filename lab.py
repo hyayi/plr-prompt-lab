@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """lab — single argparse entrypoint for the PLR prompt lab.
 
+Scoring/report/gallery now live on the eval server: run `lab run` to produce
+attributes.jsonl, then `lab submit --pull` to score on the server and fetch the
+rendered report/gallery. The lab no longer scores locally.
+
 Subcommands:
   build-golden  Build golden eval set (wraps eval/build_golden.py) and
                 copy crops to the authoritative eval/golden/<A>/crops/ path.
   label         Turn human misclassification notes into labels.jsonl
                 (wraps eval/make_labels.py).
   run           Re-score golden set with Gemma (wraps re_score.re_score).
-  eval          Score predictions vs golden labels (PLR attribute eval).
   port          Diff / apply lab prompt surface against core/ir (read-only by
                 default; --apply copies lab files into core/ir).
-  demo          GPU-free onboarding: run a full mock cycle on a synthetic
+  demo          GPU-free onboarding: run a mock re-score on a synthetic
                 dataset so a new user can see the loop end-to-end immediately.
-  report        Turn the eval ledger into ONE self-contained HTML report
-                (trends, model×prompt matrix, prompt-change→metric-delta).
 
 Usage:
     python3 lab.py <cmd> [options]
@@ -257,98 +258,6 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 
 # =====================================================================
-# Subcommand: eval
-# =====================================================================
-
-
-def _cmd_eval(args: argparse.Namespace) -> int:
-    """Score predictions vs golden labels (PLR attribute eval → eval/run_eval.py)."""
-    import importlib.util
-
-    from evalkit.dataset import declared_attributes, resolve_dataset_dir
-
-    model_name = getattr(args, "model", None)
-
-    spec = importlib.util.spec_from_file_location(
-        "run_eval",
-        os.path.join(_LAB_ROOT, "eval", "run_eval.py"),
-    )
-    re_mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(re_mod)  # type: ignore[union-attr]
-
-    # --attribute all → "라벨이 실제로 있는 속성" 전부 순회, "a,b" → 나열 순회.
-    # 기준: manifest 선언 ∩ 라벨 등장 (선언됐는데 라벨이 없으면 실패가 아니라
-    # skip+안내; 선언이 아예 없으면 라벨 키에서 직접 도출). 모델 재실행 없음:
-    # 각 속성 예측은 attributes.jsonl(전체 plr_json 캐시)에서 재추출된다.
-    requested = str(args.attribute)
-    if requested == "all":
-        if not getattr(args, "dataset", None):
-            print("[eval] --attribute all requires --dataset", file=sys.stderr)
-            return 2
-        # 선택 로직은 공유 헬퍼가 단일 정의 — 평가 서버도 같은 함수를 쓴다.
-        from evalkit.dataset import eval_attributes
-        attributes, skipped, undeclared = eval_attributes(args.dataset)
-        if skipped:
-            print(f"[eval] 라벨 없음 → skip: {', '.join(skipped)} "
-                  f"(manifest에는 선언됨 — labels.jsonl에 키가 등장하면 자동 포함)")
-        if undeclared:
-            print(f"[eval] WARNING: 라벨에는 있는데 manifest 미선언: "
-                  f"{', '.join(undeclared)} — validate-dataset가 잡는 상태입니다",
-                  file=sys.stderr)
-        if not attributes:
-            print(f"[eval] {args.dataset}: 평가할 속성을 찾지 못했습니다 "
-                  f"(manifest attributes:/attribute 선언도, 다속성 라벨 키도 없음)",
-                  file=sys.stderr)
-            return 2
-    else:
-        attributes = [a.strip() for a in requested.split(",") if a.strip()]
-
-    failures: list[str] = []
-    used_datasets: list[str] = []
-    for attribute in attributes:
-        ds_dir = resolve_dataset_dir(_LAB_ROOT, attribute, getattr(args, "dataset", None))
-        used_datasets.append(str(ds_dir))
-        orig_argv = sys.argv
-        sys.argv = ["run_eval", "--attribute", attribute,
-                    "--golden", str(ds_dir),
-                    "--pipeline", "plr",
-                    "--dataset", str(ds_dir)]
-        if model_name:
-            sys.argv += ["--model", model_name]
-        if args.version:
-            sys.argv += ["--version", args.version]
-        if args.ledger:
-            sys.argv += ["--ledger", args.ledger]
-        if getattr(args, "core_ir", None):
-            sys.argv += ["--core-ir", args.core_ir]
-        try:
-            re_mod.main()
-        except SystemExit as e:
-            code = int(e.code) if isinstance(e.code, int) else 1
-            if code:
-                failures.append(f"{attribute}: {e.code}")
-        except Exception as exc:  # noqa: BLE001 — 한 속성 실패가 나머지를 막지 않게
-            failures.append(f"{attribute}: {type(exc).__name__}: {exc}")
-        finally:
-            sys.argv = orig_argv
-        if len(attributes) > 1:
-            print()
-
-    # 측정이 하나라도 성공했으면 시각화 자동 갱신 (--no-render로 끔).
-    if len(failures) < len(attributes) and not getattr(args, "no_render", False):
-        from evalkit.autorender import auto_render
-
-        ledger = args.ledger or os.path.join(_LAB_ROOT, "eval", "ledger.jsonl")
-        auto_render(used_datasets, ledger)
-
-    if failures:
-        print(f"[eval] {len(failures)}/{len(attributes)} attribute(s) failed: "
-              + "; ".join(failures), file=sys.stderr)
-        return 1
-    return 0
-
-
-# =====================================================================
 # Subcommand: port
 # =====================================================================
 
@@ -450,7 +359,7 @@ def _read_lines(path: str) -> list[str]:
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="lab",
-        description="PLR prompt lab CLI — build, label, run, eval, port.",
+        description="PLR prompt lab CLI — build, label, run, submit, port.",
     )
     sub = p.add_subparsers(dest="cmd", metavar="<cmd>")
     sub.required = True
@@ -501,28 +410,6 @@ def _build_parser() -> argparse.ArgumentParser:
     ru.add_argument("--model", default="gemma",
                     help="registry model name (default: gemma; 'mock' is GPU-free)")
 
-    # -- eval --
-    ev = sub.add_parser(
-        "eval",
-        help="Score predictions vs golden labels (PLR attribute eval).",
-    )
-    ev.add_argument("--attribute", "-A", required=True,
-                    help="PLR attribute (gender | vehicle_type | military | "
-                         "custom), comma list, or 'all' (= every declared attribute "
-                         "that actually has labels; requires --dataset)")
-    ev.add_argument("--model", default=None,
-                    help="registry model name for the ledger (default: the model "
-                         "stamp re_score wrote into predictions.jsonl)")
-    ev.add_argument("--version", default="plr_v1.5_cot",
-                    help="PLR version tag")
-    ev.add_argument("--ledger", default=None, help="ledger.jsonl path override")
-    ev.add_argument("--core-ir", default=None, dest="core_ir",
-                    help="path to core/ir repo (for stale-seed warning)")
-    ev.add_argument("--dataset", default=None,
-                    help="dataset dir (default: eval/golden/<attribute>)")
-    ev.add_argument("--no-render", action="store_true", dest="no_render",
-                    help="skip auto-rendering gallery.html/report.html after eval")
-
     # -- port --
     po = sub.add_parser(
         "port",
@@ -547,58 +434,10 @@ def _build_parser() -> argparse.ArgumentParser:
     # -- demo --
     dm = sub.add_parser(
         "demo",
-        help="GPU-free onboarding: run a full mock cycle on a synthetic dataset.",
+        help="GPU-free onboarding: mock re-score on a synthetic dataset.",
     )
     dm.add_argument("--keep", action="store_true",
                     help="Keep datasets/demo/ directory after the run (default: removed).")
-
-    # -- experiment --
-    exp = sub.add_parser(
-        "experiment",
-        help="Run an experiment matrix defined by an experiment.yaml.",
-    )
-    exp_sub = exp.add_subparsers(dest="experiment_cmd", metavar="<experiment_cmd>")
-    exp_sub.required = True
-
-    exp_run = exp_sub.add_parser(
-        "run",
-        help="Run the cross-product matrix from an experiment.yaml.",
-    )
-    exp_run.add_argument(
-        "experiment_yaml",
-        help="Path to the experiment.yaml file.",
-    )
-    exp_run.add_argument(
-        "--strict",
-        action="store_true",
-        help="Exit nonzero if ANY cell fails (default: only exit nonzero when ALL cells fail).",
-    )
-
-    # -- report --
-    rp = sub.add_parser(
-        "report",
-        help="Generate a self-contained HTML report from the eval ledger.",
-    )
-    rp.add_argument("--out", default=os.path.join(_LAB_ROOT, "report.html"),
-                    help="output HTML path (default: report.html)")
-    rp.add_argument("--ledger", default=os.path.join(_LAB_ROOT, "eval", "ledger.jsonl"),
-                    help="ledger.jsonl path (default: eval/ledger.jsonl)")
-    rp.add_argument("--compare", default=None, metavar="LEDGER_B",
-                    help="second ledger to compare side-by-side (experiment-set vs experiment-set)")
-
-    # -- gallery --
-    ga = sub.add_parser(
-        "gallery",
-        help="Crops-vs-labels visual HTML for one dataset (wrong-first).",
-    )
-    ga.add_argument("--dataset", "-D", required=True,
-                    help="dataset directory (crops/ + labels.jsonl [+ predictions.jsonl])")
-    ga.add_argument("--attribute", "-A", default=None,
-                    help="attribute(s) to render, comma list (default: every "
-                         "labeled attribute — cards get per-attribute tags "
-                         "and an AND/OR wrong-filter)")
-    ga.add_argument("--out", default=None,
-                    help="output HTML path (default: <dataset>/gallery.html)")
 
     # -- dataset-push / submit (평가 서버 클라이언트) --
     dp = sub.add_parser("dataset-push",
@@ -634,7 +473,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _cmd_demo(args: argparse.Namespace) -> int:
-    """GPU-free onboarding: full mock cycle on a synthetic dataset.
+    """GPU-free onboarding: mock re-score on a synthetic dataset.
 
     Delegates to demo.run_demo() which lives in demo.py alongside this file.
     No GPU, no DB, no Redis required.
@@ -642,56 +481,6 @@ def _cmd_demo(args: argparse.Namespace) -> int:
     from runners.demo import run_demo
     keep = getattr(args, "keep", False)
     return run_demo(lab_root=_LAB_ROOT_PATH, keep_dir=keep)
-
-
-# =====================================================================
-# Subcommand: experiment
-# =====================================================================
-
-
-def _cmd_experiment_run(args: argparse.Namespace) -> int:
-    """Run the cross-product experiment matrix defined in an experiment.yaml.
-
-    Delegates to experiment.run_experiment().
-    """
-    from runners.experiment import run_experiment
-
-    return run_experiment(
-        experiment_yaml=args.experiment_yaml,
-        strict=getattr(args, "strict", False),
-    )
-
-
-# =====================================================================
-# Subcommand: report
-# =====================================================================
-
-
-def _cmd_report(args: argparse.Namespace) -> int:
-    """Generate a self-contained HTML report from the eval ledger.
-
-    Delegates to report.build_report(). GPU-free, network-free.
-    """
-    from evalkit.report import build_report
-
-    build_report(ledger_path=args.ledger, out_path=args.out,
-                 compare_ledger=getattr(args, "compare", None))
-    return 0
-
-
-# =====================================================================
-# Subcommand: gallery
-# =====================================================================
-
-
-def _cmd_gallery(args: argparse.Namespace) -> int:
-    """Self-contained crops-vs-labels HTML (wrong-first). GPU-free."""
-    from evalkit.gallery import build_gallery
-
-    out = build_gallery(args.dataset, out_path=getattr(args, "out", None),
-                        attribute=getattr(args, "attribute", None))
-    print(f"[gallery] written: {out}")
-    return 0
 
 
 # =====================================================================
@@ -756,19 +545,11 @@ _DISPATCH = {
     "build-golden": _cmd_build_golden,
     "label": _cmd_label,
     "run": _cmd_run,
-    "eval": _cmd_eval,
     "port": _cmd_port,
     "validate-dataset": _cmd_validate_dataset,
     "demo": _cmd_demo,
-    "report": _cmd_report,
-    "gallery": _cmd_gallery,
     "dataset-push": _cmd_dataset_push,
     "submit": _cmd_submit,
-    "experiment": None,  # nested — dispatched via _EXPERIMENT_DISPATCH below
-}
-
-_EXPERIMENT_DISPATCH = {
-    "run": _cmd_experiment_run,
 }
 
 
@@ -783,12 +564,6 @@ def main() -> None:
         args.label_args = extras
     elif extras:
         parser.error("unrecognized arguments: " + " ".join(extras))
-
-    if args.cmd == "experiment":
-        handler = _EXPERIMENT_DISPATCH.get(args.experiment_cmd)
-        if handler is None:
-            parser.error(f"Unknown experiment subcommand: {args.experiment_cmd!r}")
-        sys.exit(handler(args))
 
     handler = _DISPATCH[args.cmd]
     sys.exit(handler(args))
