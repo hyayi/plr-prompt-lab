@@ -71,7 +71,7 @@ def test_registry_get_model_mock_and_listings() -> None:
     assert registry.list_pipelines() == ["plr"]  # PLR-only lab (search removed 2026-07)
 
     plr = registry.get_pipeline("plr")
-    assert plr.eval_mode == "attr"
+    assert plr.name == "plr" and callable(plr.run_fn)
 
     with pytest.raises(ValueError):
         registry.get_model("nope")

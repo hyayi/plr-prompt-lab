@@ -263,7 +263,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 # True prompt surface: files to compare between lab and core/ir. Built from the
 # single source of truth (provenance.surface_relpaths) so `lab port` and the
-# ledger prompt_hash always cover the SAME files. Same relative path both sides;
+# run_provenance surface_hash always cover the SAME files. Same relative path both sides;
 # globs prompts/*.yaml so new prompt versions are picked up automatically.
 def _port_files() -> list[tuple[str, str]]:
     from evalkit import provenance

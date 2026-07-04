@@ -10,8 +10,8 @@ Two registries live here:
    get_provider/validation machinery was dropped in the 2026-07 slim-down —
    this shim only has to accept the registrations.
 
-2. The MODELS / PIPELINES experiment registry (P2-1) — the axes the lab CLI
-   and the experiment runner select over.
+2. The MODELS / PIPELINES registry — the axes the lab CLI selects over
+   (which model, which pipeline).
 """
 
 from __future__ import annotations
@@ -37,15 +37,14 @@ def register(slot: str, version: str, provider_class: Type[Any]) -> None:
 
 
 # ===========================================================================
-# Model / Pipeline registry (Phase-2, P2-1)
+# Model / Pipeline registry
 # ---------------------------------------------------------------------------
 # A SEPARATE, higher-level registry from the provider slots above: it names the
-# experiment axes the lab CLI and the P2-2 experiment runner select over —
-# WHICH model (gemma vs mock) and WHICH pipeline (plr vs search).  Kept in this
+# axes the lab CLI selects over — WHICH model (gemma vs mock).  Kept in this
 # module so there is one obvious place to discover selectable parameters.
 #
 # `MODELS`    : name -> zero-arg factory returning a gemma_model.Model.
-# `PIPELINES` : name -> Pipeline descriptor (the run/eval seam P2-2 builds on).
+# `PIPELINES` : name -> Pipeline descriptor (the "run" seam lab run routes on).
 # ===========================================================================
 
 from dataclasses import dataclass  # noqa: E402
@@ -96,17 +95,12 @@ def list_models() -> list[str]:
 
 @dataclass(frozen=True)
 class Pipeline:
-    """Descriptor for one experiment pipeline (the run→eval pair).
+    """Descriptor for one pipeline's "run" step.
 
     Fields:
-      name        : registry key ("plr" | "search").
+      name        : registry key ("plr").
       description : one-line human summary for help text.
-      eval_mode   : the value lab's ``eval --mode`` uses for this pipeline
-                    ("attr" for plr, "search" for search) — this is how
-                    ``--pipeline`` reconciles with the existing ``--mode`` flag:
-                    ``--pipeline plr`` == ``--mode attr``, ``--pipeline search``
-                    == ``--mode search``.
-      run_fn      : callable that performs the "run" step (re-score / retrieve).
+      run_fn      : callable that performs the "run" step (re-score).
 
     Scoring moved to the eval server (RE-004, 2026-07): the lab no longer has a
     local eval step, so ``Pipeline`` carries no ``eval_fn``.  ``run_fn`` is a
@@ -116,7 +110,6 @@ class Pipeline:
 
     name: str
     description: str
-    eval_mode: str
     run_fn: Callable[..., Any]
 
 
@@ -133,14 +126,13 @@ PIPELINES: dict[str, Pipeline] = {
     "plr": Pipeline(
         name="plr",
         description="attribute extraction: re_score (scoring on eval server)",
-        eval_mode="attr",
         run_fn=_plr_run,
     ),
 }
 
 
 def get_pipeline(name: str) -> Pipeline:
-    """Return the Pipeline descriptor for a registered name ("plr" | "search")."""
+    """Return the Pipeline descriptor for a registered name ("plr")."""
     try:
         return PIPELINES[name]
     except KeyError:

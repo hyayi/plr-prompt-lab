@@ -152,3 +152,37 @@ def test_submit_pull_all_or_nothing(tmp_path: Path, monkeypatch) -> None:
             assert client.get(path).status_code == 200, path
         # 없는 run은 404 → all-or-nothing으로 저장 안 됨
         assert client.get("/api/runs/nope/report.html").status_code == 404
+
+
+def test_pull_artifacts_roundtrip_and_partial_cleanup(tmp_path: Path, monkeypatch) -> None:
+    """pull_artifacts 자체의 all-or-nothing 계약(라우트가 아니라 클라이언트 로직):
+    ① 3종 전부 성공 → out_dir에 착지  ② 중간 실패 → SystemExit + temp/out_dir 잔재 0."""
+    import io
+    import urllib.error
+
+    from runners import client as C
+
+    out = tmp_path / "pulled"
+
+    # ① happy round-trip — _get를 스텁해 3종 모두 바이트 반환
+    def _ok(url: str, token: str) -> bytes:
+        return b"{}" if url.endswith(f"/api/runs/r1") else b"<html></html>"
+    monkeypatch.setattr(C, "_get", _ok)
+    got = C.pull_artifacts("http://x", "r1", out, "")
+    assert got == ["metrics.json", "report.html", "gallery.html"]
+    assert {p.name for p in out.iterdir()} == set(got)
+    assert not any(p.name.startswith(".pull-") for p in tmp_path.iterdir()), "temp dir 잔재"
+
+    # ② partial failure — 2번째(report.html)에서 404 → 아무것도 저장 안 됨, temp 정리
+    out2 = tmp_path / "pulled2"
+
+    def _fail_on_report(url: str, token: str) -> bytes:
+        if url.endswith("/report.html"):
+            raise urllib.error.HTTPError(url, 404, "Not Found", None,
+                                         io.BytesIO(b"no such run"))
+        return b"{}"
+    monkeypatch.setattr(C, "_get", _fail_on_report)
+    with pytest.raises(SystemExit, match="report.html"):
+        C.pull_artifacts("http://x", "r1", out2, "")
+    assert not out2.exists(), "부분 실패 시 out_dir 생성 안 됨"
+    assert not any(p.name.startswith(".pull-") for p in tmp_path.iterdir()), "temp dir 잔재"
