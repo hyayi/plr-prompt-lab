@@ -243,6 +243,16 @@ def _cmd_run(args: argparse.Namespace) -> int:
         prompt_version=args.version, model_name=model_name or "gemma"
     )
     print(f"[run] re_score done: {meta}")
+
+    # run 시점 표면 지문 + 실행 파라미터 기록 — 서버 제출 무결성 대조의 기준점.
+    from runners.client import write_run_provenance
+    prov_path = write_run_provenance(
+        Path(str(ds_dir)), _LAB_ROOT_PATH,
+        model=model_name or "gemma", version=args.version,
+        max_tokens=getattr(model, "max_tokens", None),
+        temperature=getattr(model, "temperature", None),
+    )
+    print(f"[run] provenance -> {prov_path}")
     return 0
 
 
@@ -590,6 +600,27 @@ def _build_parser() -> argparse.ArgumentParser:
     ga.add_argument("--out", default=None,
                     help="output HTML path (default: <dataset>/gallery.html)")
 
+    # -- dataset-push / submit (평가 서버 클라이언트) --
+    dp = sub.add_parser("dataset-push",
+                        help="Register a dataset directory on the eval server.")
+    dp.add_argument("--dataset", "-D", required=True, help="dataset directory")
+    dp.add_argument("--name", default=None, help="server-side name (default: dir name)")
+    dp.add_argument("--server", "-S", default=os.environ.get("EVAL_SERVER_URL", ""),
+                    help="eval server URL (default: env EVAL_SERVER_URL)")
+    dp.add_argument("--token", default=os.environ.get("EVAL_SERVER_TOKEN", ""))
+    dp.add_argument("--by", default="", help="registrant display name")
+
+    sm = sub.add_parser("submit",
+                        help="Submit a run (attributes.jsonl + surface bundle) to the eval server.")
+    sm.add_argument("--dataset", required=True, help="server-side dataset name")
+    sm.add_argument("--run-dir", required=True, dest="run_dir",
+                    help="local dataset dir holding attributes.jsonl (+run_provenance.json)")
+    sm.add_argument("--version", "-X", required=True, help="prompt version label")
+    sm.add_argument("--server", "-S", default=os.environ.get("EVAL_SERVER_URL", ""),
+                    help="eval server URL (default: env EVAL_SERVER_URL)")
+    sm.add_argument("--token", default=os.environ.get("EVAL_SERVER_TOKEN", ""))
+    sm.add_argument("--by", default="", help="submitter display name")
+
     return p
 
 
@@ -676,6 +707,42 @@ def _cmd_validate_dataset(args: argparse.Namespace) -> int:
 # Dispatch
 # =====================================================================
 
+def _cmd_dataset_push(args: argparse.Namespace) -> int:
+    """데이터셋 디렉터리를 평가 서버에 등록 (tar.gz 업로드)."""
+    if not args.server:
+        print("[dataset-push] --server 또는 EVAL_SERVER_URL이 필요합니다", file=sys.stderr)
+        return 2
+    from runners.client import dataset_push
+    ds = Path(args.dataset)
+    name = args.name or ds.name
+    res = dataset_push(args.server, ds, name, args.token, created_by=args.by)
+    print(res.get("report", ""))
+    print(f"[dataset-push] registered {res['name']!r} (crops={res['n_crops']})")
+    return 0
+
+
+def _cmd_submit(args: argparse.Namespace) -> int:
+    """run 산출물 + 표면 번들을 평가 서버에 제출하고 지표 요약을 출력."""
+    if not args.server:
+        print("[submit] --server 또는 EVAL_SERVER_URL이 필요합니다", file=sys.stderr)
+        return 2
+    from runners.client import submit_run
+    res = submit_run(args.server, args.dataset, Path(args.run_dir), args.version,
+                     args.token, submitted_by=args.by, lab_root=_LAB_ROOT_PATH)
+    badge = "" if res.get("hash_verified") else "  ⚠ hash unverified"
+    if res.get("git_dirty"):
+        badge += "  ⚠ dirty"
+    print(f"[submit] run {res['run_id']}{badge}")
+    agg = res.get("aggregate") or {}
+    print(f"[submit] aggregate: macro_f1={agg.get('macro_f1')} "
+          f"macro_acc={agg.get('macro_acc')} micro_acc={agg.get('micro_acc')}")
+    for a, m in (res.get("attributes") or {}).items():
+        print(f"[submit]   {a}: acc={m['accuracy']} macro_f1={m['macro_f1']} n={m['n']}")
+    if res.get("skipped"):
+        print(f"[submit] skipped(라벨 없음): {', '.join(res['skipped'])}")
+    return 0
+
+
 _DISPATCH = {
     "build-golden": _cmd_build_golden,
     "label": _cmd_label,
@@ -686,6 +753,8 @@ _DISPATCH = {
     "demo": _cmd_demo,
     "report": _cmd_report,
     "gallery": _cmd_gallery,
+    "dataset-push": _cmd_dataset_push,
+    "submit": _cmd_submit,
     "experiment": None,  # nested — dispatched via _EXPERIMENT_DISPATCH below
 }
 
