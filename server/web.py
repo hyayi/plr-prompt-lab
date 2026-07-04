@@ -120,3 +120,39 @@ def diff_page(request: Request, a: str, b: str):
 @router.get("/upload", response_class=HTMLResponse)
 def upload_page(request: Request):
     return templates.TemplateResponse(request, "upload.html", {})
+
+
+# =====================================================================
+# 다운로드 API — 서버가 report/gallery를 렌더해 돌려준다 (lab submit --pull 소비)
+# report.py/gallery.py는 server/render.py 어댑터로 적응(재사용 아님).
+# =====================================================================
+
+@router.get("/api/runs/{run_id}/report.html", response_class=HTMLResponse)
+def run_report(run_id: str):
+    from server.render import render_run_report
+
+    root = _state()["root"]
+    if not (root / "runs" / run_id / "meta.json").exists():
+        raise HTTPException(404, f"run {run_id!r} not found")
+    return render_run_report(root, run_id)
+
+
+@router.get("/api/datasets/{dataset}/report.html", response_class=HTMLResponse)
+def dataset_report(dataset: str):
+    from server.render import render_dataset_report
+
+    root = _state()["root"]
+    if not (root / "datasets" / dataset).is_dir():
+        raise HTTPException(404, f"dataset {dataset!r} not found")
+    return render_dataset_report(root, dataset)
+
+
+@router.get("/api/runs/{run_id}/gallery.html", response_class=HTMLResponse)
+def run_gallery(run_id: str):
+    from server.render import render_run_gallery
+
+    root = _state()["root"]
+    try:
+        return render_run_gallery(root, run_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc))

@@ -151,9 +151,13 @@ def _extracted_preds(ds: Path, attribute: str,
 
 def _preds_for(ds: Path, attribute: str | None,
                base_preds: dict[str, dict]) -> dict[str, dict]:
-    """predictions.jsonl이 요청 속성의 추출물이면 그대로, 아니면 재추출."""
+    """predictions.jsonl이 요청 속성의 추출물이면 그대로, 아니면 attributes.jsonl
+    에서 재추출. predictions.jsonl이 아예 없어도(서버 pull 등) attributes.jsonl만
+    있으면 추출한다."""
     stamped = {r.get("attribute") for r in base_preds.values() if r.get("attribute")}
-    if attribute and stamped and attribute not in stamped:
+    mismatch = bool(stamped) and attribute not in stamped
+    absent = not base_preds and (ds / "attributes.jsonl").exists()
+    if attribute and (mismatch or absent):
         return _extracted_preds(ds, attribute, base_preds)
     return base_preds
 

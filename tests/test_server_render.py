@@ -92,7 +92,6 @@ def _submit(client, tmp_path, version: str) -> str:
     return r.json()["run_id"]
 
 
-@pytest.mark.xfail(reason="RE-000 실패-설계 게이트 — RE-001에서 라우트 구현 시 xfail 제거", strict=True)
 def test_gate_gallery_for_run(client, tmp_path) -> None:
     """게이트 1: 서버가 run에 대해 gallery.html을 렌더(two-root)하고 base64 크롭 내장."""
     _seed_dataset(client, tmp_path)
@@ -103,7 +102,6 @@ def test_gate_gallery_for_run(client, tmp_path) -> None:
     assert "WRONG" in r.text or "CORRECT" in r.text, "정오 배지"
 
 
-@pytest.mark.xfail(reason="RE-000 실패-설계 게이트 — RE-001에서 라우트 구현 시 xfail 제거", strict=True)
 def test_gate_report_trend_across_runs(client, tmp_path) -> None:
     """게이트 2: 같은 데이터셋에 버전 다른 run 2회 → 데이터셋 report가 시퀀스 렌더."""
     _seed_dataset(client, tmp_path)
@@ -112,3 +110,18 @@ def test_gate_report_trend_across_runs(client, tmp_path) -> None:
     r = client.get("/api/datasets/rnd_ds/report.html")
     assert r.status_code == 200, r.text
     assert "tv1" in r.text and "tv2" in r.text, "두 버전이 리포트에 나열"
+
+
+def test_adapter_record_matches_report_contract(client, tmp_path) -> None:
+    """server/render.py의 ledger 레코드가 report.py 계약(fixture)과 필드 일치."""
+    from server.render import run_ledger_records
+    from tests.fixtures.ledger_record_schema import assert_ledger_record
+
+    _seed_dataset(client, tmp_path)
+    run_id = _submit(client, tmp_path, "cv1")
+    root = tmp_path / "data"
+    recs = run_ledger_records(root / "runs" / run_id)
+    assert recs, "run has at least one attribute record"
+    for rec in recs:
+        assert_ledger_record(rec)
+    assert recs[0]["version"] == "cv1" and recs[0]["pipeline"] == "plr"
