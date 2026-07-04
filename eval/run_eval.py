@@ -1,30 +1,23 @@
 #!/usr/bin/env python3
-"""골든셋 채점기 — predictions.jsonl × labels.jsonl 조인 → 지표 + ledger.
+"""골든셋 채점기 CLI — 채점 코어는 evalkit/scoring.py::score() (단일 원천).
+
+이 파일은 score()의 **CLI 래퍼**다: argparse → score() 호출 → stdout 리포트 +
+provenance(prompt_hash/seed_hash/gemma_repo) 스탬프 + ledger append.
+채점 로직(예측 소스 해석·지표 계산)은 전부 scoring.py에 산다 — 평가 서버도
+같은 score()를 호출하므로 lab과 서버의 지표가 갈릴 수 없다.
 
 산출 지표: accuracy · 클래스별 recall/precision/F1(+macro) · confusion ·
 bias(예: female→male 오분류율) · pred_unknown(강제커밋 준수도) ·
 margin/quality split(오답이 저신뢰/저품질에 몰리는가 = 캘리브레이션).
 라벨 정책: label=="unknown"(사람도 판별 불가)은 채점에서 제외하고
-n_label_unknown으로 별도 보고 — 강제커밋 모델에 채점 불가 크롭으로
-벌점을 주지 않기 위함. 이전 버전과의 Δ를 출력하고 ledger에 append.
-
-(원문) Golden-set eval for any PLR attribute (loop-engineering C2/C3).
-
-Joins stored model predictions (predictions.jsonl) with human ground-truth
-(labels.jsonl) for one attribute (gender / vehicle_type / military / ...),
-reports accuracy + confusion, DIFFS against the previous ledger entry for the
-same (attribute, version), and appends a version-keyed record to ledger.jsonl.
-
-The current prompt version is scored from the DB snapshot (no Gemma). Scoring a
-*changed* prompt on the same crops without a full reindex is a separate GPU step
-(re_score.py, future) that re-writes predictions.jsonl for the new version.
+n_label_unknown으로 별도 보고. 이전 버전과의 Δ를 출력하고 ledger에 append.
 
 Usage:
     python3 run_eval.py --attribute gender \
         --golden golden/gender --version plr_v1.4_cot
 
-predictions.jsonl: {"obj_id": "1003", "pred": "male", "reason": "...", "margin": "0.9"}
-labels.jsonl:      {"obj_id": "1003", "label": "female"}
+predictions.jsonl: {"obj_id": "1003", "attribute": "gender", "pred": "male", ...}
+labels.jsonl:      {"obj_id": "1003", "label": "female"}  또는 다속성 {"labels": {...}}
 """
 from __future__ import annotations
 
@@ -32,14 +25,21 @@ import argparse
 import json
 import os
 import sys
-from collections import Counter, defaultdict
 from datetime import datetime
 
-# Lab root (one level above eval/) must be importable for the shared provenance
-# helper whether this runs standalone or loaded via importlib from lab.py.
+# Lab root (one level above eval/) must be importable for the shared helpers
+# whether this runs standalone or loaded via importlib from lab.py.
 _LAB_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _LAB_ROOT not in sys.path:
     sys.path.insert(0, _LAB_ROOT)
+
+# Backward-compat re-exports — the scoring core moved to evalkit/scoring.py.
+from evalkit.scoring import (  # noqa: E402,F401
+    BIAS_PAIR,
+    ScoringError,
+    score,
+    signal_stats as _signal_stats,
+)
 
 
 def _prompt_hash() -> str:
@@ -47,53 +47,6 @@ def _prompt_hash() -> str:
     from evalkit.provenance import prompt_hash
 
     return prompt_hash(_LAB_ROOT)
-
-def _signal_stats(
-    vals: dict, eval_ids: list, is_correct: dict, threshold: float,
-) -> dict | None:
-    """크롭별 신호(margin/quality) 구간별 accuracy — 캘리브레이션 검증.
-    오답이 저신호 구간에 몰리면 신호가 유효(런타임 필터로 활용 가능),
-    high/low accuracy가 같으면 노이즈.
-
-    입력/출력 예) margin {a:0.9(정답),b:0.2(오답)}, threshold 0.7
-      → {"high":{"n":1,"accuracy":1.0}, "low":{"n":1,"accuracy":0.0},
-         "mean_correct":0.9, "mean_wrong":0.2, …}
-
-    (원문) Accuracy split by a per-crop signal (model margin or crop quality).
-
-    plr_v1.5_cot replaced the unknown escape hatch with "commit + margin",
-    so eval must verify the signal is informative: if low-margin /
-    low-quality crops concentrate the errors, the signal is usable
-    downstream; if high/low accuracy are equal, it is noise.
-    Returns None when the signal is absent from predictions (old files,
-    or attributes whose prompt emits no margin)."""
-    ids = [i for i in eval_ids if vals.get(i) is not None]
-    if not ids:
-        return None
-
-    def _acc(group):
-        return round(sum(is_correct[i] for i in group) / len(group), 4) if group else None
-
-    def _mean(group):
-        return round(sum(vals[i] for i in group) / len(group), 4) if group else None
-
-    hi = [i for i in ids if vals[i] >= threshold]
-    lo = [i for i in ids if vals[i] < threshold]
-    return {
-        "threshold": threshold,
-        "n": len(ids),
-        "high": {"n": len(hi), "accuracy": _acc(hi)},
-        "low": {"n": len(lo), "accuracy": _acc(lo)},
-        "mean_correct": _mean([i for i in ids if is_correct[i]]),
-        "mean_wrong": _mean([i for i in ids if not is_correct[i]]),
-    }
-
-
-# Per-attribute "bias" metric: (true_class -> mistaken_as) whose rate we headline.
-# For gender the user's concern is women predicted male, so ("female","male").
-BIAS_PAIR = {
-    "gender": ("female", "male"),
-}
 
 
 def _jsonl(path: str) -> list[dict]:
@@ -121,8 +74,6 @@ def main() -> None:
     ap.add_argument("--date", default=None)
     ap.add_argument("--core-ir", default=None, dest="core_ir",
                     help="path to core/ir repo (for stale-seed warning)")
-    # Experiment-combination keys (P2-1). Optional/back-compat: default to the
-    # historical (gemma + plr) combination; --dataset defaults to --golden.
     ap.add_argument("--model", default=None,
                     help="registry model name that produced predictions "
                          "(default: the model stamp in predictions.jsonl)")
@@ -142,155 +93,35 @@ def main() -> None:
     seed_hash = read_seed_hash(_LAB_ROOT)
     warn_stale_seed(_LAB_ROOT, seed_hash, args.core_ir)
 
-    from evalkit.dataset import attribute_spec, load_labels, resolve_json_path
-
     gdir = args.golden or os.path.join(here, "golden", args.attribute)
-    spec = attribute_spec(gdir, args.attribute)
 
-    preds_path = os.path.join(gdir, "predictions.jsonl")
-    attrs_path = os.path.join(gdir, "attributes.jsonl")
-    pred_rows = (
-        {r["obj_id"]: r for r in _jsonl(preds_path)}
-        if os.path.exists(preds_path) else {}
-    )
-
-    # predictions.jsonl은 re_score가 마지막으로 돌린 "한 속성"의 추출물.
-    # 행의 attribute 스탬프가 요청 속성과 다르거나 파일이 없으면,
-    # attributes.jsonl(크롭당 plr_json 전체 캐시)에서 pred/margin을 재추출한다
-    # — 모델 1회 실행으로 라벨된 모든 속성을 평가할 수 있는 근거.
-    # 모델 이름: 명시 플래그 > re_score가 행에 남긴 스탬프 > "unspecified".
-    # (과거엔 기본값 "gemma"가 mock 실행에도 그대로 찍혔다 — 눈먼 스탬프 금지.)
-    model_stamps = {r.get("model") for r in pred_rows.values() if r.get("model")}
-    resolved_model = args.model or (sorted(model_stamps)[0] if model_stamps else "unspecified")
-
-    stamped = {r.get("attribute") for r in pred_rows.values() if r.get("attribute")}
-    if (not pred_rows) or (stamped and args.attribute not in stamped):
-        if not os.path.exists(attrs_path):
-            raise SystemExit(
-                f"No predictions for attribute={args.attribute!r} and no "
-                f"attributes.jsonl to extract from — run `lab run` first."
-            )
-        if not spec.get("pred_path"):
-            raise SystemExit(
-                f"attribute={args.attribute!r}: no pred_path (declare it in "
-                f"manifest.yaml `attributes:` or use a preset attribute)."
-            )
-        extracted: dict[str, dict] = {}
-        for r in _jsonl(attrs_path):
-            oid = r["obj_id"]
-            pj = r.get("plr_json") or {}
-            row: dict = {"obj_id": oid, "attribute": args.attribute,
-                         "pred": resolve_json_path(pj, spec["pred_path"])}
-            if spec.get("margin_path"):
-                m = resolve_json_path(pj, spec["margin_path"])
-                if isinstance(m, (int, float)):
-                    row["margin"] = float(m)
-            q = (pred_rows.get(oid) or {}).get("quality")
-            if q is not None:  # 품질은 크롭의 속성 — 어느 속성 평가든 재사용 가능
-                row["quality"] = q
-            extracted[oid] = row
-        pred_rows = extracted
-
-    preds = {i: (str(r.get("pred")) if r.get("pred") not in (None, "") else "unknown")
-             for i, r in pred_rows.items()}
-    labels = load_labels(gdir, args.attribute)
-
-    ids = [i for i in preds if i in labels]
-    if not ids:
-        raise SystemExit(
-            f"No overlap between predictions and labels for "
-            f"attribute={args.attribute!r} (multi-attribute labels.jsonl rows "
-            f"must carry that key inside \"labels\")."
+    # ---- 채점 (순수 코어 — 서버와 동일 함수) ----
+    try:
+        res = score(
+            gdir, args.attribute,
+            margin_threshold=args.margin_threshold,
+            quality_threshold=args.quality_threshold,
         )
+    except ScoringError as exc:
+        raise SystemExit(str(exc))
 
-    # Forced-commit compliance (plr_v1.5_cot): how often the model still
-    # answered unknown despite the commit instruction. Measured over ALL
-    # matched ids, before any label filtering.
-    n_pred_unknown = sum(1 for i in ids if preds[i] == "unknown")
-    pred_unknown = {
-        "rate": round(n_pred_unknown / len(ids), 4),
-        "count": f"{n_pred_unknown}/{len(ids)}",
-    }
+    # 모델 이름: 명시 플래그 > 예측 행 스탬프 > "unspecified".
+    resolved_model = args.model or res["resolved_model"] or "unspecified"
 
-    # Human-unlabelable crops (label == "unknown", set via `lab label
-    # --unknown ...`) are EXCLUDED from accuracy/recall/bias/confusion: if a
-    # human cannot decide the attribute from the crop, there is no ground
-    # truth to be right or wrong against — under the forced-commit prompt the
-    # model must still answer, and counting those answers as errors would
-    # systematically punish committed guesses on undecidable crops.
-    eval_ids = [i for i in ids if labels[i] != "unknown"]
-    n_label_unknown = len(ids) - len(eval_ids)
-    if not eval_ids:
-        raise SystemExit(
-            "All labels are 'unknown' — nothing to score against. "
-            "Label at least one crop with a decided class."
-        )
-
-    classes = sorted({*(labels[i] for i in eval_ids), *(preds[i] for i in eval_ids)})
-    confusion: dict[str, Counter] = defaultdict(Counter)
-    correct = 0
-    for i in eval_ids:
-        confusion[labels[i]][preds[i]] += 1
-        correct += labels[i] == preds[i]
-    n = len(eval_ids)
-    acc = correct / n
-
-    recall = {}
-    for c in classes:
-        cid = [i for i in eval_ids if labels[i] == c]
-        if cid:
-            recall[c] = round(sum(preds[i] == c for i in cid) / len(cid), 4)
-
-    # Per-class precision + F1, and macro-F1 over classes that appear in the
-    # ground truth (classes only ever predicted have recall undefined).
-    precision = {}
-    for c in classes:
-        pid = [i for i in eval_ids if preds[i] == c]
-        if pid:
-            precision[c] = round(sum(labels[i] == c for i in pid) / len(pid), 4)
-    f1 = {}
-    for c in classes:
-        r, pr = recall.get(c), precision.get(c)
-        if r is None and pr is None:
-            continue
-        r, pr = r or 0.0, pr or 0.0
-        f1[c] = round(2 * pr * r / (pr + r), 4) if (pr + r) > 0 else 0.0
-    gt_classes = [c for c in classes if c in recall]
-    macro_f1 = (round(sum(f1.get(c, 0.0) for c in gt_classes) / len(gt_classes), 4)
-                if gt_classes else None)
-
-    # Confidence / quality splits (values are optional per prediction row).
-    is_correct = {i: labels[i] == preds[i] for i in eval_ids}
-    margins = {i: pred_rows[i].get("margin") for i in eval_ids}
-    qualities = {i: pred_rows[i].get("quality") for i in eval_ids}
-    margin_stats = _signal_stats(margins, eval_ids, is_correct, args.margin_threshold)
-    quality_stats = _signal_stats(qualities, eval_ids, is_correct, args.quality_threshold)
-
-    # Headline bias pair: attribute_spec이 manifest(속성별 attributes: 맵 →
-    # legacy 최상위 필드) → 프리셋 순으로 병합해 준다.
-    pair = None
-    bp = spec.get("bias_pair")
-    if isinstance(bp, (list, tuple)) and len(bp) == 2:
-        pair = (str(bp[0]), str(bp[1]))
-    if pair is None:
-        pair = BIAS_PAIR.get(args.attribute)
-
-    bias = None
-    if pair:
-        t_cls, as_cls = pair
-        tid = [i for i in eval_ids if labels[i] == t_cls]
-        if tid:
-            bias = {"pair": f"{t_cls}->{as_cls}",
-                    "rate": round(sum(preds[i] == as_cls for i in tid) / len(tid), 4),
-                    "count": f"{sum(preds[i] == as_cls for i in tid)}/{len(tid)}"}
+    n = res["n"]
+    acc = res["accuracy"]
+    bias = res["bias"]
+    pred_unknown = res["pred_unknown"]
+    margin_stats, quality_stats = res["margin_stats"], res["quality_stats"]
+    classes, confusion = res["classes"], res["confusion"]
 
     prev = _last_ledger(args.ledger, args.attribute, args.version)
 
     print(f"=== {args.attribute} eval: {args.version} (n={n}) ===")
-    if n_label_unknown:
-        print(f"excluded {n_label_unknown} human-unlabelable crop(s) (label=unknown)")
+    if res["n_label_unknown"]:
+        print(f"excluded {res['n_label_unknown']} human-unlabelable crop(s) (label=unknown)")
     print(f"pred unknown rate: {pred_unknown['rate']:.3f} ({pred_unknown['count']})")
-    print(f"accuracy: {acc:.3f} ({correct}/{n})", end="")
+    print(f"accuracy: {acc:.3f} ({res['correct']}/{n})", end="")
     if prev:
         d = acc - prev["accuracy"]
         print(f"   Δ vs {prev['version']}: {d:+.3f} ({prev['accuracy']:.3f} → {acc:.3f})")
@@ -308,32 +139,30 @@ def main() -> None:
                   f"high acc={st['high']['accuracy']} (n={st['high']['n']})  "
                   f"low acc={st['low']['accuracy']} (n={st['low']['n']})  "
                   f"mean correct/wrong: {st['mean_correct']}/{st['mean_wrong']}")
-    print("recall:    " + ", ".join(f"{k}={v}" for k, v in recall.items()))
-    print("precision: " + ", ".join(f"{k}={v}" for k, v in precision.items()))
-    print("f1:        " + ", ".join(f"{k}={v}" for k, v in f1.items())
-          + (f"   macro_f1={macro_f1}" if macro_f1 is not None else ""))
+    print("recall:    " + ", ".join(f"{k}={v}" for k, v in res["recall"].items()))
+    print("precision: " + ", ".join(f"{k}={v}" for k, v in res["precision"].items()))
+    print("f1:        " + ", ".join(f"{k}={v}" for k, v in res["f1"].items())
+          + (f"   macro_f1={res['macro_f1']}" if res["macro_f1"] is not None else ""))
     print("confusion (rows=true, cols=pred):")
     print("        " + "".join(f"{c:>10}" for c in classes))
     for t in classes:
-        print(f"{t:>8}" + "".join(f"{confusion[t][p]:>10}" for p in classes))
+        print(f"{t:>8}" + "".join(f"{confusion.get(t, {}).get(p, 0):>10}" for p in classes))
 
+    # ---- provenance + ledger (CLI 래퍼의 소관 — score()는 모름) ----
     gemma_repo = os.environ.get("IR_GEMMA_REPO", "")
     record = {
         "attribute": args.attribute, "version": args.version,
         "date": args.date or datetime.now().isoformat(timespec="seconds"),
-        "n": n, "accuracy": round(acc, 4), "recall": recall,
-        "precision": precision, "f1": f1, "macro_f1": macro_f1, "bias": bias,
-        "confusion": {t: dict(confusion[t]) for t in classes},
-        # plr_v1.5_cot forced-commit metrics: model unknown rate (over all
-        # matched ids) and how many crops were human-unlabelable (excluded).
+        "n": n, "accuracy": acc, "recall": res["recall"],
+        "precision": res["precision"], "f1": res["f1"],
+        "macro_f1": res["macro_f1"], "bias": bias,
+        "confusion": confusion,
         "pred_unknown": pred_unknown,
-        "n_label_unknown": n_label_unknown,
-        # Confidence/quality calibration (None when the signal is absent).
+        "n_label_unknown": res["n_label_unknown"],
         "margin_stats": margin_stats,
         "quality_stats": quality_stats,
         "seed_hash": seed_hash or "",
         "gemma_repo": gemma_repo,
-        # ---- Experiment-combination keys (P2-1) ----
         "dataset": args.dataset or gdir,
         "model": resolved_model,
         "pipeline": args.pipeline,
