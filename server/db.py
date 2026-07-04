@@ -60,7 +60,9 @@ CREATE TABLE IF NOT EXISTS label_audit (
 
 def connect(db_path: str | Path) -> sqlite3.Connection:
     """WAL·busy_timeout이 설정된 연결. row_factory=Row."""
-    conn = sqlite3.connect(str(db_path))
+    # check_same_thread=False: FastAPI의 동기 핸들러는 스레드풀에서 돈다.
+    # 쓰기는 WRITE_LOCK으로 직렬화되고 읽기는 WAL이라 스레드 공유가 안전.
+    conn = sqlite3.connect(str(db_path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")

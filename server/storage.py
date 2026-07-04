@@ -88,6 +88,17 @@ def surface_hash(bundle_dir: str | Path) -> str:
     return prompt_hash(bundle_dir)
 
 
+def find_dataset_root(extracted: Path) -> Path | None:
+    """해제 결과에서 데이터셋 루트 탐지 — manifest.yaml이 최상위 또는
+    단일 하위 디렉터리에 있는 두 관례를 모두 수용."""
+    if (extracted / "manifest.yaml").exists():
+        return extracted
+    subdirs = [d for d in extracted.iterdir() if d.is_dir()]
+    if len(subdirs) == 1 and (subdirs[0] / "manifest.yaml").exists():
+        return subdirs[0]
+    return None
+
+
 def read_json(path: Path) -> dict | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -131,7 +142,10 @@ def reconcile_and_rebuild(root: Path, conn: sqlite3.Connection) -> dict:
             shutil.move(str(run_dir), str(target))
             quarantined.append(run_dir.name)
             continue
-        _db.upsert_run(conn, meta, metrics)
+        # metrics.json = {"attributes": {attr: res}, "aggregate": ...} 표준형;
+        # 평면형({attr: res})도 수용 (구형/수동 배치 호환).
+        per_attr = metrics.get("attributes") if isinstance(metrics.get("attributes"), dict) else metrics
+        _db.upsert_run(conn, meta, per_attr)
         rebuilt_runs.append(run_dir.name)
 
     return {"runs": rebuilt_runs, "quarantined": quarantined}
