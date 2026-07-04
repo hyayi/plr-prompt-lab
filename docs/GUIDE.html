@@ -290,7 +290,22 @@ margin·quality 캘리브레이션을 ledger에 적재.</div>
   → PROMPT_VERSION bump)를 1회 수행 — 그 전까지 동기화하지 마세요.
 </div>
 
-<h2><span class="n">10</span> 지도 — 명령·스킬·문서</h2>
+<h2><span class="n">10</span> 평가 서버 — 팀 리더보드 (선택)</h2>
+<pre><code><span class="c"># 서버 기동 (관리자 1회, 사내 서버에서):</span>
+docker compose -f server/docker-compose.example.yml up -d --build   <span class="c"># :8890</span>
+
+<span class="c"># 사용자: 데이터셋 등록 → run 제출 (lab 산출물 그대로)</span>
+export EVAL_SERVER_URL=http://<서버IP>:8890  EVAL_SERVER_TOKEN=<토큰>
+python3 lab.py dataset-push --dataset datasets/my_test              <span class="c"># 크롭+라벨 등록</span>
+python3 lab.py run -X plr_v1.5_cot --dataset datasets/my_test       <span class="c"># run_provenance.json 자동 기록</span>
+python3 lab.py submit --dataset my_test --run-dir datasets/my_test -X plr_v1.5_cot
+<span class="out">[submit] run r20260704-... ✓  aggregate: macro_f1=... micro_acc=...</span></code></pre>
+<div class="expect">브라우저 <b>http://&lt;서버IP&gt;:8890/</b> — 데이터셋별 리더보드(다지표 정렬),
+run 상세(프롬프트 원문 열람), 두 run 비교(파일 diff+파라미터), 라벨 정정 시 전 run 자동 재채점.
+제출물에는 표면 번들(프롬프트·vocab·파서 py 사본 — 보관/diff 전용)이 함께 박제되고,
+run 시점 지문과 다르면 ⚠ 미검증 배지가 붙습니다.</div>
+
+<h2><span class="n">11</span> 지도 — 명령·스킬·문서</h2>
 <table>
 <tr><th>명령</th><th>역할</th></tr>
 <tr><td><code>lab demo [--keep]</code></td><td>GPU-free 온보딩 (mock 전체 사이클)</td></tr>
