@@ -333,7 +333,8 @@ async def submit_run(
                 "temperature": prov.get("temperature"),
                 "reason_toggle": str(prov.get("reason", "")),
                 "submitted_by": submitted_by,
-                "submitted_at": datetime.now().isoformat(timespec="seconds"),
+                # microseconds: 같은 초 다중 제출도 재기동 리플레이 후 순서 보존
+                "submitted_at": datetime.now().isoformat(timespec="microseconds"),
                 "status": "scored",
             }
             (run_dir / "meta.json").write_text(
@@ -367,7 +368,9 @@ def list_runs(dataset: str | None = None, all_history: bool = False) -> dict:
     if dataset:
         q += " WHERE dataset=?"
         params = (dataset,)
-    q += " ORDER BY run_id DESC"
+    # 같은 초에 생성된 run은 run_id 정렬이 hex 꼬리로 갈릴 수 있어
+    # 삽입 순서(rowid)를 최종 타이브레이커로 — "최신" 선택을 결정적으로.
+    q += " ORDER BY submitted_at DESC, rowid DESC"
     rows = [dict(r) for r in conn.execute(q, params).fetchall()]
     if not all_history:
         latest: dict[tuple, dict] = {}
