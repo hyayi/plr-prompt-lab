@@ -2,8 +2,8 @@
 
 ## Purpose / When to Use
 
-Use this skill AFTER an experiment run (`lab experiment run` or
-`lab run` + `lab eval`) to turn the results into a **grounded prompt
+Use this skill AFTER a submit (`lab run` → `lab submit --pull`, 여러 버전이면
+각 버전 반복) to turn the pulled server results into a **grounded prompt
 improvement proposal**. The skill is an agent workflow: it reads the ledger /
 report, LOOKS AT the actual failure crops (gallery + raw images), and drives
 a multi-role debate loop until a judge accepts the proposal.
@@ -14,11 +14,18 @@ named sample (`obj_id`) whose crop was actually viewed.
 
 ## Inputs (all produced by the lab)
 
-| Source | What it gives you |
+**서버에서 `lab submit --pull`로 받는 파일 (채점은 서버 단일 — lab 로컬 eval 제거됨)**
+
+| Source (pulled) | What it gives you |
 |---|---|
-| `eval/ledger.jsonl` (or the experiment's ledger) | accuracy / recall / precision / F1 / confusion / bias / `pred_unknown` / `margin_stats` / `quality_stats` per version |
-| `lab report --out report.html` | cross-version comparison table, trends, confusion rendering |
-| `lab gallery --dataset D` | crops-vs-labels HTML, **wrong-first** — the visual evidence base |
+| `<pulled>/metrics.json` | accuracy / recall / precision / F1 / confusion / bias / `pred_unknown` / `margin_stats` / `quality_stats` — 서버 채점 결과 |
+| `<pulled>/report.html` | cross-version comparison table, trends, confusion (서버 렌더) |
+| `<pulled>/gallery.html` | crops-vs-labels HTML, **wrong-first** — 오답 크롭 base64 내장 (서버 렌더) |
+
+**로컬 run 산출물 (lab이 만들어 그대로 보유 — 서버로 안 감)**
+
+| Source (local) | What it gives you |
+|---|---|
 | `<dataset>/predictions.jsonl` | per-crop pred + margin + quality |
 | `<dataset>/attributes.jsonl` | full PLR JSON per crop (per-slot analysis) |
 | `<dataset>/raw_responses.jsonl` | VERBATIM model text per crop + input/output token counts — check what the model actually said before parsing/normalisation touched it (e.g. was `gray` really answered, or coerced from an off-enum word?) |
@@ -105,8 +112,9 @@ If any fail → back to 2 (next round). After round 3 → emit `unresolved`.
    referencing an existing prompt), with a header comment documenting the
    rationale per change.
 3. **예상 효과** — the judge-approved measurable predictions.
-4. **검증 계획** — the exact `lab experiment run` yaml comparing
-   current vs new version on the same dataset.
+4. **검증 계획** — 신·구 버전을 각각 `lab run` → `lab submit`(같은 서버 데이터셋)한 뒤
+   서버 리더보드(`/d/<dataset>`)에서 지표 Δ를 확인하는 절차. (로컬 experiment 스윕은
+   제거됨 — 비교는 서버 리더보드가 담당.)
 5. (if capped) **미해결 쟁점** — the judge's outstanding objections.
 
 ## Ground rules

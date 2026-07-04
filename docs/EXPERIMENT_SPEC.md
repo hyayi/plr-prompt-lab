@@ -1,5 +1,7 @@
 # EXPERIMENT_SPEC.md — 실험 매트릭스 러너
 
+> ⚠ DEPRECATED (2026-07): lab experiment는 제거됨. 다버전 비교는 각 버전 `lab submit` 후 서버 리더보드(/d/<dataset>)에서 확인하세요.
+
 `lab experiment run <experiment.yaml>`은
 `datasets × models × prompts × pipelines × attributes`의 **교차곱**을
 셀 단위로 열거하고, 각 셀마다:
