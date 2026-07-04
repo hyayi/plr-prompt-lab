@@ -43,6 +43,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="plr-eval-server", lifespan=lifespan)
 
+# 웹 UI 라우터는 앱 정의 후 등록 (순환 import 회피를 위해 지연 include — 파일 하단).
+
 
 @app.middleware("http")
 async def token_guard(request: Request, call_next):
@@ -395,3 +397,12 @@ def run_detail(run_id: str) -> dict:
     ) if (run_dir / "surface").is_dir() else []
     return {"meta": meta, "metrics": metrics, "surface_files": surface_files,
             "provenance": read_json(run_dir / "run_provenance.json")}
+
+
+# =====================================================================
+# Web UI (server/web.py) — API 정의 뒤에 include (web이 app.list_runs를 참조)
+# =====================================================================
+
+from server.web import router as _web_router  # noqa: E402
+
+app.include_router(_web_router)
