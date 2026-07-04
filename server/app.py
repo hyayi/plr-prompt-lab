@@ -228,3 +228,170 @@ async def correct_labels(
 
     return {"dataset": name, "diff_summary": diff_summary,
             "rescored_runs": rescored, "report": report}
+
+
+# =====================================================================
+# Runs API (AC2, AC3, AC7)
+# =====================================================================
+
+from server.storage import new_run_id, read_json, surface_hash as _surface_hash  # noqa: E402
+
+
+def _validate_attributes_jsonl(path) -> int:
+    """행별 plr_json을 스키마 검증 — 형식 부정 차단. 행 수 반환."""
+    from plr_schema import validate_plr
+
+    n = 0
+    with open(path, encoding="utf-8") as f:
+        for lineno, line in enumerate(f, start=1):
+            if not line.strip():
+                continue
+            try:
+                rec = json.loads(line)
+                validate_plr(rec["plr_json"])
+            except Exception as exc:  # noqa: BLE001 — 첫 위반 지점을 그대로 보고
+                raise HTTPException(
+                    422, f"attributes.jsonl line {lineno}: {exc}")
+            n += 1
+    if n == 0:
+        raise HTTPException(422, "attributes.jsonl is empty")
+    return n
+
+
+@app.post("/api/runs", status_code=201)
+async def submit_run(
+    dataset: str = Form(...),
+    version_label: str = Form(...),
+    submitted_by: str = Form(""),
+    attributes: UploadFile = File(...),
+    surface: UploadFile = File(...),
+    provenance: UploadFile | None = File(None),
+) -> dict:
+    root, conn = STATE["root"], STATE["conn"]
+    ds_dir = root / "datasets" / dataset
+    if not ds_dir.is_dir():
+        raise HTTPException(404, f"dataset {dataset!r} not found — 먼저 등록하세요")
+
+    run_id = new_run_id()
+    run_dir = root / "runs" / run_id
+    run_dir.mkdir(parents=True)
+    try:
+        # 1) 파일 수신 (스트리밍) — meta.json은 맨 마지막에 쓴다:
+        #    meta+metrics가 모두 있어야 완결 run (크래시 잔재는 기동 시 격리).
+        await _save_upload(attributes, run_dir / "attributes.jsonl")
+        tar_path = run_dir / ".surface.tgz"
+        await _save_upload(surface, tar_path)
+        prov: dict = {}
+        if provenance is not None:
+            await _save_upload(provenance, run_dir / "run_provenance.json")
+            prov = read_json(run_dir / "run_provenance.json") or {}
+
+        _validate_attributes_jsonl(run_dir / "attributes.jsonl")
+
+        # 2) 표면 번들 해제 + 해시 재계산·대조 (run 시점 지문 vs 업로드 번들).
+        #    업로드된 py는 저장·열람·diff 전용 — 여기서든 어디서든 절대
+        #    import/실행하지 않는다 (RCE 방지 하드 규칙).
+        try:
+            safe_extract_targz(tar_path, run_dir / "surface")
+        except ExtractError as exc:
+            raise HTTPException(400, f"surface bundle rejected: {exc}")
+        tar_path.unlink(missing_ok=True)
+        bundle_root = find_dataset_root(run_dir / "surface") or (run_dir / "surface")
+        if not (bundle_root / "prompts").is_dir():
+            # 단일 최상위 디렉터리로 감싼 번들 수용
+            subs = [d for d in (run_dir / "surface").iterdir() if d.is_dir()]
+            if len(subs) == 1 and (subs[0] / "prompts").is_dir():
+                bundle_root = subs[0]
+        recomputed = _surface_hash(bundle_root)
+        claimed = str(prov.get("surface_hash", ""))
+        hash_verified = bool(claimed) and (claimed == recomputed)
+
+        # 3) 채점 (lab과 동일 함수) — 쓰기 락 아래 직렬화.
+        from evalkit.scoring import ScoringError
+        from server.scoring import score_run
+
+        async with dbm.WRITE_LOCK:
+            try:
+                res = score_run(ds_dir, run_dir / "attributes.jsonl")
+            except ScoringError as exc:
+                raise HTTPException(422, f"scoring failed: {exc}")
+
+            (run_dir / "metrics.json").write_text(
+                json.dumps(res, ensure_ascii=False), encoding="utf-8")
+            meta = {
+                "run_id": run_id, "dataset": dataset,
+                "version_label": version_label,
+                "surface_hash": recomputed,
+                "hash_verified": hash_verified,
+                "claimed_surface_hash": claimed,
+                "submitter_lab_sha": str(prov.get("lab_sha", "")),
+                "git_dirty": bool(prov.get("git_dirty", False)),
+                "model": str(prov.get("model", "")),
+                "max_tokens": prov.get("max_tokens"),
+                "temperature": prov.get("temperature"),
+                "reason_toggle": str(prov.get("reason", "")),
+                "submitted_by": submitted_by,
+                "submitted_at": datetime.now().isoformat(timespec="seconds"),
+                "status": "scored",
+            }
+            (run_dir / "meta.json").write_text(
+                json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+            dbm.upsert_run(conn, meta, res["attributes"])
+
+        return {
+            "run_id": run_id,
+            "hash_verified": hash_verified,
+            "git_dirty": meta["git_dirty"],
+            "aggregate": res["aggregate"],
+            "attributes": {a: {"accuracy": m["accuracy"], "macro_f1": m["macro_f1"],
+                               "n": m["n"]}
+                           for a, m in res["attributes"].items()},
+            "skipped": res["skipped"],
+        }
+    except HTTPException:
+        shutil.rmtree(run_dir, ignore_errors=True)  # 불완전 run 즉시 정리
+        raise
+    except Exception:
+        shutil.rmtree(run_dir, ignore_errors=True)
+        raise
+
+
+@app.get("/api/runs")
+def list_runs(dataset: str | None = None, all_history: bool = False) -> dict:
+    """리더보드 데이터 — 기본은 version_label당 최신 run, all_history=True면 전체."""
+    conn = STATE["conn"]
+    q = "SELECT * FROM runs"
+    params: tuple = ()
+    if dataset:
+        q += " WHERE dataset=?"
+        params = (dataset,)
+    q += " ORDER BY run_id DESC"
+    rows = [dict(r) for r in conn.execute(q, params).fetchall()]
+    if not all_history:
+        latest: dict[tuple, dict] = {}
+        for r in rows:  # run_id 내림차순 → 첫 등장이 최신
+            latest.setdefault((r["dataset"], r["version_label"]), r)
+        rows = list(latest.values())
+    for r in rows:
+        r["metrics"] = {}
+        for m in STATE["conn"].execute(
+                "SELECT attribute, metric, value FROM metrics WHERE run_id=?",
+                (r["run_id"],)):
+            r["metrics"].setdefault(m["attribute"], {})[m["metric"]] = m["value"]
+    return {"runs": rows}
+
+
+@app.get("/api/runs/{run_id}")
+def run_detail(run_id: str) -> dict:
+    root = STATE["root"]
+    run_dir = root / "runs" / run_id
+    meta = read_json(run_dir / "meta.json")
+    if not meta:
+        raise HTTPException(404, f"run {run_id!r} not found")
+    metrics = read_json(run_dir / "metrics.json") or {}
+    surface_files = sorted(
+        str(p.relative_to(run_dir / "surface"))
+        for p in (run_dir / "surface").rglob("*") if p.is_file()
+    ) if (run_dir / "surface").is_dir() else []
+    return {"meta": meta, "metrics": metrics, "surface_files": surface_files,
+            "provenance": read_json(run_dir / "run_provenance.json")}
