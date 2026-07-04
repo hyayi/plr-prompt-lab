@@ -189,6 +189,29 @@ def labeled_attributes(dataset_dir: str | Path) -> list[str]:
     return list(seen)
 
 
+def eval_attributes(dataset_dir: str | Path) -> tuple[list[str], list[str], list[str]]:
+    """"라벨이 실제로 있는 평가 속성"의 단일 정의 — lab eval-all과 평가 서버가
+    같은 헬퍼를 쓴다 (선택 로직이 갈리면 lab↔서버 지표 비교가 무의미).
+
+    Returns (attributes, skipped, undeclared):
+      attributes — 평가할 속성 (manifest 선언 ∩ 라벨 등장; 선언 없으면 라벨 키,
+                   다속성 라벨 없으면 선언 그대로 — legacy 단일 label 데이터셋)
+      skipped    — 선언됐지만 라벨이 아직 없는 속성 (실패 아님 — 안내 대상)
+      undeclared — 라벨에는 있는데 manifest 미선언 (오타 의심 — 경고 대상)
+    """
+    declared = declared_attributes(dataset_dir)
+    labeled = labeled_attributes(dataset_dir)
+    if declared and labeled:
+        attributes = [a for a in declared if a in labeled]
+        skipped = [a for a in declared if a not in attributes]
+        undeclared = [a for a in labeled if a not in declared]
+    elif declared:      # legacy 단일 label 행뿐 → 선언 기준
+        attributes, skipped, undeclared = declared, [], []
+    else:               # manifest 선언 없음 → 라벨 키 기준
+        attributes, skipped, undeclared = labeled, [], []
+    return attributes, skipped, undeclared
+
+
 def declared_attributes(dataset_dir: str | Path) -> list[str]:
     """manifest가 선언한 평가 속성 목록 — `lab eval --attribute all`의 순회 대상.
 
