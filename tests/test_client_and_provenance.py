@@ -45,6 +45,52 @@ def test_surface_bundle_matches_surface_relpaths_and_hash(tmp_path: Path) -> Non
     assert prompt_hash(tmp_path) == prompt_hash(_LAB_ROOT)
 
 
+def test_surface_hash_scoped_to_used_version(tmp_path: Path) -> None:
+    """S4: surface_hash/번들이 run이 쓴 프롬프트 버전만 커버 — 안 쓴 버전 편집은
+    지문을 안 바꾸고, 쓴 버전 편집은 바꾼다. version 미지정(lab port 경로)은 전 버전."""
+    import io
+    import tarfile
+
+    from evalkit.provenance import prompt_hash
+    from runners.client import build_surface_bundle
+
+    root = tmp_path
+    (root / "prompts" / "v1").mkdir(parents=True)
+    (root / "prompts" / "v2").mkdir(parents=True)
+    (root / "prompts" / "v1" / "person.yaml").write_text("system: v1\n", encoding="utf-8")
+    (root / "prompts" / "v2" / "person.yaml").write_text("system: v2\n", encoding="utf-8")
+
+    h1 = prompt_hash(root, version="v1")
+    # ① 안 쓴 v2 편집 → v1 해시 불변
+    (root / "prompts" / "v2" / "person.yaml").write_text("system: v2-EDIT\n", encoding="utf-8")
+    assert prompt_hash(root, version="v1") == h1, "다른 버전 편집이 지문을 바꾸면 안 됨"
+    # ② 쓴 v1 편집 → 해시 변함
+    (root / "prompts" / "v1" / "person.yaml").write_text("system: v1-EDIT\n", encoding="utf-8")
+    assert prompt_hash(root, version="v1") != h1, "사용 버전 편집은 지문을 바꿔야 함"
+
+    # ③ version 미지정(전 버전 = lab port 경로)은 어느 버전 변경에도 반응 — 동작 불변
+    hall = prompt_hash(root)
+    (root / "prompts" / "v2" / "person.yaml").write_text("system: v2-AGAIN\n", encoding="utf-8")
+    assert prompt_hash(root) != hall, "version 미지정은 전 버전을 해싱(lab port 불변)"
+
+    # ④ 번들도 사용 버전만 담는다
+    data = build_surface_bundle(root, version="v1")
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
+        names = {m.name for m in tf.getmembers() if m.isfile()}
+    assert "prompts/v1/person.yaml" in names
+    assert not any(n.startswith("prompts/v2/") for n in names), "번들에 안 쓴 버전 포함 금지"
+
+    # ⑤ 불변식: 서버가 version 미지정으로 번들을 재해싱한 값 == client의 버전스코프 해시
+    #    (서버 코드 변경 없이 hash_verified가 성립하는 근거)
+    bdir = tmp_path / "extracted"
+    bdir.mkdir()
+    with tarfile.open(fileobj=io.BytesIO(build_surface_bundle(root, version="v1")),
+                      mode="r:gz") as tf:
+        tf.extractall(bdir)
+    assert prompt_hash(bdir) == prompt_hash(root, version="v1"), \
+        "서버 재해싱(version 미지정)이 client 버전스코프 해시와 일치해야 함"
+
+
 def test_connection_refused_gives_friendly_error(monkeypatch) -> None:
     """서버가 안 떠 있을 때(URLError) raw 트레이스백 대신 원인 안내 SystemExit."""
     import urllib.error

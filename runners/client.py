@@ -73,14 +73,18 @@ def targz_dir(src: Path, arcname: str) -> bytes:
     return buf.getvalue()
 
 
-def build_surface_bundle(lab_root: Path) -> bytes:
-    """surface_relpaths 전체(prompts/vocab/configs/파서·코어·스키마·전처리 py)를
-    상대경로 그대로 tar.gz — 서버 보관·diff·해시 재계산용 (서버는 절대 실행 안 함)."""
+def build_surface_bundle(lab_root: Path, version: str | None = None) -> bytes:
+    """surface_relpaths(prompts/vocab/configs/파서·코어·스키마·전처리 py)를 상대경로
+    그대로 tar.gz — 서버 보관·diff·해시 재계산용 (서버는 절대 실행 안 함).
+
+    ``version`` 지정 시 prompts는 그 버전(prompts/<version>/)만 담는다 — run이 쓴
+    버전만 보관·해싱해 안 쓴 버전이 지문을 오염시키지 않게. write_run_provenance의
+    surface_hash와 반드시 같은 version으로 호출해야 서버 재계산이 일치한다."""
     from evalkit.provenance import surface_relpaths
 
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tf:
-        for rel in surface_relpaths(lab_root, include_exp_configs=True):
+        for rel in surface_relpaths(lab_root, include_exp_configs=True, version=version):
             tf.add(lab_root / rel, arcname=rel)
     return buf.getvalue()
 
@@ -103,7 +107,7 @@ def submit_run(server: str, dataset_name: str, run_dir: Path, version: str,
         raise SystemExit(f"{attrs} 없음 — 먼저 `lab run`으로 산출물을 만드세요")
     files = {
         "attributes": ("attributes.jsonl", attrs.read_bytes(), "application/json"),
-        "surface": ("surface.tgz", build_surface_bundle(lab_root), "application/gzip"),
+        "surface": ("surface.tgz", build_surface_bundle(lab_root, version), "application/gzip"),
     }
     prov = run_dir / "run_provenance.json"
     if prov.exists():
@@ -193,7 +197,7 @@ def write_run_provenance(dataset_dir: Path, lab_root: Path, *,
         pass
 
     prov = {
-        "surface_hash": prompt_hash(lab_root),
+        "surface_hash": prompt_hash(lab_root, version=version),
         "lab_sha": lab_sha,
         "git_dirty": dirty,
         "model": model,
