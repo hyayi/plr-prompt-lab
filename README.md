@@ -136,6 +136,7 @@ configs)의 해시라 knob 하나만 바꿔도 다른 값이 찍힙니다.
 | [docs/HANDOFF.md](docs/HANDOFF.md) | 외부 프롬프트 엔지니어 워크플로·규칙·반납 절차 |
 | [docs/DATASET_SPEC.md](docs/DATASET_SPEC.md) | 데이터셋 형식·파일 스키마 |
 | [docs/INSTALL.md](docs/INSTALL.md) | 환경 셋업 (GPU 빌드·모델 다운로드) |
+| [docs/DOCKER.md](docs/DOCKER.md) | **Docker 배포** — lab(GPU)·서버 이미지 빌드·실행 (토큰·주소·볼륨만) |
 | [SESSION_HANDOFF.md](SESSION_HANDOFF.md) | 진행 상태·결정 기록 |
 | [SEED.md](SEED.md) | 원본 core/ir 해시 기록 |
 
