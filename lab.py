@@ -620,6 +620,10 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="eval server URL (default: env EVAL_SERVER_URL)")
     sm.add_argument("--token", default=os.environ.get("EVAL_SERVER_TOKEN", ""))
     sm.add_argument("--by", default="", help="submitter display name")
+    sm.add_argument("--pull", action="store_true",
+                    help="제출 후 서버가 렌더한 metrics/report/gallery를 로컬로 받아온다")
+    sm.add_argument("--out", default=None,
+                    help="--pull 저장 위치 (기본: <run-dir>/pulled/)")
 
     return p
 
@@ -740,6 +744,11 @@ def _cmd_submit(args: argparse.Namespace) -> int:
         print(f"[submit]   {a}: acc={m['accuracy']} macro_f1={m['macro_f1']} n={m['n']}")
     if res.get("skipped"):
         print(f"[submit] skipped(라벨 없음): {', '.join(res['skipped'])}")
+    if getattr(args, "pull", False):
+        from runners.client import pull_artifacts
+        out_dir = Path(args.out) if args.out else Path(args.run_dir) / "pulled"
+        got = pull_artifacts(args.server, res["run_id"], out_dir, args.token)
+        print(f"[submit] pulled {', '.join(got)} -> {out_dir}")
     return 0
 
 

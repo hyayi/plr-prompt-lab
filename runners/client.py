@@ -13,6 +13,8 @@ import io
 import json
 import os
 import secrets
+import shutil
+import tempfile
 import tarfile
 import urllib.error
 import urllib.request
@@ -103,6 +105,53 @@ def submit_run(server: str, dataset_name: str, run_dir: Path, version: str,
         files,
     )
     return _post(server.rstrip("/") + "/api/runs", body, ctype, token)
+
+
+def _get(url: str, token: str) -> bytes:
+    req = urllib.request.Request(url, method="GET")
+    if token:
+        req.add_header("X-Auth-Token", token)
+    with urllib.request.urlopen(req) as resp:
+        return resp.read()
+
+
+def pull_artifacts(server: str, run_id: str, out_dir: Path, token: str) -> list[str]:
+    """서버가 렌더한 metrics/report/gallery를 로컬로 받아온다 (all-or-nothing).
+
+    셋 중 하나라도 실패하면 임시 dir를 버리고 SystemExit — 반쪽 dir로
+    improve-prompt이 오독하지 않게. 전부 성공 시에만 out_dir로 원자 이동.
+    Returns 저장된 파일명 리스트.
+    """
+    base = server.rstrip("/")
+    targets = {
+        "metrics.json": f"{base}/api/runs/{run_id}",
+        "report.html": f"{base}/api/runs/{run_id}/report.html",
+        "gallery.html": f"{base}/api/runs/{run_id}/gallery.html",
+    }
+    tmp = Path(tempfile.mkdtemp(prefix=".pull-", dir=out_dir.parent))
+    got: list[str] = []
+    try:
+        for fname, url in targets.items():
+            try:
+                data = _get(url, token)
+            except urllib.error.HTTPError as e:
+                detail = e.read().decode("utf-8", errors="replace")[:200]
+                raise SystemExit(
+                    f"pull 실패({fname}, HTTP {e.code}): {detail}\n"
+                    f"받은 것: {got or '없음'} — 부분 pull은 저장하지 않음")
+            (tmp / fname).write_bytes(data)
+            got.append(fname)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for fname in got:
+            _os_replace(tmp / fname, out_dir / fname)
+        return got
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _os_replace(src: Path, dst: Path) -> None:
+    import os
+    os.replace(src, dst)
 
 
 def write_run_provenance(dataset_dir: Path, lab_root: Path, *,

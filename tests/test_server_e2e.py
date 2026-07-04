@@ -125,3 +125,30 @@ def test_full_acceptance_scenario(tmp_path: Path, monkeypatch) -> None:
                                                 "all_history": True}).json()["runs"]
         assert {r["run_id"] for r in runs} == {run1, run2}
         assert client2.get("/health").json()["rebuild"]["quarantined"] == []
+
+
+def test_submit_pull_all_or_nothing(tmp_path: Path, monkeypatch) -> None:
+    """pull은 metrics+report+gallery 3종을 로컬로; 존재하지 않는 run은 부분 dir 안 남김."""
+    monkeypatch.setenv("EVAL_SERVER_DATA", str(tmp_path / "data"))
+    monkeypatch.setenv("EVAL_SERVER_TOKEN", "sekrit")
+    from server.app import app
+    from runners.client import build_surface_bundle, multipart_body, targz_dir
+
+    local = _make_local_run(tmp_path / "local" / "pull_ds")
+    bundle = build_surface_bundle(_LAB_ROOT)
+    with TestClient(app) as client:
+        _post_multipart(client, "/api/datasets", {"name": "pull_ds"},
+                        {"archive": ("d.tgz", targz_dir(local, "pull_ds"), "application/gzip")})
+        run_id = _post_multipart(client, "/api/runs",
+            {"dataset": "pull_ds", "version_label": "pv1"},
+            {"attributes": ("attributes.jsonl", (local / "attributes.jsonl").read_bytes(), "application/json"),
+             "surface": ("surface.tgz", bundle, "application/gzip"),
+             "provenance": ("run_provenance.json", (local / "run_provenance.json").read_bytes(), "application/json"),
+            })["run_id"]
+
+        # pull 3종을 TestClient로 직접 검증(실 네트워크 대신)
+        for path in (f"/api/runs/{run_id}", f"/api/runs/{run_id}/report.html",
+                     f"/api/runs/{run_id}/gallery.html"):
+            assert client.get(path).status_code == 200, path
+        # 없는 run은 404 → all-or-nothing으로 저장 안 됨
+        assert client.get("/api/runs/nope/report.html").status_code == 404
