@@ -1,6 +1,6 @@
 """Story S4 — end-to-end cycle demo.
 
-Deliverable 2: full A-cycle (2-version Δ) + B-cycle (recall@k) with
+A-cycle: 두 버전 mock 실행이 서로 다른 예측을 재현(채점·Δ는 서버 레포 소관).
 MOCK model + synthetic data. No GPU, no DB, no redis required.
 
 Deliverable 3: wiring-proof — `lab run` reaches LabGemmaModel.generate which
@@ -12,13 +12,10 @@ All tests assert no storage / psycopg2 / redis in sys.modules.
 
 from __future__ import annotations
 
-import io
 import json
 import sys
 import textwrap
-from contextlib import redirect_stdout
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -164,28 +161,6 @@ def test_a_cycle_two_versions_reproduce_predictions(tmp_path: Path) -> None:
     assert all(r["pred"] == "male" for r in preds_v2), (
         f"v2: expected all male preds, got {[r['pred'] for r in preds_v2]}"
     )
-
-
-# =====================================================================
-# Deliverable 2B — B-cycle: run_search_over_golden → run_search_eval
-# =====================================================================
-
-# Minimal valid vehicle PLR YAML for the search candidates
-_MOCK_BLACK_VEHICLE_YAML = textwrap.dedent("""\
-    target: vehicle
-    color: black
-    type: sedan
-    military: civilian
-""")
-
-_MOCK_RED_VEHICLE_YAML = textwrap.dedent("""\
-    target: vehicle
-    color: red
-    type: sedan
-    military: civilian
-""")
-
-
 
 
 
