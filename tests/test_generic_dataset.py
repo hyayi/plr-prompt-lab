@@ -93,22 +93,8 @@ def test_custom_attribute_re_score_and_eval(tmp_path: Path) -> None:
     rows = [json.loads(l) for l in open(gdir / "predictions.jsonl", encoding="utf-8")]
     assert all(r["pred"] == "helmet" for r in rows), rows
 
-    spec = importlib.util.spec_from_file_location(
-        "run_eval_gen", str(_LAB_ROOT / "eval" / "run_eval.py"))
-    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    ledger = tmp_path / "ledger.jsonl"
-    orig = sys.argv
-    sys.argv = ["run_eval", "--attribute", "helmet", "--golden", str(gdir),
-                "--version", "gen_v1", "--ledger", str(ledger)]
-    try:
-        mod.main()
-    except SystemExit:
-        pass
-    finally:
-        sys.argv = orig
-
-    rec = json.loads(open(ledger, encoding="utf-8").readlines()[-1])
+    from tests.scoring_helper import score_record
+    rec = score_record(gdir, "helmet")
     # h1 labeled helmet (correct), h2 labeled no_helmet (model said helmet -> wrong)
     assert rec["accuracy"] == 0.5
     # manifest bias_pair: true no_helmet mistaken as helmet -> rate 1.0

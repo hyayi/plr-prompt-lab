@@ -38,15 +38,14 @@ def test_lab_demo_exits_zero_and_prints_cycle() -> None:
     out = result.stdout
 
     # Five steps must be mentioned
-    for step in ["Step 1/5", "Step 2/5", "Step 3/5", "Step 4/5", "Step 5/5"]:
+    for step in ["Step 1/2", "Step 2/2"]:
         assert step in out, f"Expected '{step}' in demo output:\n{out}"
 
     # Accuracy values must appear
-    assert "accuracy: 1.000" in out, f"Expected 'accuracy: 1.000' in demo output:\n{out}"
-    assert "accuracy: 0.000" in out, f"Expected 'accuracy: 0.000' in demo output:\n{out}"
+    assert "attributes.jsonl" in out, f"Expected run artifacts in demo output:\n{out}"
 
     # Δ line
-    assert "-1.000" in out, f"Expected delta '-1.000' in demo output:\n{out}"
+    assert "submit" in out, f"Expected submit guidance in demo output:\n{out}"
 
     # Walkthrough text
     assert "Demo complete" in out, f"Expected 'Demo complete' in demo output:\n{out}"

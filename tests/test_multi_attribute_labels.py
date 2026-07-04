@@ -83,21 +83,9 @@ def _make_multi_dataset(base: Path) -> Path:
 
 
 def _run_eval(golden: Path, ledger: Path, attribute: str) -> dict:
-    spec = importlib.util.spec_from_file_location(
-        "run_eval_multi", str(_LAB_ROOT / "eval" / "run_eval.py"))
-    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    orig = sys.argv
-    sys.argv = ["run_eval", "--attribute", attribute, "--golden", str(golden),
-                "--version", "multi_v1", "--ledger", str(ledger)]
-    try:
-        mod.main()
-    except SystemExit:
-        pass
-    finally:
-        sys.argv = orig
-    recs = [json.loads(l) for l in open(ledger, encoding="utf-8")]
-    return next(r for r in reversed(recs) if r["attribute"] == attribute)
+    """run_eval CLI 제거 후 score() 직접호출 (ledger 인자는 하위호환 무시)."""
+    from tests.scoring_helper import score_record
+    return score_record(golden, attribute)
 
 
 def test_load_labels_both_shapes(tmp_path: Path) -> None:
@@ -153,27 +141,19 @@ def test_validate_multi_attribute(tmp_path: Path) -> None:
 
 
 def test_eval_all_skips_declared_but_unlabeled(tmp_path: Path) -> None:
-    """`eval -A all`의 기준은 "라벨이 실제로 있는 속성": manifest에 선언만 되고
-    라벨이 없는 속성은 실패가 아니라 skip+안내여야 한다 (exit 0)."""
-    import subprocess
+    """"라벨이 실제로 있는 속성"만 평가 대상: 선언만 되고 라벨 없는 속성은 skipped.
+    (lab eval CLI 제거 후 — 선택 로직 eval_attributes는 서버가 공유하는
+    evalkit/dataset.py에 유지, 여기서 직접 검증.)"""
+    from evalkit.dataset import eval_attributes
 
     ds = _make_multi_dataset(tmp_path / "ds")
     mp = ds / "manifest.yaml"
     mp.write_text(mp.read_text(encoding="utf-8") + "  military: {}\n", encoding="utf-8")
 
-    ledger = tmp_path / "ledger.jsonl"
-    result = subprocess.run(
-        [sys.executable, str(_LAB_ROOT / "lab.py"), "eval", "-A", "all",
-         "--dataset", str(ds), "--version", "skip_t", "--ledger", str(ledger)],
-        capture_output=True, text=True, cwd=str(_LAB_ROOT),
-    )
-    assert result.returncode == 0, f"skip은 실패가 아니어야 한다:\n{result.stderr}"
-    assert "skip: military" in result.stdout
-    evaluated = {json.loads(l)["attribute"] for l in open(ledger, encoding="utf-8")}
-    assert evaluated == {"gender", "helmet"}
-    # eval 종료 시 시각화 자동 렌더 — 데이터셋 gallery + ledger 옆 report
-    assert (ds / "gallery.html").exists(), "eval 후 gallery.html 자동 생성"
-    assert (ledger.parent / "report.html").exists(), "eval 후 report.html 자동 생성"
+    attributes, skipped, undeclared = eval_attributes(ds)
+    assert set(attributes) == {"gender", "helmet"}
+    assert "military" in skipped
+    assert undeclared == []
 
 
 class _HintAwareModel:

@@ -1,4 +1,5 @@
-"""AC4 파리티 게이트: lab `eval` 경로와 서버 채점 경로의 지표 완전 일치.
+"""서버 채점 정합: score() 코어와 server score_run이 같은 지표를 낸다.
+(lab eval CLI 제거 후 채점기는 서버 하나 — 과거 lab-vs-server 파리티는 무의미.)
 
 두 경로 모두 evalkit.scoring.score()에서 종결되지만, 이 테스트는 그 사실을
 **믿지 않고 측정한다** — 래퍼 어느 쪽이 해석/전처리를 몰래 더하면 빨간불.
@@ -77,22 +78,11 @@ def _make_dataset(base: Path) -> Path:
 
 
 def _lab_eval_record(golden: Path, ledger: Path, attribute: str) -> dict:
-    """lab CLI 경로 그대로: run_eval.main()을 argv 주입으로 실행 (lab.py 방식)."""
-    spec = importlib.util.spec_from_file_location(
-        "run_eval_parity", str(_LAB_ROOT / "eval" / "run_eval.py"))
-    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    orig = sys.argv
-    sys.argv = ["run_eval", "--attribute", attribute, "--golden", str(golden),
-                "--version", "parity_v1", "--ledger", str(ledger)]
-    try:
-        mod.main()
-    except SystemExit:
-        pass
-    finally:
-        sys.argv = orig
-    recs = [json.loads(l) for l in open(ledger, encoding="utf-8")]
-    return next(r for r in reversed(recs) if r["attribute"] == attribute)
+    """채점 코어 정합: score()가 서버 score_run과 같은 지표를 내는지.
+    (lab CLI 제거 후 채점기는 서버 하나 — score()는 그 코어. 이 테스트는
+    서버 어댑터가 코어에서 갈라지지 않음을 고정한다.)"""
+    from evalkit.scoring import score
+    return score(str(golden), attribute)
 
 
 def test_metric_parity_lab_vs_server(tmp_path: Path) -> None:
@@ -132,9 +122,9 @@ def test_model_stamp_branch_parity(tmp_path: Path) -> None:
         {"obj_id": "d", "attribute": "gender", "pred": "male", "margin": 0.8,
          "quality": 0.7, "model": "mock"},
     ])
-    ledger = tmp_path / "ledger2.jsonl"
-    lab_rec = _lab_eval_record(ds, ledger, "gender")
-    assert lab_rec["model"] == "mock", "CLI가 예측 행 스탬프에서 모델을 해석해야"
+    lab_rec = _lab_eval_record(ds, tmp_path / "ledger2.jsonl", "gender")
+    # score()는 model을 resolved_model로 반환(모델 스탬프 해석은 코어 소관).
+    assert lab_rec["resolved_model"] == "mock", "예측 행 스탬프에서 모델 해석"
 
     direct = score(ds, "gender")  # 같은 score() — 스탬프 일치 경로
     assert direct["resolved_model"] == "mock"

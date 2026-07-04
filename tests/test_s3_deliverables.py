@@ -169,26 +169,6 @@ def test_lab_help_lists_all_subcommands() -> None:
         assert cmd in out, f"Subcommand '{cmd}' missing from --help output:\n{out}"
 
 
-def test_lab_eval_subhelp() -> None:
-    """python3 lab.py eval --help must exit 0 and show mode choices."""
-    result = subprocess.run(
-        [sys.executable, str(_LAB_ROOT / "lab.py"), "eval", "--help"],
-        capture_output=True, text=True,
-    )
-    assert result.returncode == 0, (
-        f"lab.py eval --help exited {result.returncode}\n{result.stderr}"
-    )
-    assert "--attribute" in result.stdout, (
-        f"Expected '--attribute' in eval --help:\n{result.stdout}"
-    )
-    assert "--version" in result.stdout, (
-        f"Expected '--version' in eval --help:\n{result.stdout}"
-    )
-    # PLR-only lab (2026-07): the search mode options must be GONE.
-    assert "--mode " not in result.stdout, (
-        f"'--mode ' should be removed from eval --help:\n{result.stdout}"
-    )
-
 
 def test_lab_m_invocation() -> None:
     """python3 -m lab --help must also work (verifies __main__.py)."""
@@ -217,49 +197,3 @@ def test_lab_m_invocation() -> None:
 # =====================================================================
 
 
-def test_run_eval_ledger_has_seed_and_gemma(tmp_path: Path) -> None:
-    """run_eval.main() appends a ledger record that includes seed_hash and gemma_repo."""
-    # Build minimal golden dir
-    gdir = tmp_path / "golden" / "gender"
-    gdir.mkdir(parents=True)
-
-    preds = [{"obj_id": "p1", "pred": "male", "reason": ""}]
-    labels = [{"obj_id": "p1", "true": "male"}]
-    _write_jsonl(gdir / "predictions.jsonl", preds)
-    _write_jsonl(gdir / "labels.jsonl", labels)
-
-    ledger_path = tmp_path / "ledger.jsonl"
-
-    import importlib
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "run_eval_mod",
-        str(_LAB_ROOT / "eval" / "run_eval.py"),
-    )
-    run_eval = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(run_eval)  # type: ignore[union-attr]
-
-    orig_argv = sys.argv
-    sys.argv = [
-        "run_eval",
-        "--attribute", "gender",
-        "--golden", str(gdir),
-        "--version", "test_v",
-        "--ledger", str(ledger_path),
-    ]
-    os.environ["IR_GEMMA_REPO"] = "test/gemma"
-    try:
-        run_eval.main()
-    except SystemExit:
-        pass
-    finally:
-        sys.argv = orig_argv
-        del os.environ["IR_GEMMA_REPO"]
-
-    assert ledger_path.exists(), "ledger.jsonl not written by run_eval"
-    records = _read_jsonl(ledger_path)
-    assert len(records) == 1
-    rec = records[0]
-    assert "seed_hash" in rec, f"seed_hash missing from ledger record: {rec}"
-    assert "gemma_repo" in rec, f"gemma_repo missing from ledger record: {rec}"
-    assert rec["gemma_repo"] == "test/gemma"

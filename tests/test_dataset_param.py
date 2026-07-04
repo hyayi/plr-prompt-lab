@@ -131,30 +131,10 @@ def test_resolve_dataset_dir_precedence(tmp_path: Path) -> None:
 # =====================================================================
 
 
-def _run_eval_against(gdir: Path, version: str, ledger_path: Path) -> str:
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location(
-        "run_eval_mod2", str(_LAB_ROOT / "eval" / "run_eval.py")
-    )
-    run_eval = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(run_eval)  # type: ignore[union-attr]
-
-    orig_argv = sys.argv
-    sys.argv = [
-        "run_eval", "--attribute", "gender",
-        "--golden", str(gdir), "--version", version,
-        "--ledger", str(ledger_path), "--date", "2026-07-01T00:00:00",
-    ]
-    buf = io.StringIO()
-    try:
-        with redirect_stdout(buf):
-            run_eval.main()
-    except SystemExit:
-        pass
-    finally:
-        sys.argv = orig_argv
-    return buf.getvalue()
+def _run_eval_against(gdir: Path, version: str, ledger_path: Path) -> dict:
+    """run_eval CLI 제거 후 score() 직접호출 (반환: 지표 dict)."""
+    from tests.scoring_helper import score_record
+    return score_record(gdir, "gender")
 
 
 def test_run_and_eval_on_arbitrary_dataset(tmp_path: Path) -> None:
@@ -179,13 +159,10 @@ def test_run_and_eval_on_arbitrary_dataset(tmp_path: Path) -> None:
     assert all(r["pred"] == "female" for r in preds)
     assert (ds_dir / "attributes.jsonl").exists()
 
-    # `eval` core — score against labels (all female → accuracy 1.0)
-    ledger = tmp_path / "ledger.jsonl"
-    out = _run_eval_against(ds_dir, "ds_v1", ledger)
-    records = _read_jsonl(ledger)
-    assert len(records) == 1
-    assert records[0]["accuracy"] == pytest.approx(1.0, abs=1e-4)
-    assert "accuracy" in out
+    # `eval` core — score() 직접호출 (run_eval CLI/ledger 제거 후, 지표 dict 반환)
+    rec = _run_eval_against(ds_dir, "ds_v1", tmp_path / "ledger.jsonl")
+    assert rec["accuracy"] == pytest.approx(1.0, abs=1e-4)
+    assert "accuracy" in rec
 
 
 # =====================================================================

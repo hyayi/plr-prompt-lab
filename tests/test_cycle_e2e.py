@@ -131,38 +131,10 @@ def _make_plr_golden_dir(tmp_path: Path, obj_ids: list[str]) -> Path:
     return gdir
 
 
-def _run_eval_for(
-    gdir: Path,
-    version: str,
-    ledger_path: Path,
-) -> str:
-    """Call run_eval.main() for gender attribute; return captured stdout."""
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location(
-        "run_eval_mod",
-        str(_LAB_ROOT / "eval" / "run_eval.py"),
-    )
-    run_eval = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(run_eval)  # type: ignore[union-attr]
-
-    orig_argv = sys.argv
-    sys.argv = [
-        "run_eval",
-        "--attribute", "gender",
-        "--golden", str(gdir),
-        "--version", version,
-        "--ledger", str(ledger_path),
-        "--date", "2026-07-01T00:00:00",
-    ]
-    buf = io.StringIO()
-    try:
-        with redirect_stdout(buf):
-            run_eval.main()
-    except SystemExit:
-        pass
-    finally:
-        sys.argv = orig_argv
+def _run_eval_for(gdir: Path, version: str, ledger_path: Path) -> dict:
+    """run_eval CLI 제거 후 score() 직접호출 (gender 지표 dict 반환)."""
+    from tests.scoring_helper import score_record
+    return score_record(gdir, "gender")
 
     return buf.getvalue()
 
@@ -197,18 +169,9 @@ def test_a_cycle_two_versions_delta(tmp_path: Path) -> None:
         f"v1: expected all female preds, got {[r['pred'] for r in preds_v1]}"
     )
 
-    out_v1 = _run_eval_for(gdir, "mock_v1", ledger_path)
-    assert ledger_path.exists(), "ledger.jsonl not created after v1 eval"
-    records_v1 = _read_jsonl(ledger_path)
-    assert len(records_v1) == 1
-    rec_v1 = records_v1[0]
-    assert rec_v1["version"] == "mock_v1"
+    rec_v1 = _run_eval_for(gdir, "mock_v1", ledger_path)
     # All 3 correct (all female, all labeled female) → accuracy 1.0
-    assert rec_v1["accuracy"] == pytest.approx(1.0, abs=1e-4), (
-        f"v1 accuracy should be 1.0, got {rec_v1['accuracy']}"
-    )
-    # First run has no prior version → "no prior version to diff"
-    assert "no prior" in out_v1, f"Expected '(no prior version to diff)' in v1 output:\n{out_v1}"
+    assert rec_v1["accuracy"] == pytest.approx(1.0, abs=1e-4)
 
     # --- version 2: MockModel returns male → all wrong ---
     meta_v2 = rs.re_score("gender", MockModel(_MOCK_YAML_V2_ALL_MALE), golden_dir=str(gdir))
@@ -219,25 +182,10 @@ def test_a_cycle_two_versions_delta(tmp_path: Path) -> None:
         f"v2: expected all male preds, got {[r['pred'] for r in preds_v2]}"
     )
 
-    out_v2 = _run_eval_for(gdir, "mock_v2", ledger_path)
-    records_v2 = _read_jsonl(ledger_path)
-    assert len(records_v2) == 2, f"Expected 2 ledger records, got {len(records_v2)}"
-
-    rec_v2 = records_v2[1]
-    assert rec_v2["version"] == "mock_v2"
+    rec_v2 = _run_eval_for(gdir, "mock_v2", ledger_path)
     # All 3 wrong (all male, labeled female) → accuracy 0.0
-    assert rec_v2["accuracy"] == pytest.approx(0.0, abs=1e-4), (
-        f"v2 accuracy should be 0.0, got {rec_v2['accuracy']}"
-    )
-
-    # Second run must show the Δ vs v1
-    assert "Δ vs mock_v1" in out_v2, (
-        f"Expected 'Δ vs mock_v1' in v2 output, got:\n{out_v2}"
-    )
-    # The delta should be -1.000 (1.0 → 0.0)
-    assert "-1.000" in out_v2 or "-1.0" in out_v2, (
-        f"Expected delta -1.000 in v2 output:\n{out_v2}"
-    )
+    assert rec_v2["accuracy"] == pytest.approx(0.0, abs=1e-4)
+    # Δ(1.0→0.0)는 삭제된 ledger/CLI 기능 — 서버 리더보드가 대체(범위 밖).
 
 
 # =====================================================================

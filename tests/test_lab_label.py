@@ -80,7 +80,7 @@ def test_non_label_command_rejects_extras(tmp_path):
     # main()'s parse_known_args routing must NOT silently swallow stray flags
     # for other subcommands.
     r = subprocess.run(
-        [sys.executable, "lab.py", "eval", "--attribute", "gender", "--bogus-flag"],
+        [sys.executable, "lab.py", "run", "--version", "v", "--attribute", "gender", "--bogus-flag"],
         cwd=LAB, capture_output=True, text=True,
     )
     assert r.returncode != 0

@@ -60,21 +60,16 @@ def _make_dataset(base: Path, obj_ids: list[str]) -> Path:
 
 
 def _run_eval(golden: Path, ledger: Path, extra_args: list[str] | None = None) -> dict:
-    spec = importlib.util.spec_from_file_location(
-        "run_eval_cq", str(_LAB_ROOT / "eval" / "run_eval.py"))
-    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    orig = sys.argv
-    sys.argv = ["run_eval", "--attribute", "gender", "--golden", str(golden),
-                "--version", "cq_v1", "--ledger", str(ledger)] + (extra_args or [])
-    try:
-        mod.main()
-    except SystemExit:
-        pass
-    finally:
-        sys.argv = orig
-    with open(ledger, encoding="utf-8") as f:
-        return json.loads(f.readlines()[-1])
+    """run_eval CLI 제거 후 score() 직접호출. extra_args의 --*-threshold만 해석."""
+    from tests.scoring_helper import score_record
+    kw = {}
+    ea = extra_args or []
+    for i, a in enumerate(ea):
+        if a == "--margin-threshold":
+            kw["margin_threshold"] = float(ea[i + 1])
+        elif a == "--quality-threshold":
+            kw["quality_threshold"] = float(ea[i + 1])
+    return score_record(golden, "gender", **kw)
 
 
 def test_re_score_records_margin_and_quality(tmp_path: Path) -> None:

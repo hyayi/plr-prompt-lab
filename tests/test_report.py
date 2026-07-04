@@ -171,16 +171,14 @@ def test_build_report_creates_self_contained_html(tmp_path: Path) -> None:
 
 
 def test_lab_report_cli_wiring(tmp_path: Path) -> None:
-    import lab as lab_module
+    from evalkit.report import build_report
 
     ledger = tmp_path / "ledger.jsonl"
     _synthetic_ledger(ledger)
     out = tmp_path / "cli_report.html"
 
-    args = argparse.Namespace(ledger=str(ledger), out=str(out))
-    exit_code = lab_module._cmd_report(args)
-
-    assert exit_code == 0
+    # lab report CLI는 제거됨(서버가 렌더) — 렌더러 자체는 직접 호출로 검증
+    build_report(str(ledger), str(out))
     assert out.exists()
     text = out.read_text(encoding="utf-8")
     assert 'id="section-matrix"' not in text

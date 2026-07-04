@@ -51,22 +51,8 @@ def test_gallery_builds_wrong_first(tmp_path: Path) -> None:
 
 def test_run_eval_precision_f1(tmp_path: Path) -> None:
     ds = _make_ds(tmp_path / "ds")
-    spec = importlib.util.spec_from_file_location(
-        "run_eval_f1", str(_LAB_ROOT / "eval" / "run_eval.py"))
-    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    ledger = tmp_path / "ledger.jsonl"
-    orig = sys.argv
-    sys.argv = ["run_eval", "--attribute", "gender", "--golden", str(ds),
-                "--version", "f1_v1", "--ledger", str(ledger)]
-    try:
-        mod.main()
-    except SystemExit:
-        pass
-    finally:
-        sys.argv = orig
-
-    rec = json.loads(open(ledger, encoding="utf-8").readlines()[-1])
+    from tests.scoring_helper import score_record
+    rec = score_record(ds, "gender")
     # labels: a=female b=female c=male; preds: a=female b=male c=male
     # female: recall 1/2, precision 1/1 -> f1 = 2*0.5*1/(1.5) = 0.6667
     # male:   recall 1/1, precision 1/2 -> f1 = 0.6667
