@@ -1,0 +1,28 @@
+# plr-prompt-lab GPU 실측 예시.
+# lab 은 CLI 라 `run` 서브명령으로 1회성 실행:
+#   docker compose -f docker-compose.example.yml run --rm lab \
+#       run -X plr_v1.5_cot --dataset datasets/mine --model gemma
+#   docker compose -f docker-compose.example.yml run --rm lab \
+#       submit --dataset mine --run-dir datasets/mine -X plr_v1.5_cot --pull
+services:
+  lab:
+    build: .
+    image: plr-prompt-lab
+    environment:
+      - EVAL_SERVER_URL=http://CHANGE-ME:8890   # 평가 서버 주소
+      - EVAL_SERVER_TOKEN=change-me              # 서버 변이 토큰(서버의 EVAL_SERVER_TOKEN 과 동일)
+      - HF_TOKEN=                                # HuggingFace 토큰(Gemma 다운로드 인증) — 여기 입력
+      # 옵션(기본값 있음): IR_GEMMA_MAIN_FILE / IR_GEMMA_N_GPU_LAYERS / CUDA_VISIBLE_DEVICES
+    volumes:
+      - ./datasets:/app/datasets                # 데이터셋(크롭+라벨) — 로컬과 공유
+      - hf_cache:/hf-cache                       # 모델 캐시(첫 run 자동 다운로드 후 재사용)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  hf_cache:

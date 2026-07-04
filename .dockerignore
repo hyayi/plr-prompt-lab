@@ -1,0 +1,24 @@
+# 이미지에 들어가면 안 되는 것 (보안·용량)
+# NOTE: .dockerignore 는 인라인 주석(패턴 뒤 #)을 지원하지 않는다 — 주석은 전용 줄로.
+
+# .git 에 master-backup-secret(DB 비밀번호 포함) 브랜치가 있어 절대 금지
+.git
+# 사적 CCTV 크롭 — 이미지에 굽지 않고 런타임 볼륨으로 마운트
+datasets/
+# 골든셋 크롭
+eval/golden/*/crops/
+# 모델 가중치 — HF 캐시 볼륨으로 (이미지 비대화 방지)
+models/
+*.gguf
+
+# 캐시·빌드 잔여물
+.venv
+__pycache__/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+results/
+
+# 로컬 env
+*.env
+.env
