@@ -28,3 +28,4 @@ datasets/
 # Generated report artifacts
 report.html
 gallery.html
+.venv/
