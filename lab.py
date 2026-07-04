@@ -509,7 +509,6 @@ def _cmd_dataset_push(args: argparse.Namespace) -> int:
     ds = Path(args.dataset)
     name = args.name or ds.name
     res = dataset_push(args.server, ds, name, args.token, created_by=args.by)
-    print(res.get("report", ""))
     print(f"[dataset-push] registered {res['name']!r} (crops={res['n_crops']})")
     return 0
 
