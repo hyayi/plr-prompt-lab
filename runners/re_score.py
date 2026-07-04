@@ -268,6 +268,12 @@ def re_score(
             _pre_marked=skip_marker,
         )
 
+        # 클라이언트-측 스키마 검증 (평가 서버가 신뢰할 수 있는 계약): 산출된
+        # plr_json이 저장 스키마를 만족하는지 여기서 fail-loud. 기존
+        # plr_schema.validate_plr(신규 아님)를 재사용 — 서버는 2차에서 검증 생략.
+        from plr_schema import validate_plr
+        validate_plr(plr_json)
+
         pred_val = resolve_json_path(plr_json, pred_path)
         pred = str(pred_val) if pred_val not in (None, "") else "unknown"
         reason = _extract_reason(attribute, plr_json)
