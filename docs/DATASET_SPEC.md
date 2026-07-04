@@ -75,14 +75,18 @@ attribute: gender          # 필수 — 이 데이터셋이 다루는 PLR 속성
 n: 150                     # 필수 — 라벨된 객체 수 (기대값)
 created: "2026-07-01"      # 필수 — 생성일 (ISO)
 source_note: "video vd_001_0032, frames 0–3600"  # 필수 — 출처 메모
-
-# 옵션 필드 (없어도 됨):
-model: "plr_v1.4_cot"      # 초기 예측에 쓴 PLR 프롬프트 버전 (기록용)
-prompt: "prompts/plr_v1.5_cot/"  # 프롬프트 경로 (기록용)
 ```
 
 **필수 필드**: `attribute`(또는 아래의 `attributes`), `n`, `created`,
-`source_note`.
+`source_note`. — manifest 는 **데이터셋만** 기술한다.
+
+> **모델/프롬프트 버전은 manifest 에 넣지 않는다.** 데이터셋은 모델과 무관해야
+> 하고(같은 데이터셋을 여러 모델·버전으로 채점), 실제로 어떤 모델·프롬프트로
+> 실행했는지는 **run 시점**에 기록된다: `lab run -X <version> --model <model>` →
+> `run_provenance.json`(model·version·surface_hash), `lab submit` 의
+> `version_label`. 서버 리더보드/리포트의 model·version 열은 이 run 레코드에서
+> 온다(manifest 가 아님). 과거 `model:`/`prompt:` 옵션 필드는 아무도 읽지 않는
+> 잔재였고 2026-07 제거됐다.
 
 `attribute` 값이 `validate-dataset`의 라벨 어휘 검사 기준이 된다 (§5).
 

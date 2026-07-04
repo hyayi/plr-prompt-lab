@@ -130,7 +130,8 @@ configs)의 해시라 knob 하나만 바꿔도 다른 값이 찍힙니다.
 | 문서 | 내용 |
 |---|---|
 | [docs/GUIDE.html](docs/GUIDE.html) | **실습 가이드** — 설치·전체 루프·속성 레시피 (여기부터) |
-| [docs/TUTORIAL.md](docs/TUTORIAL.md) | **lab ↔ 평가 서버 연동 튜토리얼** — 서버 기동·push·submit·리더보드 (복붙 따라치기) |
+| [docs/TUTORIAL.md](docs/TUTORIAL.md) | **연동 워크플로 튜토리얼** — run·push·submit·리더보드 (복붙 따라치기) |
+| [docs/DATASET_GUIDE.md](docs/DATASET_GUIDE.md) | **데이터셋 만들기** — manifest·라벨·검증 (실습) |
 | [docs/STRUCTURE.html](docs/STRUCTURE.html) | 아키텍처 시각화 |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | 외부 프롬프트 엔지니어 워크플로·규칙·반납 절차 |
 | [docs/DATASET_SPEC.md](docs/DATASET_SPEC.md) | 데이터셋 형식·파일 스키마 |
