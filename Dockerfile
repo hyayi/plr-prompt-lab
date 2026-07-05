@@ -19,7 +19,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # python + llama-cpp-python CUDA 빌드에 필요한 툴체인
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 python3-pip python3-dev git build-essential cmake libgomp1 \
+        python3 python3-pip python3-dev git build-essential cmake ninja-build libgomp1 \
     && ln -sf /usr/bin/python3 /usr/local/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
