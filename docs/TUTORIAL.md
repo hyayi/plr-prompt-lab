@@ -208,18 +208,41 @@ xdg-open datasets/demo/pulled/report.html    # 버전 비교표
 - `metrics.json` 필드: accuracy/recall/precision/f1/macro_f1/bias/confusion/
   pred_unknown/n_label_unknown/margin_stats/quality_stats (속성별)
 
-## E-2. 개선 루프 — 버전 A/B
+## E-2. 개선 루프 — skills로 프롬프트 정리·개선
 
+`skills/`는 **Claude Code(에이전트)가 따라가는 워크플로 지침**입니다. Claude에게
+"**<스킬명> 스킬대로 해줘**"라고 요청하면 해당 `skills/<name>/SKILL.md`를 읽어 수행합니다.
+개선 한 바퀴는 이렇게 돕니다:
+
+### 1) 오답 분석 → 개선안: `improve-prompt`
+방금 `submit --pull`로 받은 결과로 **근거 있는** 개선안을 만듭니다. Claude에게:
+
+> "improve-prompt 스킬대로 `datasets/demo`의 submit 결과를 분석해서 개선안 만들어줘"
+
+Claude가 `pulled/metrics.json`(지표)·`pulled/gallery.html`(오답 크롭)·로컬
+`raw_responses.jsonl`(모델 원문)·`crops/<obj_id>.jpg`(직접 봄)를 읽고 **6역할 토론
+루프**(최대 3라운드)로 제안을 냅니다. ⚠ 측정 없는 "문구 다듬기"는 하지 않습니다.
+
+### 2) 새 버전 작성: `author-prompt`
+개선안대로 새 프롬프트 버전을 만듭니다. Claude에게:
+
+> "author-prompt 스킬대로 그 제안을 반영한 `prompts/plr_v1.6_test/` 버전 만들어줘"
+
+강제커밋(unknown 선택지 금지)·버전명 ≤16자·enum 주입·파서 계약 등 **깨지면 안 되는
+계약**을 스킬이 강제합니다(상세: [HANDOFF.md](HANDOFF.md) "skills로 프롬프트 작성·개선").
+
+### 3) (프롬프트 외 표면을 건드리면) `co-change`
+어휘(`schema/vocab.yaml`)·파서·스키마·전처리까지 손대면, **고치기 전에** co-change로
+동행 수정 목록을 적용(조용한 드리프트 방지).
+
+### 4) 재실행 → 리더보드 Δ
 ```bash
-# 프롬프트(prompts/<버전>/person.yaml) 수정했다고 치고, 새 버전으로 run+submit
-python3 lab.py run -X plr_v1.6_test --dataset datasets/demo --model mock
+python3 lab.py run -X plr_v1.6_test --dataset datasets/demo --model gemma  # (mock이면 --model mock)
 python3 lab.py submit --dataset demo --run-dir datasets/demo -X plr_v1.6_test
-# → 리더보드 http://127.0.0.1:8890/d/demo 에 두 버전이 나란히 (Δ 비교)
+# → 리더보드 http://127.0.0.1:8890/d/demo 에 plr_v1.5_cot vs plr_v1.6_test 나란히 (Δ 비교)
 ```
 
-프롬프트를 **skills로 정리·개선**하는 법(author-prompt로 새 버전 작성 · improve-prompt로
-오답 근거 개선 · co-change로 안전 수정)과 전체 개선 워크플로·반납(`lab port`)은
-[HANDOFF.md](HANDOFF.md)의 **"skills로 프롬프트 작성·개선"** 참고.
+이겼으면 `lab port`로 core/ir에 반납합니다(승격 절차: [HANDOFF.md](HANDOFF.md)).
 
 ## E-3. 실측(GPU) 전환
 
