@@ -217,7 +217,9 @@ python3 lab.py submit --dataset demo --run-dir datasets/demo -X plr_v1.6_test
 # → 리더보드 http://127.0.0.1:8890/d/demo 에 두 버전이 나란히 (Δ 비교)
 ```
 
-전체 개선 워크플로·반납(`lab port`)은 [HANDOFF.md](HANDOFF.md).
+프롬프트를 **skills로 정리·개선**하는 법(author-prompt로 새 버전 작성 · improve-prompt로
+오답 근거 개선 · co-change로 안전 수정)과 전체 개선 워크플로·반납(`lab port`)은
+[HANDOFF.md](HANDOFF.md)의 **"skills로 프롬프트 작성·개선"** 참고.
 
 ## E-3. 실측(GPU) 전환
 

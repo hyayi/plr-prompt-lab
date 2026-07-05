@@ -180,6 +180,39 @@ ZioVision 팀에 보내는 것:
 
 ---
 
+## skills로 프롬프트 작성·개선
+
+`skills/`는 Claude Code(에이전트)가 따라가는 워크플로 지침입니다. Claude에게
+**"<스킬명> 스킬대로 해줘"** 라고 요청하면 해당 `skills/<name>/SKILL.md`를 읽어 수행합니다.
+프롬프트 작업엔 셋을 씁니다:
+
+### ① 새 버전 작성 — `author-prompt`
+`prompts/<version>.yaml`을 만들 때. 지켜야 할 계약을 강제합니다:
+- **강제커밋(v1.5+)**: `unknown`을 답 선택지로 주지 않음 — 낮은 확신은 `margins` 블록으로
+- **버전명 ≤ 16자·재사용 금지**(`plr_v<major>.<minor>_<tag>`) — 재인덱싱 트리거·리더보드 키
+- **enum은 주입**(`{colors}` 등 플레이스홀더 유지, `commit_enums: true`) — 손으로 쓰면 vocab과 드리프트
+- **출력 스키마 = 파서 계약**(`plr_parse.parse_plr_response` 파싱 가능) · **marker 문단 유지**
+- 작성 즉시 `lab run -X <version> --dataset D`로 실행 가능
+
+### ② 결과 기반 개선 — `improve-prompt`
+`lab submit --pull` **후**에, 회수한 결과로 **근거 있는** 개선안을 만듭니다:
+- 입력: `pulled/metrics.json`(지표)·`pulled/report.html`(버전비교)·`pulled/gallery.html`(오답 크롭)
+  + 로컬 `raw_responses.jsonl`(모델 원문)·`crops/<obj_id>.jpg`(**직접 봄**)
+- **6역할 토론 루프**(최대 3라운드) — 판정자 수용까지. 모든 주장은 **지표 또는 실제 본 크롭(obj_id)**으로 뒷받침
+- ⚠ 측정 없는 "문구 다듬기" 금지
+
+### ③ 표면 수정 전 필독 — `co-change`
+프롬프트·어휘(`schema/vocab.yaml`)·파서·스키마·전처리 중 **무엇이든 고치기 전에** 열어,
+변경 유형별 **동행 수정 목록**을 적용(조용한 드리프트 방지). 승격(core/ir 반영)은 별도 체크리스트.
+
+### 전형적 사이클
+```
+개선 버전 선택 → (author-prompt: 새 버전 yaml) → lab run → lab submit --pull
+   → (improve-prompt: 오답 분석·개선안) → 새 버전 → 리더보드 Δ → 승격(lab port)
+```
+
+---
+
 ## 빠른 참조
 
 ```bash
@@ -197,7 +230,6 @@ python3 -m pytest tests/ -q                               # 전체 테스트 (72
 
 - [GUIDE.html](GUIDE.html) — 복붙 실습 가이드 (전체 개선 루프 + 명령 레시피)
 - [DATASET_SPEC.md](DATASET_SPEC.md) — 데이터셋 형식·파일 스키마 전체
-- [EXPERIMENT_SPEC.md](EXPERIMENT_SPEC.md) — experiment.yaml 스펙
 - [INSTALL.md](INSTALL.md) — Python 환경, GPU 빌드, 모델 다운로드
 - `SEED.md` — 이 lab이 추출된 core/ir 커밋
 - `skills/` — author-prompt(작성 계약) · improve-prompt(개선 루프) ·
