@@ -1,8 +1,8 @@
 # plr-prompt-lab
 
-> 📖 **처음이라면 [`docs/GUIDE.html`](docs/GUIDE.html)을 브라우저로 여세요** —
-> 설치부터 전체 개선 루프까지 복붙으로 따라 하는 실습 가이드(자체완결 HTML·오프라인)입니다.
-> 아키텍처 시각화는 [`docs/STRUCTURE.html`](docs/STRUCTURE.html).
+> 📖 **처음이라면 [`docs/TUTORIAL.md`](docs/TUTORIAL.md)부터** —
+> 서버 연동·run·submit까지 복붙으로 따라 하는 실습 가이드입니다. 데이터셋 만들기는
+> [`docs/DATASET_GUIDE.md`](docs/DATASET_GUIDE.md), 아키텍처 시각화는 [`docs/STRUCTURE.html`](docs/STRUCTURE.html).
 
 PLR(객체 속성 추출) **프롬프트를 측정하며 개선**하는 독립 실험 도구입니다.
 운영 추론 서비스(`core/ir`)의 PLR 인풋/아웃풋 표면만 lean 추출했고
@@ -129,8 +129,7 @@ configs)의 해시라 knob 하나만 바꿔도 다른 값이 찍힙니다.
 
 | 문서 | 내용 |
 |---|---|
-| [docs/GUIDE.html](docs/GUIDE.html) | **실습 가이드** — 설치·전체 루프·속성 레시피 (여기부터) |
-| [docs/TUTORIAL.md](docs/TUTORIAL.md) | **연동 워크플로 튜토리얼** — run·push·submit·리더보드 (복붙 따라치기) |
+| [docs/TUTORIAL.md](docs/TUTORIAL.md) | **실습 튜토리얼** — run·push·submit·리더보드 (여기부터, 복붙) |
 | [docs/DATASET_GUIDE.md](docs/DATASET_GUIDE.md) | **데이터셋 만들기** — manifest·라벨·검증 (실습) |
 | [docs/STRUCTURE.html](docs/STRUCTURE.html) | 아키텍처 시각화 |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | 외부 프롬프트 엔지니어 워크플로·규칙·반납 절차 |

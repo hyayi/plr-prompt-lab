@@ -3,7 +3,7 @@
 **ZioVision 추론 서비스를 직접 건드리지 않고 PLR 프롬프트를 개선하는
 프롬프트 엔지니어**를 위한 문서다. (lab은 PLR 전용 — 텍스트 검색
 파이프라인은 2026-07 제거.) 손으로 따라 하는 실습은
-[GUIDE.html](GUIDE.html)이 짝 문서다 — 이 문서는 역할·규칙·경계 중심.
+[TUTORIAL.md](TUTORIAL.md)가 짝 문서다 — 이 문서는 역할·규칙·경계 중심.
 
 ---
 
@@ -228,7 +228,7 @@ python3 -m pytest tests/ -q                               # 전체 테스트 (72
 
 ## 참고 문서
 
-- [GUIDE.html](GUIDE.html) — 복붙 실습 가이드 (전체 개선 루프 + 명령 레시피)
+- [TUTORIAL.md](TUTORIAL.md) — 복붙 실습 튜토리얼 (연동·run·submit) / [DOCKER_TUTORIAL.md](DOCKER_TUTORIAL.md) — 도커 사용
 - [DATASET_SPEC.md](DATASET_SPEC.md) — 데이터셋 형식·파일 스키마 전체
 - [INSTALL.md](INSTALL.md) — Python 환경, GPU 빌드, 모델 다운로드
 - `SEED.md` — 이 lab이 추출된 core/ir 커밋
